@@ -94,15 +94,20 @@ notes). The MSI builds unsigned on Windows in CI (`installer` job); signing wait
   set sees "Choose your own in Settings" on Home. No server password anywhere: `auth.mode(scope)` is accounts
   (any account exists), setup (no account and the server is `reachable_by_others()`: OPENSKETCH_PUBLIC_URL on a
   non-loopback host, OPENSKETCH_REQUIRE_SIGNIN, or the legacy OPENSKETCH_PASSWORD still set; or the request is not
-  `is_local`: a non-loopback client or any forwarding header) or open (no account, the machine itself only). In
-  setup mode only /setup, the product pages and static files answer (no MCP, API, pairing, sign-up); the first
-  person to submit /setup (name, email, password, "Anyone can create their own account", ticked by default) owns the
+  `is_local`: a non-loopback client, any forwarding header, a non-loopback Host (DNS rebinding) or an Origin of
+  another site; `mode()` without a scope never reads open) or open (no account, the machine itself only). In
+  setup mode only /setup, the product pages and static files answer (no MCP, API, pairing, sign-up, add-in link,
+  and no AI app grant made before accounts: "local" grants work only in open mode, "server" ones never without an
+  owner); on a server not `reachable_by_others()` /setup itself is taken only from the machine (403 otherwise).
+  PasswordGate refuses paths with `.`/`..` segments, `//` or a backslash (400). The first person to submit /setup (name, email, password, "Anyone can create their own account", ticked by default) owns the
   server. OPENSKETCH_PASSWORD is read only as the seed of an old owner's server-wide private address
   (`_legacy_password`). No /reset page: the owner resets people on Admin, and their own password with
   `python -m opensketch --reset-password EMAIL` on the server (`fly ssh console`). Suspension (`accounts.set_suspended`,
   Admin Suspend/Resume, `POST /api/account/users/<id>/suspend`, never the owner): `accounts.get` returns None for a
   suspended account, so sessions, OAuth tokens and refreshes, the private address, the add-in key (`swbridge.resolve`)
-  and paired computers (`ACCOUNT_SUSPENDED`, 401; Companion keeps its pairing and retries) stop at once; sign-in
+  and paired computers (`ACCOUNT_SUSPENDED`, 401; `devicebridge.suspend_person` closes live sessions (409 reason
+  suspended) and fails waiting commands; the Companion keeps its pairing and retries) stop at once; OAuth grants are
+  kept (refresh says suspended, works again after Resume); sign-in
   (password, Google, Companion password pairing) says it is suspended; `get_any` is for the owner's views.
   `tests/test_mcp_access.py` covers setup mode, per-person MCP, suspension, expiry and no shared password.
 - Pages: `/` is the product page for visitors (`site.landing`) and the app's Home for a signed-in person (and on an

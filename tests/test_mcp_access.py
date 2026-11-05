@@ -53,8 +53,7 @@ def test_a_public_server_answers_no_mcp_until_it_has_an_owner():
         assert app.post(f"/mcp/{auth.mcp_token()}", json=INIT, headers=ACCEPT).status_code == 404  # not even the server-wide key
         assert app.post("/mcp", json=INIT, headers=ACCEPT).status_code == 401
         assert app.get("/api/solidworks").status_code == 401
-        ok, _ = swbridge.resolve(swbridge.key_for(None))
-        assert ok  # (the add-in key exists, but every page that shows it needs sign-in, and none answers yet)
+        assert not swbridge.resolve(swbridge.key_for(None))[0]  # nor the add-in link
         assert app.get("/dashboard", follow_redirects=False).headers["location"] == "/setup"
     _owner_with_open_signup()
     with TestClient(server.app) as app:
@@ -104,9 +103,10 @@ def test_suspending_a_person_stops_every_way_in_at_once():
         assert _mcp(app, tok["access_token"], "tools/list").status_code == 401       # her AI apps stop at once
         assert app.post(private, json=INIT, headers=ACCEPT).status_code == 404       # her private address too
         assert not swbridge.resolve(key)[0]                                           # and her add-in key
-        refresh = app.post("/oauth/token", data={"grant_type": "refresh_token", "refresh_token": tok["refresh_token"],
-                                                 "client_id": client["client_id"]})
-        assert refresh.status_code == 400 and refresh.json()["error"] == "invalid_grant"
+        refresh = lambda t: app.post("/oauth/token", data={"grant_type": "refresh_token", "refresh_token": t,
+                                                           "client_id": client["client_id"]})
+        r = refresh(tok["refresh_token"])
+        assert r.status_code == 400 and r.json()["error"] == "invalid_grant" and "suspended" in r.json()["error_description"]
         back = TestClient(server.app)
         r = back.post("/login", data={"email": "ann@example.com", "password": "anns-pass-1", "next": "/"})
         assert r.status_code == 403 and "suspended" in r.text                      # the right password, still no
@@ -114,12 +114,14 @@ def test_suspending_a_person_stops_every_way_in_at_once():
         people = {p["email"]: p for p in owner.get("/api/admin/people").json()["people"]}
         assert people["ann@example.com"]["suspended"] is True
 
-        # resumed: she signs in again; her private address and add-in key work again; an AI app reconnects with Allow
+        # resumed: she signs in again; her private address, add-in key and AI app connection all work again as they were
         assert owner.post(f"/api/account/users/{ann_id}/suspend", json={"suspended": False}).status_code == 200
         assert back.post("/login", data={"email": "ann@example.com", "password": "anns-pass-1", "next": "/"},
                          follow_redirects=False).status_code == 303
         assert app.post(private, json=INIT, headers=ACCEPT).status_code == 200 and swbridge.resolve(key)[0]
-        assert _mcp(app, _connect(back, app, client)["access_token"], "tools/list").status_code == 200
+        assert _mcp(app, tok["access_token"], "tools/list").status_code == 200
+        r = refresh(tok["refresh_token"])
+        assert r.status_code == 200 and _mcp(app, r.json()["access_token"], "tools/list").status_code == 200
 
 
 def test_expired_sessions_and_tokens_are_refused(monkeypatch):
@@ -146,3 +148,60 @@ def test_no_shared_server_password_anywhere():
         assert "server password" not in t.lower() and "server_password" not in t and "OPENSKETCH_PASSWORD" not in t
     assert owner.get("/api/admin/server-password").status_code == 404
     assert "reset_with_server_password" not in owner.get("/api/account").json()
+
+
+def test_a_connection_made_before_any_account_stops_when_others_can_reach_the_server(monkeypatch):
+    """An AI app approved on a server open to its own machine (a "local" grant) works only there. Once the server can
+    be reached from elsewhere and has no owner, that token and its refresh are refused (setup mode answers no MCP)."""
+    monkeypatch.delenv("OPENSKETCH_PUBLIC_URL")
+    local = dict(base_url="http://127.0.0.1:8000", client=("127.0.0.1", 50000))
+    with TestClient(server.app, **local) as app:
+        browser = TestClient(server.app, **local)
+        client = _register(app)
+        from tests.test_mcp_oauth import _pkce
+        import re
+        from urllib.parse import parse_qs, urlparse
+        verifier, chal = _pkce()
+        cb = "https://claude.ai/api/mcp/auth_callback"
+        page = browser.get("/oauth/authorize", params={"response_type": "code", "client_id": client["client_id"], "redirect_uri": cb,
+                                                       "state": "s", "code_challenge": chal, "code_challenge_method": "S256"})
+        req = re.search(r'name="req" value="([^"]+)"', page.text).group(1)
+        code = parse_qs(urlparse(browser.post("/oauth/authorize", data={"req": req}, follow_redirects=False).headers["location"]).query)["code"][0]
+        tok = app.post("/oauth/token", data={"grant_type": "authorization_code", "code": code, "redirect_uri": cb,
+                                             "client_id": client["client_id"], "code_verifier": verifier}).json()
+        assert _mcp(app, tok["access_token"], "tools/list").status_code == 200  # on its own machine: fine
+    monkeypatch.setenv("OPENSKETCH_PUBLIC_URL", "https://cados.example.com")
+    with TestClient(server.app, **local) as app:
+        assert _mcp(app, tok["access_token"], "tools/list").status_code == 401
+        r = app.post("/oauth/token", data={"grant_type": "refresh_token", "refresh_token": tok["refresh_token"],
+                                           "client_id": client["client_id"]})
+        assert r.status_code == 400
+    monkeypatch.delenv("OPENSKETCH_PUBLIC_URL")
+    with TestClient(server.app, client=("203.0.113.9", 50000)) as remote:  # nor from another address
+        assert _mcp(remote, tok["access_token"], "tools/list").status_code == 401
+
+
+def test_a_page_on_another_site_cannot_use_a_server_open_to_its_own_machine(monkeypatch):
+    """Open mode serves this machine's own programs only: a web page elsewhere (its Origin), or one that rebinds its own
+    name to 127.0.0.1 (its Host), gets setup mode: no MCP, no keys, no setup from that page."""
+    monkeypatch.delenv("OPENSKETCH_PUBLIC_URL")
+    local = dict(base_url="http://127.0.0.1:8000", client=("127.0.0.1", 50000))
+    with TestClient(server.app, **local) as app:
+        assert app.post("/mcp", json=INIT, headers=ACCEPT).status_code == 200  # this machine's own program
+        assert app.post("/mcp", json=INIT, headers={**ACCEPT, "Origin": "https://evil.example"}).status_code == 401
+        assert app.get("/api/solidworks", headers={"Origin": "https://evil.example"}).status_code == 401
+    with TestClient(server.app, base_url="http://attacker.example:8000", client=("127.0.0.1", 50000)) as rebound:
+        assert rebound.get("/api/solidworks").status_code == 401
+        assert rebound.post("/mcp", json=INIT, headers=ACCEPT).status_code == 401
+        r = rebound.post("/setup", data={"name": "X", "email": "x@example.com", "new_password": "attacker-1"},
+                         headers={"Origin": "http://attacker.example:8000"}, follow_redirects=False)
+        assert r.status_code == 403 and not accounts.any_users()
+
+
+def test_dot_segments_never_slip_past_sign_in():
+    c = TestClient(server.app, client=("203.0.113.9", 50000))
+    # (encoded, so the client sends the dots as they are; the server decodes them before routing)
+    for p in ("/mcp/%2E%2E/favicon.svg", "/mcp/%2e%2e/fonts/fonts.css", "/v2/device/%2E%2E/%2E%2E/downloads/x.zip",
+              "/mcp/%2E/x", "/ui//app.js", "/mcp%2F..%2Ffavicon.svg"):
+        assert c.get(p).status_code == 400, p
+    assert c.get("/favicon.svg").status_code == 200

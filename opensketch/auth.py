@@ -91,8 +91,8 @@ def mcp_token() -> str:
     return os.environ.get("OPENSKETCH_MCP_TOKEN") or _mac("mcp", 32)
 
 
-def check_token(token: str) -> bool:
-    return resolve_mcp(token)[0]
+def check_token(token: str, scope=None) -> bool:
+    return resolve_mcp(token, scope)[0]
 
 
 def _person_token(user_id: str, n: int) -> str:
@@ -174,22 +174,43 @@ def reachable_by_others() -> bool:
     return bool(public or os.environ.get("OPENSKETCH_REQUIRE_SIGNIN") or _legacy_password())
 
 
+LOOPBACK = ("127.0.0.1", "::1", "localhost")
+
+
+def _host_name(value: str) -> str:
+    """The host of a Host header or an Origin, without scheme, port or IPv6 brackets."""
+    from urllib.parse import urlsplit
+    v = (value or "").strip().lower()
+    return (urlsplit(v if "://" in v else "//" + v).hostname or "") if v else ""
+
+
 def is_local(scope) -> bool:
-    """The request came from this machine itself, not through a proxy or tunnel (they add a forwarding header).
-    "testclient" is the in-process test client's name, never a network address."""
-    host = ((scope.get("client") or ("",))[0] or "") if scope else ""
-    if host not in ("127.0.0.1", "::1", "localhost", "testclient"):
+    """The request came from this machine itself, from a program or a page on this machine: a loopback client, no
+    forwarding header (proxies and tunnels add one), a loopback Host (a DNS-rebinding page has its own name there) and
+    no Origin of another site (a page elsewhere fetching this server). The in-process test client is "testclient"
+    talking to "testserver", names no network request can carry together."""
+    if not scope:
         return False
-    return not any(h in _headers(scope) for h in FORWARDED)
+    client = (scope.get("client") or ("",))[0] or ""
+    h = _headers(scope)
+    if any(k in h for k in FORWARDED):
+        return False
+    test = client == "testclient"
+    if client not in LOOPBACK and not test:
+        return False
+    if _host_name(h.get("host", "")) not in LOOPBACK + (("testserver",) if test else ()):
+        return False
+    origin = h.get("origin", "")
+    return not origin or _host_name(origin) in LOOPBACK + (("testserver",) if test else ())
 
 
 def mode(scope=None) -> str:
-    """accounts, setup or open (see the top of this file). Without a request (scope), open means no account and no
-    public address; each request from elsewhere then still gets setup mode."""
+    """accounts, setup or open (see the top of this file). Open needs a request from this machine itself, so a call
+    without the request (scope) never gets it: it reads setup."""
     from . import accounts
     if accounts.any_users():
         return "accounts"
-    if reachable_by_others() or (scope is not None and not is_local(scope)):
+    if reachable_by_others() or not is_local(scope):
         return "setup"
     return "open"
 
@@ -667,6 +688,9 @@ class PasswordGate:
         if scope["type"] != "http":
             return await self.app(scope, receive, send)
         path = scope.get("path", "")
+        if any(seg in (".", "..") for seg in path.split("/")) or "//" in path or "\\" in path:
+            # "/mcp/../x" would count as a machine path here and then reach a file: never pass such a path on
+            return await _send(send, 400, b'{"error":"Bad path."}', [(b"content-type", b"application/json")])
         if scope.get("method") not in ("GET", "HEAD", "OPTIONS") and not _machine_path(path) and not _same_origin(scope):
             return await _send(send, 403, b'{"error":"This request did not come from a CADOS page."}', [(b"content-type", b"application/json")])
         if path == "/healthz" and scope.get("method") in ("GET", "HEAD"):  # the supervisor's check: no data, no sign-in
@@ -788,6 +812,11 @@ class PasswordGate:
         if path == "/setup":
             if m == "accounts":
                 return await go("/login")
+            if not reachable_by_others() and not is_local(scope):
+                # a server set up for its own machine only (no public address) is set up from that machine, never
+                # from elsewhere, nor by a page of another site open in its browser
+                return await _send(send, 403, notice_page("Set up CADOS on its own computer",
+                                                          "Open CADOS on the computer it runs on to create the administrator account."), HTML)
             if not post:
                 return await _send(send, 200, _setup_page(nxt), HTML)
             try:  # once only: create_owner refuses as soon as any account exists (under the accounts lock)
@@ -847,7 +876,7 @@ async def _google_flow(path, scope, q, go, send):
     st = oauth.read_state(_cookie(scope, oauth.STATE_COOKIE))
 
     async def fail(msg, status=400):
-        return await _send(send, status, _login_page((st or {}).get("n", "/"), msg) if mode() == "accounts" else
+        return await _send(send, status, _login_page((st or {}).get("n", "/"), msg) if mode(scope) == "accounts" else
                            _setup_page("/", msg), HTML + [(b"set-cookie", clear)])
 
     if q.get("error"):

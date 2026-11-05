@@ -550,5 +550,5 @@ def test_an_open_server_takes_pairing_only_from_its_own_machine():
     assert remote.post("/devices/pair", data={"code": "ABCD-EFGH", "name": "x"}).status_code in (401, 403)
     via_tunnel = TestClient(server.app, client=("127.0.0.1", 50000), headers={"X-Forwarded-For": "203.0.113.9"})
     assert via_tunnel.post("/v2/devices/pair/start", json={"public_jwk": jwk, "name": "x"}).status_code == 403
-    local = TestClient(server.app, client=("127.0.0.1", 50000))
+    local = TestClient(server.app, base_url="http://127.0.0.1:8000", client=("127.0.0.1", 50000))
     assert local.post("/v2/devices/pair/start", json={"public_jwk": jwk, "name": "x"}).status_code == 200

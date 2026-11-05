@@ -483,6 +483,7 @@ def api_suspend_user(user_id: str, req: Suspend, request: Request):
         return JSONResponse({"error": str(e)}, status_code=400)
     if req.suspended:
         _forget(user_id)
+        devicebridge.suspend_person(user_id)  # held long polls and waiting commands end now, not at the next request
     return {"user": u}
 
 
@@ -938,6 +939,8 @@ async def _oauth_client_call(request: Request, fn):
         raise mcpauth.OAuthError("temporarily_unavailable", "Too many requests from this address. Try again in a minute.", 429)
     form = await _body_form(request)
     await mcpauth.ensure_client(form.get("client_id"))
+    if fn is mcpauth.token:
+        return await run_in_threadpool(fn, form, request.headers.get("authorization", ""), request.scope)
     return await run_in_threadpool(fn, form, request.headers.get("authorization", ""))
 
 

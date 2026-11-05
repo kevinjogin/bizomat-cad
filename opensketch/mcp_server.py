@@ -162,7 +162,7 @@ class _BearerGate:
         else:
             authz = headers.get("authorization", "")
             tok = authz[7:].strip() if authz[:7].lower() == "bearer " else ""
-            ok, user = mcpauth.user_for_access(tok) if tok else (False, None)
+            ok, user = mcpauth.user_for_access(tok, scope) if tok else (False, None)
             grant = mcpauth.grant_info(tok) if ok else None
             if not ok:
                 body = json.dumps({"error": "invalid_token" if tok else "unauthorized",

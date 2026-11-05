@@ -255,6 +255,8 @@ def test_a_suspended_persons_computer_is_refused_until_they_are_resumed(base, co
                                                    "instances": pc.instances, "paused": False})
     assert status().status_code == 200
     accounts.set_suspended(pat["id"], True)
+    db.suspend_person(pat["id"])  # what the Admin page's Suspend does next: the live session closes at once
+    assert db._sessions[pc.device_id].closed[0] == "suspended"
     r = status()
     assert r.status_code == 401 and r.json()["error"]["code"] == "ACCOUNT_SUSPENDED"
     other = FakeCompanion(base, Canned(), name="PAT-LAPTOP", approve=False)

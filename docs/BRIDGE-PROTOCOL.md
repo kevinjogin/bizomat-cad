@@ -118,7 +118,7 @@ MCP tools add `error_code` beside `error` in their JSON.
 | `INPUT_INVALID`, `INPUT_FORBIDDEN_FIELD`, `UNKNOWN_OP`, `PAYLOAD_TOO_LARGE` | The command is wrong; nothing ran | after fixing it |
 | `UNAUTHENTICATED`, `SIGNATURE_INVALID`, `REPLAY_DETECTED`, `TOKEN_EXPIRED` (clock), `DPOP_INVALID` | A request or command failed its checks | no (clock: after correcting) |
 | `DEVICE_UNKNOWN`, `DEVICE_REVOKED`, `WRONG_DEVICE` | Not this account's computer, or removed | pair again |
-| `ACCOUNT_SUSPENDED` | The computer's CADOS account is suspended by the owner (401 on every device request; pairing with the password: 403). The computer stays paired | after the owner resumes the account (the Companion retries every 30 s) |
+| `ACCOUNT_SUSPENDED` | The computer's CADOS account is suspended by the owner (401 on every device request; pairing with the password: 403; a held `next` ends with 409 reason `suspended`; waiting commands fail with this code). The computer stays paired | after the owner resumes the account (the Companion retries every 30 s) |
 | `DEVICE_OFFLINE`, `DEVICE_AMBIGUOUS`, `NOT_CONNECTED` | Which computer: offline, several online, none | when it is online / with `device=` |
 | `INSTANCE_NOT_RUNNING`, `SW_BUSY_DIALOG`, `USER_EDITING`, `PAUSED` | SOLIDWORKS closed, a dialog open, a sketch open, paused by the person | after they act |
 | `APPROVAL_DENIED` | The person declined a destructive operation in SOLIDWORKS | no |

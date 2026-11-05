@@ -116,8 +116,8 @@ def resolve(token: str) -> tuple[bool, dict | None]:
     from . import accounts
     counters = _counters()
     users = accounts.list_users()
-    if not users and auth._eq(token, _key("local", int(counters.get("local", 0)))):
-        return True, None
+    if not users and not auth.reachable_by_others() and auth._eq(token, _key("local", int(counters.get("local", 0)))):
+        return True, None  # a server for this PC only; one others can reach waits for its owner (setup mode)
     for u in users:
         if not u.get("suspended") and auth._eq(token, _key(u["id"], int(counters.get(u["id"], 0)))):
             return True, u

@@ -79,12 +79,18 @@ def test_a_public_server_waits_for_its_owner_without_any_server_password(monkeyp
 def test_a_request_from_elsewhere_never_gets_open_mode():
     """Open mode (no account, no sign-in) is only for the machine the server runs on; through a proxy or tunnel, or
     from another address, the same server waits in setup mode."""
-    assert auth.mode() == "open"
-    local = {"type": "http", "client": ("127.0.0.1", 5000), "headers": []}
+    host = (b"host", b"127.0.0.1:8000")
+    local = {"type": "http", "client": ("127.0.0.1", 5000), "headers": [host]}
     assert auth.mode(local) == "open"
-    assert auth.mode({**local, "headers": [(b"x-forwarded-for", b"203.0.113.9")]}) == "setup"
-    assert auth.mode({**local, "headers": [(b"cf-connecting-ip", b"203.0.113.9")]}) == "setup"
-    assert auth.mode({"type": "http", "client": ("192.168.1.20", 5000), "headers": []}) == "setup"
+    assert auth.mode({**local, "headers": [(b"host", b"localhost:8000"), (b"origin", b"http://localhost:8000")]}) == "open"
+    assert auth.mode() == "setup"  # without the request: never open
+    assert auth.mode({**local, "headers": [host, (b"x-forwarded-for", b"203.0.113.9")]}) == "setup"
+    assert auth.mode({**local, "headers": [host, (b"cf-connecting-ip", b"203.0.113.9")]}) == "setup"
+    assert auth.mode({"type": "http", "client": ("192.168.1.20", 5000), "headers": [host]}) == "setup"
+    # a page on another site in this machine's browser: its Origin, or (DNS rebinding) its own name as the Host
+    assert auth.mode({**local, "headers": [host, (b"origin", b"https://evil.example")]}) == "setup"
+    assert auth.mode({**local, "headers": [(b"host", b"attacker.example:8000")]}) == "setup"
+    assert auth.mode({**local, "headers": [(b"host", b"testserver")]}) == "setup"  # the test name only with the test client
 
 
 def test_invites_members_and_owner_rules():

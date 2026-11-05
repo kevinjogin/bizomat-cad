@@ -517,14 +517,25 @@ def _new_tokens(d: dict, grant_id: str) -> dict:
             "scope": SCOPE}
 
 
-def _user_exists(user_id: str) -> bool:
-    if user_id in ("server", "local"):
-        return True
-    from . import accounts
+def _user_exists(user_id: str, scope=None) -> bool:
+    """The grant's person can still use CADOS. Grants made before any account ("local": consent on a server open to
+    its own machine; "server": the old password sign-in) act as the owner once there is one, and with no account
+    only "local" ones, and only for a request from that machine itself (open mode)."""
+    from . import accounts, auth
+    if user_id == "local" or user_id == "server":
+        if accounts.any_users():
+            return accounts.owner() is not None
+        return user_id == "local" and auth.mode(scope) == "open"
     return accounts.get(user_id) is not None
 
 
-def token(form: dict, basic: str = "") -> dict:
+def _suspended(user_id: str) -> bool:
+    from . import accounts
+    u = accounts.get_any(user_id) if user_id not in ("local", "server") else None
+    return bool(u and u.get("suspended"))
+
+
+def token(form: dict, basic: str = "", scope=None) -> dict:
     grant_type = form.get("grant_type", "")
     cid, rec = _client_auth(form, basic)
     with _lock:
@@ -541,7 +552,9 @@ def token(form: dict, basic: str = "") -> dict:
             if form.get("resource") and _canon(form["resource"]) not in (
                     _canon(c["resource"]), _canon(c["resource"].rsplit("/mcp", 1)[0]), _canon(_origin(c["resource"]))):
                 raise OAuthError("invalid_target", "This server only issues tokens for its own MCP endpoint.")
-            if not _user_exists(c["user"]):
+            if _suspended(c["user"]):
+                raise OAuthError("invalid_grant", "This CADOS account is suspended. Ask your CADOS administrator.")
+            if not _user_exists(c["user"], scope):
                 raise OAuthError("invalid_grant", "That CADOS account no longer exists.")
             d = _load()
             gid = "osg_" + secrets.token_urlsafe(12)
@@ -570,7 +583,9 @@ def token(form: dict, basic: str = "") -> dict:
             g = d["grants"].get(gid) if gid else None
             if g is None or g["client_id"] != cid or g.get("refresh_exp", 0) < now:
                 raise OAuthError("invalid_grant", "This connection was ended or has expired. Connect again.")
-            if not _user_exists(g["user"]):
+            if _suspended(g["user"]):  # refused, but kept: it works again once the owner resumes the account
+                raise OAuthError("invalid_grant", "This CADOS account is suspended. Ask your CADOS administrator.")
+            if not _user_exists(g["user"], scope):
                 d["grants"].pop(gid, None)
                 _save(d)
                 raise OAuthError("invalid_grant", "That CADOS account no longer exists.")
@@ -599,7 +614,7 @@ def _origin(uri: str) -> str:
     return f"{u.scheme}://{u.netloc}"
 
 
-def user_for_access(tok: str) -> tuple[bool, dict | None]:
+def user_for_access(tok: str, scope=None) -> tuple[bool, dict | None]:
     """(valid, person) for a Bearer token on the MCP endpoint. Person None = a server without accounts."""
     if not tok or not tok.startswith("osa_") or len(tok) > 100:
         return False, None
@@ -613,9 +628,9 @@ def user_for_access(tok: str) -> tuple[bool, dict | None]:
         return False, None
     from . import accounts
     if g["user"] in ("server", "local"):
-        user = accounts.owner()
-        if user is None and accounts.any_users():
+        if not _user_exists(g["user"], scope):
             return False, None
+        user = accounts.owner()
     else:
         user = accounts.get(g["user"])
         if user is None:

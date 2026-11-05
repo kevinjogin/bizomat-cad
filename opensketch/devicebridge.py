@@ -536,7 +536,16 @@ def _end_session(device_id: str, reason: str, message: str) -> None:
     for p in [p for p in _pending.values() if p.payload["device_id"] == device_id]:
         if p.status not in TERMINAL:
             _note(p, "unknown" if p.status == "running" else "failed", note=message)
-            _resolve(p.fut, exc=BridgeError(message, code="DEVICE_REVOKED" if reason == "revoked" else "SESSION_REPLACED"))
+            code = {"revoked": "DEVICE_REVOKED", "suspended": "ACCOUNT_SUSPENDED"}.get(reason, "SESSION_REPLACED")
+            _resolve(p.fut, exc=BridgeError(message, code=code))
+
+
+def suspend_person(user_id: str) -> None:
+    """The owner suspended this person: their computers' live sessions close (a held long poll answers 409 with
+    reason "suspended") and their waiting commands fail. The computers stay paired; their next request gets
+    ACCOUNT_SUSPENDED until the account is resumed."""
+    for d in devices_for({"id": user_id}):
+        _end_session(d["id"], "suspended", "This CADOS account is suspended. Ask your CADOS administrator.")
 
 
 def _clean_name(name) -> str:

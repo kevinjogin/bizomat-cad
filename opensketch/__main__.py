@@ -2,7 +2,8 @@
 
 Recovery, run on the server itself (on Fly: fly ssh console -a cados -C "python -m opensketch --reset-password EMAIL"):
 --reset-password EMAIL gives that account a new strong password, prints it once and signs the account out everywhere.
-Whoever can run commands on the server can already read its data, so this needs no other password."""
+Whoever can run commands on the server can already read its data, so this needs no other password. It writes the
+account files from a second process: run it while nobody is signing up or being changed on the Admin page."""
 
 import argparse
 import faulthandler
