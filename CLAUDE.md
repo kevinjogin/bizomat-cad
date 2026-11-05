@@ -77,8 +77,10 @@ notes). The MSI builds unsigned on Windows in CI (`installer` job); signing wait
   commands. `Endpoint` serves it
   at each path in `PATHS` = ("/mcp", "/solidworks/mcp"): the path itself takes a Bearer token (`_BearerGate`, 401
   with the protected-resource pointer for that path), `path/<key>` the private address (`_TokenGate`,
-  `auth.resolve_mcp`). /solidworks/mcp is a second address early connectors used. Stateless Streamable HTTP, JSON
-  responses.
+  `auth.resolve_mcp`). /solidworks/mcp is a second address early connectors used. Stateless Streamable HTTP; each answer
+  is an event stream (`json_response=False`): its headers go at once and sse-starlette sends a comment every 15 s,
+  so a tool that waits minutes for SOLIDWORKS survives a proxy's idle limit (Cloudflare in front of bizomat.ai: 524
+  after 100 s of silence). Tests read answers with `tests/mcp_reply.rpc`.
 - OAuth (`mcpauth.py`): `RESOURCES` maps both paths to "CADOS" with their own protected-resource metadata; a
   token from either works on both; one connection per person and app. DCR, client metadata documents (fetched with
   `safefetch.py`: public https only, pinned address), PKCE S256, refresh rotation, revoke.
@@ -235,7 +237,7 @@ notes). The MSI builds unsigned on Windows in CI (`installer` job); signing wait
   host (RFC 9728 /.well-known/oauth-protected-resource/cad/mcp, RFC 8414 /.well-known/oauth-authorization-server/cad,
   also /.well-known/openid-configuration/cad); the 401 pointer names the RFC 9728 address and the issuer is
   https://bizomat.ai/cad. On bizomat.ai /CAD 301s to /cad and other pages 302 into /cad (until the website's Worker
-  serves the root and passes /cad/* and those three well-known paths on). OPENSKETCH_REDIRECT_HOSTS
+  serves the root: it passes /cad/*, the OAuth well-known paths and the root program paths below on to this app). OPENSKETCH_REDIRECT_HOSTS
   (cados.fly.dev, cados.kevos.com, cad.bizomat.ai) are old hosts: pages 301 to https://bizomat.ai/cad, programs
   (/healthz, /mcp*, /solidworks/mcp*, OAuth register/token/revoke, /.well-known/, /v2/, /api/) keep working at their
   root with that host's own address (`canonical.machine_base`), and the consent page accepts a resource on any of

@@ -15,6 +15,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from opensketch import mcpauth, server, store
+from tests.mcp_reply import rpc
 
 ACCEPT = {"Accept": "application/json, text/event-stream"}
 
@@ -162,11 +163,11 @@ def test_sign_in_consent_tokens_and_solidworks_are_per_person(app):
     init = _mcp(app, tok["access_token"], "initialize",
                 {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "t", "version": "1"}})
     assert init.status_code == 200 and init.headers["access-control-allow-origin"] == "*"
-    status = json.dumps(_mcp(app, tok["access_token"], params={"name": "sw_status", "arguments": {}}).json())
+    status = json.dumps(rpc(_mcp(app, tok["access_token"], params={"name": "sw_status", "arguments": {}})))
     assert "OWNER-PC" in status
     # Mei connects her own Claude: it reaches only her SOLIDWORKS link (none yet)
     tok2 = _connect(member, app, info)
-    status = json.dumps(_mcp(app, tok2["access_token"], params={"name": "sw_status", "arguments": {}}).json())
+    status = json.dumps(rpc(_mcp(app, tok2["access_token"], params={"name": "sw_status", "arguments": {}})))
     assert "OWNER-PC" not in status and '\\"connected\\": false' in status
     # a code works once; a wrong verifier never
     assert app.post("/oauth/token", data={"grant_type": "authorization_code", "code": "osk_nope", "client_id": info["client_id"],

@@ -19,6 +19,7 @@ import pytest
 
 from opensketch import auth, devicebridge as db, server, sw_tools, swbridge
 from tests.bridge_fakes import FakeCompanion, Refused
+from tests.mcp_reply import rpc
 
 
 @pytest.fixture(autouse=True)
@@ -73,7 +74,7 @@ def _mcp(base, name, args):
     r = httpx.post(url, json={"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": name, "arguments": args}},
                    headers={"Accept": "application/json, text/event-stream"}, timeout=180)
     assert r.status_code == 200, r.text
-    res = r.json()["result"]
+    res = rpc(r)["result"]
     return res, json.loads(res["content"][0]["text"])
 
 
@@ -604,3 +605,27 @@ def test_a_computer_paired_under_a_path_works_as_on_a_host_of_its_own(cad_base, 
     bad = pc.http.post(cad_base + "/v2/device/hello", content=b"{}",
                        headers={"Authorization": pc.proof("POST", "/cad/v2/device/hello", b"{}")})
     assert bad.status_code == 401  # a proof is for the path below the address, never the prefixed one
+
+
+@pytest.mark.parametrize("where", ["base", "cad_base"])
+def test_a_tool_call_keeps_its_connection_alive_while_solidworks_works(where, request, companions, monkeypatch):
+    """An answer is an event stream: its headers go at once and a comment at each keep-alive interval (15 s; 0.2 s here)
+    until SOLIDWORKS answers, so a proxy that ends a silent response (Cloudflare in front of bizomat.ai/cad: 100 s)
+    keeps a tool that runs for minutes. Under /cad too: the prefix's HTML rewriting never holds a stream back."""
+    from sse_starlette.sse import EventSourceResponse
+    monkeypatch.setattr(EventSourceResponse, "DEFAULT_PING_INTERVAL", 0.2)
+    at = request.getfixturevalue(where)
+    pc = FakeCompanion(at, Canned())
+    companions.append(pc)
+    pc.hold = threading.Event()  # SOLIDWORKS is busy until the test lets it answer
+    body = {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "sw_get_document", "arguments": {}}}
+    with httpx.stream("POST", f"{at}/mcp/{auth.mcp_token()}", json=body, timeout=30,
+                      headers={"Accept": "application/json, text/event-stream"}) as r:
+        assert r.status_code == 200 and r.headers["content-type"].startswith("text/event-stream")
+        lines = r.iter_lines()
+        first = next(line for line in lines if line)
+        assert first.startswith(":"), first  # a keep-alive comment while the command is still running
+        pc.hold.set()
+        data = [line[5:].strip() for line in lines if line.startswith("data:")]
+    res = json.loads(data[-1])["result"]
+    assert not res.get("isError") and json.loads(res["content"][0]["text"])["op"] == "read"

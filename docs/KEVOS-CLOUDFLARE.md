@@ -44,15 +44,22 @@ answers. It never replaces another record unless you tick replace_existing. Afte
 
 1. DNS: a CNAME `bridge.<your-domain>` to the gateway host (for Fly: `cados.fly.dev`, then `fly certs add
    bridge.<your-domain>` and the DNS check record Fly asks for).
-2. Proxy on (orange cloud) or off. With the proxy on:
+2. Proxy on (orange cloud) or off. With the proxy on (bizomat.ai is proxied, so its Worker can serve the website):
    - SSL/TLS mode **Full (strict)**.
-   - A Cache Rule: **Bypass cache** for the whole hostname (the gateway sends `no-store`; this makes it certain).
+   - A Cache Rule: **Bypass cache** for the gateway's paths (the gateway sends `no-store`; this makes it certain). On
+     its own hostname, the whole hostname; on bizomat.ai, `/cad*` and the root paths below, so the website's files
+     keep their caching.
    - Do not turn on Bot Fight Mode or JavaScript challenges for `/mcp*`, `/solidworks/mcp*`, `/oauth/*`,
-     `/.well-known/*` or `/v2/*`: AI apps' servers and the Companions are programs and cannot solve challenges.
+     `/.well-known/*` or `/v2/*`, nor (on bizomat.ai) for the same paths under `/cad`: AI apps' servers and the
+     Companions are programs and cannot solve challenges.
    - Rate limiting (optional, the gateway has its own): `/v2/devices/pair/start` 20 per IP per hour; `/oauth/register`
-     30 per IP per hour; `/login` 20 per IP per 10 minutes.
+     30 per IP per hour; `/login` 20 per IP per 10 minutes (each also under `/cad` on bizomat.ai).
+   - The proxy connects to Fly over HTTPS with the hostname's Fly certificate, which Fly renews by itself only while the
+     record points straight at Fly. Add the `_acme-challenge` CNAME that `fly certs show <hostname> -a cados` lists
+     (validation by DNS), or renewal fails behind the proxy and Cloudflare then refuses the expired certificate (526).
    - Limits that matter and are respected: request bodies (100 MB on Free and Pro plans: the Companion uploads in
-     32 MiB chunks) and the 100 s response timeout (long polls are held 25 s).
+     32 MiB chunks) and the 100 s response timeout: long polls are held 25 s, and MCP answers are event streams that
+     send a comment every 15 s while a tool waits for SOLIDWORKS (up to 900 s).
 3. Set `OPENSKETCH_PUBLIC_URL=https://bridge.<your-domain>` on the gateway, so OAuth metadata and pairing links use it.
 4. In the MSI, `GATEWAY_URL=https://bridge.<your-domain>`.
 
