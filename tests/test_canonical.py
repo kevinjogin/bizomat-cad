@@ -253,6 +253,33 @@ def test_apps_set_up_with_the_new_or_an_old_address_sign_in_and_keep_working():
             assert refreshed.status_code == 200, refreshed.text
 
 
+
+def test_google_sign_in_comes_back_under_cad(monkeypatch):
+    """Google sends the person back to the address the sign-in started from, under /cad (the website owns the rest of
+    bizomat.ai), and the state cookie is scoped there: the return address registered with Google is
+    https://bizomat.ai/cad/auth/google/callback, which the settings page shows."""
+    from opensketch import oauth
+    browser = _setup_owner()
+    monkeypatch.setenv("GOOGLE_CLIENT_ID", "cid.apps.googleusercontent.com")
+    monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "secret")
+    asked = []
+
+    async def exchange(code, redirect_uri):
+        asked.append(redirect_uri)
+        return {"sub": "g-1", "email": "owner@example.com", "email_verified": True, "name": "Owner", "hd": "example.com"}
+    monkeypatch.setattr(oauth, "exchange", exchange)
+    back = NEW + "/auth/google/callback"
+    assert browser.get(PRE + "/api/account/google", headers={"host": SITE}).json()["redirect_uri"] == back
+    browser.get(PRE + "/logout", headers={"host": SITE})
+    r = browser.get(PRE + "/auth/google", headers={"host": SITE}, follow_redirects=False)
+    assert r.status_code == 303 and parse_qs(urlparse(r.headers["location"]).query)["redirect_uri"] == [back]
+    assert "Path=/cad/auth/google;" in r.headers["set-cookie"]
+    state = parse_qs(urlparse(r.headers["location"]).query)["state"][0]
+    r = browser.get(f"{PRE}/auth/google/callback?state={state}&code=good-code", headers={"host": SITE}, follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == PRE + "/", r.text[:300]
+    assert asked == [back]
+    assert browser.get(PRE + "/api/account", headers={"host": SITE}).json()["user"]["google"]
+
 def test_sign_in_to_another_server_is_refused():
     browser = _setup_owner()
     reg = browser.post("/cad/oauth/register", json={"client_name": "Claude", "redirect_uris": [CALLBACK]}).json()
