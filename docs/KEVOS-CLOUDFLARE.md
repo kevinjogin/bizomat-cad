@@ -75,7 +75,7 @@ the network.
    ```
 
 2. Public hostname `bridge.example.com` to `http://localhost:8000`. Start the gateway with
-   `OPENSKETCH_PUBLIC_URL=https://bridge.example.com` and a server password (`OPENSKETCH_PASSWORD`, or accounts made).
+   `OPENSKETCH_PUBLIC_URL=https://bridge.example.com`, then create the owner account on its website at once.
 3. Cloudflare Access (optional, for the website): make an Access application for `bridge.example.com` with your
    identity provider for people, and a second application on the same hostname with a **Bypass** policy for the
    paths `/mcp`, `/mcp/*`, `/solidworks/mcp*`, `/oauth/*`, `/.well-known/*`, `/v2/*`. Those paths have their own
@@ -91,8 +91,8 @@ one gateway (A or B) for all computers and retire per-PC tunnels.
 
 ## Never
 
-- Never publish the gateway without sign-in: set `OPENSKETCH_PASSWORD` (or make accounts) first. A gateway without
-  sign-in takes pairing only from its own machine, so no computer can be added to it over the network, but its MCP
-  endpoint would still be open.
+- Never leave a published gateway without its owner account. Until it exists, the gateway answers only its setup
+  page to anyone not on its own machine (no MCP, no pairing, no data), and the first person to fill that page in
+  becomes the owner.
 - Never put a Companion or add-in endpoint on the internet: they have none. The only listener on a computer is the
   local pipe for that Windows user.

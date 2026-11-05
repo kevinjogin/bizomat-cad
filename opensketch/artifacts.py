@@ -121,8 +121,7 @@ def _directory() -> Path:
 def _signature(artifact_id: str, filename: str, expires: int) -> str:
     # Domain separation prevents a download signature from being used as any other credential.
     message = f"opensketch-artifact-v1\n{artifact_id}\n{filename}\n{expires}"
-    # keyed by the random data-folder secret and the connector address: a new server password still revokes
-    # every link, but a short password cannot be guessed offline from one
+    # keyed by the random data-folder secret and the server-wide connector address
     key = hmac.new(auth.data_secret("artifact-download"), auth.mcp_token().encode(), hashlib.sha256).digest()
     return hmac.new(key, message.encode(), hashlib.sha256).hexdigest()
 

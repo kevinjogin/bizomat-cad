@@ -119,7 +119,7 @@ def resolve(token: str) -> tuple[bool, dict | None]:
     if not users and auth._eq(token, _key("local", int(counters.get("local", 0)))):
         return True, None
     for u in users:
-        if auth._eq(token, _key(u["id"], int(counters.get(u["id"], 0)))):
+        if not u.get("suspended") and auth._eq(token, _key(u["id"], int(counters.get(u["id"], 0)))):
             return True, u
     return False, None
 
