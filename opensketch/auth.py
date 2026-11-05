@@ -659,7 +659,7 @@ def _machine_path(path: str) -> bool:
     return (path in ("/mcp", "/mcp/") or path.startswith("/mcp/") or path in OAUTH_PUBLIC
             or path in ("/solidworks/mcp", "/solidworks/mcp/") or path.startswith("/solidworks/mcp/")
             or path.startswith("/.well-known/oauth-")
-            or path.startswith(("/v2/device/", "/v2/devices/")) or path == "/v2/keys")
+            or path.startswith(("/v2/device/", "/v2/devices/", "/v2/bridge/")) or path == "/v2/keys")
 
 
 def _same_origin(scope) -> bool:

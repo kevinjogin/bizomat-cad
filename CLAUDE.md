@@ -225,10 +225,18 @@ notes). The MSI builds unsigned on Windows in CI (`installer` job); signing wait
 - Code: https://github.com/jogkev-creator/CADOS (moved from jogkev-creator/opensketchyz in Nov 2026; release
   downloads, the MSI's links and `swbridge.ADDIN_DOWNLOAD` point there). The Fly app below was linked to the old
   repository: relink it in Fly (or deploy by hand) after the move.
-- Public address https://cados.kevos.com (point it at the Fly app with `domain.yml`; fly.toml [env] and deploy.yml set
-  it as OPENSKETCH_PUBLIC_URL). `canonical.py` (outermost middleware) answers 301 on the old host (fly.toml
-  OPENSKETCH_REDIRECT_HOSTS=cados.fly.dev, Host header only) for GET/HEAD, keeping path and query; never for
-  /healthz, /mcp*, /solidworks/mcp*, OAuth register/token/revoke, /.well-known/, /v2/, /api/ (`tests/test_canonical.py`).
+- Public address https://cados.kevos.com today; CAD Automation's own address is to be https://cad.bizomat.ai
+  (bizomat.ai itself is the BIZOMAT website, never a CAD address). fly.toml [env] (and deploy.yml for manual
+  deploys) set OPENSKETCH_PUBLIC_URL, OPENSKETCH_REDIRECT_HOSTS=cados.fly.dev,cados.kevos.com and
+  OPENSKETCH_ALIAS_HOSTS=cad.bizomat.ai. `canonical.py` (outermost middleware, Host header only) ignores the canonical
+  host in both lists; it answers 301 on an old host for GET/HEAD, keeping path and query, never for /healthz, /mcp*,
+  /solidworks/mcp*, OAuth register/token/revoke, /.well-known/, /v2/, /api/; alias hosts are served as they are. On
+  an old or alias host those program paths keep that host as their own address (`canonical.machine_base`: OAuth
+  metadata, the 401 pointer, upload and download links), and the consent page accepts a resource on any of the
+  server's addresses and answers with that address as `iss`, so connectors, add-ins and computers keep working on
+  the address they were set up with. Moving to cad.bizomat.ai, once its DNS record (DNS only, CNAME to
+  cados.fly.dev) and Fly certificate exist, is OPENSKETCH_PUBLIC_URL='https://cad.bizomat.ai' alone
+  (`tests/test_canonical.py`, phases A and B).
   Favicons (`static/favicon.svg|ico`, `ui/icon-32.png`, `ui/icon-180.png`) are the KEVOS K (drawn from the KEVOS logo;
   kevos.com could not be fetched from the build session). Origin https://cados.fly.dev (Fly
   app `cados`, Sydney, first made with Fly Launch from GitHub on 4 Nov 2026); the deploy health checks use it.

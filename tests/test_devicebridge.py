@@ -552,3 +552,18 @@ def test_an_open_server_takes_pairing_only_from_its_own_machine():
     assert via_tunnel.post("/v2/devices/pair/start", json={"public_jwk": jwk, "name": "x"}).status_code == 403
     local = TestClient(server.app, base_url="http://127.0.0.1:8000", client=("127.0.0.1", 50000))
     assert local.post("/v2/devices/pair/start", json={"public_jwk": jwk, "name": "x"}).status_code == 200
+
+
+def test_the_update_manifest_reaches_computers_on_a_server_with_accounts(monkeypatch):
+    """The Companion asks with its device proof and no cookie. On a server with accounts the sign-in gate must leave
+    /v2/bridge/ to the device API (it sent such requests to the sign-in page)."""
+    from fastapi.testclient import TestClient
+    monkeypatch.setenv("OPENSKETCH_PUBLIC_URL", "https://cad.example.test")
+    owner = TestClient(server.app, base_url="https://cad.example.test")
+    r = owner.post("/setup", data={"name": "Owner", "email": "owner@example.com", "new_password": "correct horse",
+                                   "next": "/"}, follow_redirects=False)
+    assert r.status_code in (302, 303), r.text[:200]
+    anon = TestClient(server.app, base_url="https://cad.example.test")
+    r = anon.get("/v2/bridge/update.json", follow_redirects=False)
+    assert r.status_code == 401 and r.headers["content-type"].startswith("application/json"), (r.status_code, r.headers)
+    assert anon.get("/dashboard", follow_redirects=False).status_code == 303  # pages still need sign-in

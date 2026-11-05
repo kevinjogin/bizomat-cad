@@ -7,6 +7,8 @@ auth.py and mcpauth.py, the computer link in devicebridge.py. Keep it that way w
 
 from __future__ import annotations
 
+from html import escape
+
 from . import brand
 from .brand import icon
 
@@ -236,6 +238,7 @@ def docs(signed_in: bool = False, base: str = "") -> bytes:
         ("The assistant cannot sign in to CADOS", "Remove the connector in your assistant and add it again. If it still fails, use the private address in Settings."),
     ]
     rows = "".join(f"<tr><td>{a}</td><td>{b}</td></tr>" for a, b in trouble)
+    svc = escape(base.rstrip("/")) if base.startswith("https://") else "https://cados.kevos.com"  # this server's own address
     html = f"""{brand.head("Documentation", "Install CADOS, connect your AI assistant to SOLIDWORKS, verify the connection and fix common problems.", path="/docs", index=True, base=base)}<body>
 {brand.header("docs", signed_in)}
 <main id="main"><div class="doc-hero"><div class="container"><span class="eyebrow">Documentation</span><h1>Set up CADOS</h1>
@@ -284,12 +287,12 @@ installer adds the CADOS add-in and the KEVOS Companion, registers the add-in wi
 computer and starts the Companion when you sign in to Windows. There are no files to copy and no registry to edit. It does
 not change your CAD files.</p></li></ol>
 <p>IT teams can install silently and set the service address for everyone:</p>
-<pre class="code">msiexec /i CADOS-for-SOLIDWORKS-x64.msi /qn GATEWAY_URL=https://cados.kevos.com</pre></section>
+<pre class="code">msiexec /i CADOS-for-SOLIDWORKS-x64.msi /qn GATEWAY_URL={svc}</pre></section>
 
 <section id="pair"><h2>Pair a computer</h2>
 <p>Pairing adds the computer to your account. After an interactive install the KEVOS Companion opens its pairing window
 by itself. You can also open it from the tray icon: Pair this computer.</p>
-<ol class="steps"><li><h4>Check the address and the name</h4><p>Check the CADOS service address (<code>https://cados.kevos.com</code> unless your organisation runs its own) and the name for this computer.</p></li>
+<ol class="steps"><li><h4>Check the address and the name</h4><p>Check the CADOS service address (<code>{svc}</code> unless your organisation runs its own) and the name for this computer.</p></li>
 <li><h4>Enter your CADOS email and password</h4><p>Use the same email and password you sign in to CADOS with, then choose Pair. The computer is added at once.</p></li>
 <li><h4>Or confirm in the browser</h4><p>Leave email and password empty and choose Pair: your browser opens CADOS. Sign in, check that it shows the same code as the Companion, and choose Add this computer.</p></li></ol>
 <p>The Companion makes a key for this computer in the Windows key store. The key cannot be copied to another computer,

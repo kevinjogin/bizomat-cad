@@ -17,10 +17,15 @@ kill_timeout = '15s'
 
 [env]
   OPENSKETCH_DATA = '/data'
-  # The public address (OAuth metadata, links, canonical tags); browsers on the old host are sent there with a 301
-  # (opensketch/canonical.py; health checks, MCP, OAuth, /api/ and the device API are not redirected).
+  # The public address (OAuth metadata, links, canonical tags); browsers on an old host are sent there with a 301
+  # (opensketch/canonical.py; health checks, MCP, OAuth, /api/ and the device API are not redirected, and keep their
+  # own host's address for connectors, add-ins and computers set up with it). The canonical host is ignored in both
+  # lists. CAD Automation's own address is cad.bizomat.ai (bizomat.ai is the BIZOMAT website): it is an alias until
+  # its DNS record and Fly certificate exist; then OPENSKETCH_PUBLIC_URL becomes 'https://cad.bizomat.ai' and
+  # cados.kevos.com turns into an old host by itself.
   OPENSKETCH_PUBLIC_URL = 'https://cados.kevos.com'
-  OPENSKETCH_REDIRECT_HOSTS = 'cados.fly.dev'
+  OPENSKETCH_REDIRECT_HOSTS = 'cados.fly.dev,cados.kevos.com'
+  OPENSKETCH_ALIAS_HOSTS = 'cad.bizomat.ai'
 
 [[mounts]]
   source = 'opensketch_data'

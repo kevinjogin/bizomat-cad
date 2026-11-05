@@ -20,7 +20,13 @@ Use one of these.
 
 ### A. Gateway hosted on Fly (or any host) with a domain on Cloudflare (recommended)
 
-CADOS by KEVOS uses `cados.kevos.com` (a CNAME to `cados.fly.dev`). Run the Domain workflow with that host name
+CAD Automation answers on `cados.kevos.com` today and moves to its own address `cad.bizomat.ai` (bizomat.ai is the
+BIZOMAT website). For the new address, in the bizomat.ai zone: a DNS-only (grey cloud) CNAME `cad` to `cados.fly.dev`,
+then `fly certs add cad.bizomat.ai -a cados` and the check record Fly asks for. When
+`https://cad.bizomat.ai/healthz` answers, set `OPENSKETCH_PUBLIC_URL = 'https://cad.bizomat.ai'` in fly.toml:
+cados.kevos.com then redirects pages and keeps serving programs (opensketch/canonical.py). Keep its record.
+
+`cados.kevos.com` itself is a CNAME to `cados.fly.dev`. Run the Domain workflow with that host name
 (its default) once `kevos.com` is in the Cloudflare account; `deploy.yml` sets `OPENSKETCH_PUBLIC_URL` to it unless the
 repository variable `PUBLIC_URL` says otherwise. If `kevos.com` is managed elsewhere, add the same two records there by
 hand (step 1 below: the CNAME and the check record Fly asks for after `fly certs add cados.kevos.com -a cados`).

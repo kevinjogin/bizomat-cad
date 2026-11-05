@@ -29,7 +29,7 @@ import uuid
 from pathlib import Path
 from urllib.parse import urlencode
 
-from . import auth, store
+from . import auth, canonical, store
 
 LINK_LIFETIME = 600          # seconds a link takes an upload
 KEEP = 1800                  # seconds an uploaded file waits for sw_import
@@ -156,7 +156,7 @@ def create(user: dict | None, filename: str, cap: int, size_bytes: int | None = 
                 "created": int(now), "expires_at": expires}
         _write(meta)
     query = urlencode({"expires": expires, "signature": _signature(upload_id, owner, expires)})
-    url = f"{auth.public_url()}/mcp/uploads/{upload_id}?{query}"
+    url = f"{canonical.machine_base() or auth.public_url()}/mcp/uploads/{upload_id}?{query}"
     return {"upload_id": upload_id, "upload_url": url, "method": "PUT", "filename": filename,
             "expires_at": expires, "expires_in_seconds": LINK_LIFETIME, "max_bytes": cap}
 

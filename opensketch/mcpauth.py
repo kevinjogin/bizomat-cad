@@ -123,8 +123,27 @@ def _eq(a: str, b: str) -> bool:
 # ----------------------------------------------------------------------------- metadata
 
 def base_url(headers: dict) -> str:
-    from . import auth
-    return auth.public_url(headers).rstrip("/")
+    """This server's address as the caller knows it: an old host name it was set up with (canonical.machine_base,
+    so the metadata names the address the app connected to), else the public address."""
+    from . import auth, canonical
+    return canonical.machine_base(headers) or auth.public_url(headers).rstrip("/")
+
+
+def bases(headers: dict) -> list[str]:
+    """Every address this server answers sign-ins for: the caller's own, the public one and the old host names."""
+    from . import auth, canonical
+    out = []
+    for b in [base_url(headers), auth.public_url(headers).rstrip("/"), *canonical.legacy_bases()]:
+        if b and b not in out:
+            out.append(b)
+    return out
+
+
+def issuer_for(resource: str, headers: dict) -> str:
+    """The issuer an app expects back (RFC 9207 iss): the address it signed in through, which is the origin of the
+    resource it asked for when that is one of this server's own addresses."""
+    o = _origin(resource or "")
+    return next((b for b in bases(headers) if _canon(b) == _canon(o)), base_url(headers))
 
 
 # The MCP endpoint's addresses (mcp_server.PATHS): /mcp, and /solidworks/mcp, a second address early connectors
@@ -453,8 +472,14 @@ def check_authorize(params: dict, headers: dict) -> tuple[dict, dict]:
     if params.get("code_challenge_method") != "S256" or not (43 <= len(params.get("code_challenge", "")) <= 128):
         raise OAuthError("invalid_request", "The app did not protect the sign-in with PKCE (S256).")
     res = params.get("resource")
-    known = {_canon(resource_url(headers, p)): resource_url(headers, p) for p in RESOURCES}
-    if res and _canon(res) not in known and _canon(res) != _canon(base_url(headers)):
+    # the MCP endpoint at any of this server's addresses (an app set up with an old host name signs in here after
+    # the browser was sent on to the public address), or just the address itself
+    known = {}
+    for b in bases(headers):
+        for p in RESOURCES:
+            known.setdefault(_canon(b + p), b + p)
+        known.setdefault(_canon(b), b + "/mcp")
+    if res and _canon(res) not in known:
         raise OAuthError("invalid_target", "The app asked to sign in to a different server.")
     target = known.get(_canon(res or ""), resource_url(headers))
     scope = params.get("scope") or SCOPE

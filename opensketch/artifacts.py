@@ -22,7 +22,7 @@ import uuid
 from pathlib import Path
 from urllib.parse import urlencode
 
-from . import assembly, auth, geometry, store
+from . import assembly, auth, canonical, geometry, store
 
 LIFETIME = 3600
 PREVIEW_LIFETIME = 600
@@ -225,7 +225,7 @@ def _publish(rec: dict, raw: bytes, fmt: str, name: str, part_id: str | None, ow
         (directory / f"{artifact_id}.json").unlink(missing_ok=True)
         raise
     query = urlencode({"expires": expires, "signature": _signature(artifact_id, filename, expires)})
-    return dict(info, download_url=f"{auth.public_url()}/mcp/artifacts/{artifact_id}/{filename}?{query}")
+    return dict(info, download_url=f"{canonical.machine_base() or auth.public_url()}/mcp/artifacts/{artifact_id}/{filename}?{query}")
 
 
 def resolve(artifact_id: str, filename: str, expires: str, signature: str) -> tuple[Path, dict]:

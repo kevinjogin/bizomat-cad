@@ -1001,7 +1001,7 @@ async def oauth_decide(request: Request):
             pass
     if req is None or mcpauth.client(req["client_id"], fetch=False) is None:
         return _auth_html(auth.oauth_problem_page("This page has expired. Start connecting again from your AI app."), 400)
-    iss = mcpauth.base_url(_hdrs(request))
+    iss = mcpauth.issuer_for(req.get("resource", ""), _hdrs(request))
     if form.get("action") == "deny":
         return RedirectResponse(mcpauth.with_query(req["redirect_uri"], error="access_denied", state=req["state"] or None,
                                                    iss=iss), status_code=303)
