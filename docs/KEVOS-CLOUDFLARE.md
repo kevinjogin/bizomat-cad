@@ -20,11 +20,13 @@ Use one of these.
 
 ### A. Gateway hosted on Fly (or any host) with a domain on Cloudflare (recommended)
 
-CAD Automation answers on `cados.kevos.com` today and moves to its own address `cad.bizomat.ai` (bizomat.ai is the
-BIZOMAT website). For the new address, in the bizomat.ai zone: a DNS-only (grey cloud) CNAME `cad` to `cados.fly.dev`,
-then `fly certs add cad.bizomat.ai -a cados` and the check record Fly asks for. When
-`https://cad.bizomat.ai/healthz` answers, set `OPENSKETCH_PUBLIC_URL = 'https://cad.bizomat.ai'` in fly.toml:
-cados.kevos.com then redirects pages and keeps serving programs (opensketch/canonical.py). Keep its record.
+CAD Automation lives under the BIZOMAT website's address, at `https://bizomat.ai/cad` (fly.toml
+`OPENSKETCH_PUBLIC_URL`; `opensketch/canonical.py` serves the prefix). bizomat.ai is in the owner's Cloudflare account.
+Until the website's Worker serves the root of bizomat.ai, its records point (DNS only) at this Fly app, which sends
+`bizomat.ai/<page>` into `/cad`. Afterwards the record is proxied and the Worker passes `/cad/*` and the root OAuth
+metadata of `/cad` (`/.well-known/oauth-protected-resource/cad/...`, `/.well-known/oauth-authorization-server/cad`,
+`/.well-known/openid-configuration/cad`) on to this app. `cados.kevos.com`, `cados.fly.dev` and `cad.bizomat.ai` are old
+hosts: pages 301 to `bizomat.ai/cad`, programs keep working there. Keep their records.
 
 `cados.kevos.com` itself is a CNAME to `cados.fly.dev`. Run the Domain workflow with that host name
 (its default) once `kevos.com` is in the Cloudflare account; `deploy.yml` sets `OPENSKETCH_PUBLIC_URL` to it unless the
@@ -42,15 +44,22 @@ answers. It never replaces another record unless you tick replace_existing. Afte
 
 1. DNS: a CNAME `bridge.<your-domain>` to the gateway host (for Fly: `cados.fly.dev`, then `fly certs add
    bridge.<your-domain>` and the DNS check record Fly asks for).
-2. Proxy on (orange cloud) or off. With the proxy on:
+2. Proxy on (orange cloud) or off. With the proxy on (bizomat.ai is proxied, so its Worker can serve the website):
    - SSL/TLS mode **Full (strict)**.
-   - A Cache Rule: **Bypass cache** for the whole hostname (the gateway sends `no-store`; this makes it certain).
+   - A Cache Rule: **Bypass cache** for the gateway's paths (the gateway sends `no-store`; this makes it certain). On
+     its own hostname, the whole hostname; on bizomat.ai, `/cad*` and the root paths below, so the website's files
+     keep their caching.
    - Do not turn on Bot Fight Mode or JavaScript challenges for `/mcp*`, `/solidworks/mcp*`, `/oauth/*`,
-     `/.well-known/*` or `/v2/*`: AI apps' servers and the Companions are programs and cannot solve challenges.
+     `/.well-known/*` or `/v2/*`, nor (on bizomat.ai) for the same paths under `/cad`: AI apps' servers and the
+     Companions are programs and cannot solve challenges.
    - Rate limiting (optional, the gateway has its own): `/v2/devices/pair/start` 20 per IP per hour; `/oauth/register`
-     30 per IP per hour; `/login` 20 per IP per 10 minutes.
+     30 per IP per hour; `/login` 20 per IP per 10 minutes (each also under `/cad` on bizomat.ai).
+   - The proxy connects to Fly over HTTPS with the hostname's Fly certificate, which Fly renews by itself only while the
+     record points straight at Fly. Add the `_acme-challenge` CNAME that `fly certs show <hostname> -a cados` lists
+     (validation by DNS), or renewal fails behind the proxy and Cloudflare then refuses the expired certificate (526).
    - Limits that matter and are respected: request bodies (100 MB on Free and Pro plans: the Companion uploads in
-     32 MiB chunks) and the 100 s response timeout (long polls are held 25 s).
+     32 MiB chunks) and the 100 s response timeout: long polls are held 25 s, and MCP answers are event streams that
+     send a comment every 15 s while a tool waits for SOLIDWORKS (up to 900 s).
 3. Set `OPENSKETCH_PUBLIC_URL=https://bridge.<your-domain>` on the gateway, so OAuth metadata and pairing links use it.
 4. In the MSI, `GATEWAY_URL=https://bridge.<your-domain>`.
 

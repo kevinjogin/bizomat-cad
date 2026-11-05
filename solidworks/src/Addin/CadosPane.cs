@@ -83,7 +83,7 @@ namespace OpenSketch.Sw
     /// <summary>The panel itself (WinForms), in the KEVOS look: white, charcoal text, KEVOS orange for the one action.</summary>
     public sealed class CadosPaneControl : UserControl
     {
-        public const string DefaultGateway = "https://cados.kevos.com";
+        public const string DefaultGateway = "https://bizomat.ai/cad";
         public const string VerifyPrompt = "Check the CADOS connection to SOLIDWORKS.";
         public const string SelfTestPrompt = "Run the SOLIDWORKS self test, all three stages.";
 

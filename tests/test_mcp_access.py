@@ -11,6 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from opensketch import accounts, auth, mcpauth, server, swbridge
+from tests.mcp_reply import rpc
 from tests.test_mcp_oauth import ACCEPT, _connect, _mcp, _register
 
 INIT = {"jsonrpc": "2.0", "id": 1, "method": "initialize",
@@ -67,7 +68,7 @@ def test_each_mcp_request_is_one_signed_in_person():
         # an AI app (Claude, ChatGPT...) connects with OAuth: Ann signs in once, clicks Allow, and the app gets her token
         tok = _connect(ann, app, _register(app))
         r = _mcp(app, tok["access_token"], "tools/list")
-        assert r.status_code == 200 and any(t["name"] == "sw_status" for t in r.json()["result"]["tools"])
+        assert r.status_code == 200 and any(t["name"] == "sw_status" for t in rpc(r)["result"]["tools"])
         assert mcpauth.user_for_access(tok["access_token"])[1]["email"] == "ann@example.com"
         # no token, a made-up token, or a made-up private address: refused
         assert app.post("/mcp", json=INIT, headers=ACCEPT).status_code == 401

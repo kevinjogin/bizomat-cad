@@ -5,7 +5,7 @@
 the assistant builds it as native SOLIDWORKS features in your own files: fully defined sketches, extrudes, cuts,
 revolves, holes, fillets, patterns, components, mates and drawings.
 
-CADOS is a product from [KEVOS](https://kevos.com/). Website: https://cados.kevos.com. Code names inside the
+CADOS is a product from [KEVOS](https://kevos.com/). Website: https://bizomat.ai/cad (formerly https://cados.kevos.com). Code names inside the
 repository (the `opensketch` Python package, `OPENSKETCH_*` settings, the add-in's file names) are kept for
 compatibility.
 
@@ -62,7 +62,7 @@ The feature format is in [docs/DOCUMENT.md](docs/DOCUMENT.md).
 
 ## Use it
 
-1. **Sign in** at https://cados.kevos.com (or your own server, see below) and open the dashboard.
+1. **Sign in** at https://bizomat.ai/cad (or your own server, see below) and open the dashboard.
 2. **Install CADOS** on the SOLIDWORKS computer (SOLIDWORKS 2022 or newer, Windows 64-bit): the Windows installer
    (`CADOS-for-SOLIDWORKS-x64.msi`, "Download CADOS for SOLIDWORKS" on the website) adds the CADOS add-in and the KEVOS Companion; see
    [docs/KEVOS-INSTALL.md](docs/KEVOS-INSTALL.md). Without the installer: download the add-in package from the

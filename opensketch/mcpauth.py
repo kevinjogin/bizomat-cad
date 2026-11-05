@@ -140,10 +140,11 @@ def bases(headers: dict) -> list[str]:
 
 
 def issuer_for(resource: str, headers: dict) -> str:
-    """The issuer an app expects back (RFC 9207 iss): the address it signed in through, which is the origin of the
-    resource it asked for when that is one of this server's own addresses."""
-    o = _origin(resource or "")
-    return next((b for b in bases(headers) if _canon(b) == _canon(o)), base_url(headers))
+    """The issuer an app expects back (RFC 9207 iss): the address it signed in through, which is the one of this
+    server's own addresses (with its path, e.g. https://bizomat.ai/cad) that the resource it asked for lives under."""
+    r = _canon(resource or "")
+    mine = [b for b in bases(headers) if r == _canon(b) or r.startswith(_canon(b) + "/")]
+    return max(mine, key=len) if mine else base_url(headers)
 
 
 # The MCP endpoint's addresses (mcp_server.PATHS): /mcp, and /solidworks/mcp, a second address early connectors
@@ -156,7 +157,10 @@ def resource_url(headers: dict, path: str = "/mcp") -> str:
 
 
 def resource_metadata_url(headers: dict, path: str = "/mcp") -> str:
-    return base_url(headers) + "/.well-known/oauth-protected-resource" + path
+    """RFC 9728: the metadata of https://host/cad/mcp sits at https://host/.well-known/oauth-protected-resource/cad/mcp
+    (the well-known part goes in at the root of the host, before the resource's own path)."""
+    u = urlsplit(base_url(headers))
+    return f"{u.scheme}://{u.netloc}/.well-known/oauth-protected-resource{u.path.rstrip('/')}{path}"
 
 
 def protected_resource(headers: dict, path: str = "/mcp") -> dict:

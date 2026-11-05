@@ -5,7 +5,7 @@
 ```
 AI assistant (Claude, ChatGPT, MCP clients)
    |  HTTPS, OAuth 2.1 (MCP Streamable HTTP)
-CADOS gateway (this server, https://cados.kevos.com): sign-in, devices, checks, command routing
+CADOS gateway (this server, https://bizomat.ai/cad): sign-in, devices, checks, command routing
    |  outbound HTTPS from the computer, signed both ways (docs/BRIDGE-PROTOCOL.md)
 KEVOS Companion (KEVOS.Companion.exe, tray, per Windows user)
    |  local named pipe, this Windows user only

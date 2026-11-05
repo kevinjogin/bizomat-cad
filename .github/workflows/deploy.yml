@@ -100,7 +100,7 @@ jobs:
       REGION: syd
       # The public address (OAuth metadata, pairing and download links). The health checks below use <app>.fly.dev, the
       # origin that always answers. Set the repository variable PUBLIC_URL to override it.
-      PUBLIC_URL: ${{ vars.PUBLIC_URL || 'https://cados.kevos.com' }}
+      PUBLIC_URL: ${{ vars.PUBLIC_URL || 'https://bizomat.ai/cad' }}
     steps:
       - name: Check setup
         id: setup

@@ -3,7 +3,7 @@
 # from an administrator PowerShell:
 #   powershell -ExecutionPolicy Bypass -File .github\scripts\test-install.ps1 -Msi <path to the .msi>
 # It undoes what it installs; per-user settings and pairing (HKCU, %LOCALAPPDATA%, the key store) are never touched.
-param([Parameter(Mandatory = $true)][string]$Msi, [string]$Gateway = 'https://cados.kevos.com')
+param([Parameter(Mandatory = $true)][string]$Msi, [string]$Gateway = 'https://bizomat.ai/cad')
 $ErrorActionPreference = 'Stop'
 $Msi = (Resolve-Path $Msi).Path
 $logs = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { $env:TEMP }
@@ -46,11 +46,7 @@ $code = Msiexec "/x `"$Msi`" /qn /norestart /l*v `"$logs\cados-uninstall.log`""
 Check ($code -eq 0 -or $code -eq 3010) "uninstall finished (exit code $code)"
 foreach ($f in $files) { Check (-not (Test-Path (Join-Path $dir $f))) "removed $f" }
 Check (-not (Value "HKLM:\SOFTWARE\Classes\CLSID\$addin\InprocServer32" 'CodeBase')) 'add-in COM class unregistered (no code base left)'
-if (Test-Path "HKLM:\SOFTWARE\Classes\CLSID\$addin") {
-  # The MSI creates "Implemented Categories" with ForceCreateOnInstall and does not delete it: empty keys stay behind.
-  $left = Get-ChildItem "HKLM:\SOFTWARE\Classes\CLSID\$addin" -Recurse | ForEach-Object { $_.PSChildName }
-  Write-Host "note  empty keys left under the add-in's CLSID: $($left -join ', ')"
-}
+Check (-not (Test-Path "HKLM:\SOFTWARE\Classes\CLSID\$addin")) "add-in COM keys removed (0.12.3 and later)"
 Check (-not (Test-Path "HKLM:\SOFTWARE\SolidWorks\Addins\$addin")) 'SOLIDWORKS listing removed'
 Check (-not (Value $run 'KEVOS Companion')) 'start at sign-in removed'
 

@@ -592,10 +592,33 @@ def _net(ip: str) -> str:
     return str(ipaddress.ip_network(f"{a}/64", strict=False)) if a.version == 6 else str(a)
 
 
+# Cloudflare's published edge addresses (https://www.cloudflare.com/ips/, checked Nov 2026). When bizomat.ai is proxied
+# by Cloudflare, every request reaches Fly from one of them and the visitor's address is in CF-Connecting-IP. That
+# header is believed only from these addresses: anyone else could write it.
+CLOUDFLARE_NETS = ("173.245.48.0/20", "103.21.244.0/22", "103.22.200.0/22", "103.31.4.0/22", "141.101.64.0/18",
+                   "108.162.192.0/18", "190.93.240.0/20", "188.114.96.0/20", "197.234.240.0/22", "198.41.128.0/17",
+                   "162.158.0.0/15", "104.16.0.0/13", "104.24.0.0/14", "172.64.0.0/13", "131.0.72.0/22",
+                   "2400:cb00::/32", "2606:4700::/32", "2803:f800::/32", "2405:b500::/32", "2405:8100::/32",
+                   "2a06:98c0::/29", "2c0f:f248::/32")
+
+
+def _from_cloudflare(ip: str) -> bool:
+    import ipaddress
+    try:
+        a = ipaddress.ip_address(ip.strip().strip("[]"))
+    except ValueError:
+        return False
+    return any(a in ipaddress.ip_network(n) for n in CLOUDFLARE_NETS)
+
+
 def _client(scope) -> str:
     h = _headers(scope)
     ip = h.get("fly-client-ip") or (h.get("x-forwarded-for") or "").split(",")[0].strip()
-    return _net(ip or (scope.get("client") or ("?",))[0])
+    ip = ip or (scope.get("client") or ("?",))[0]
+    cf = (h.get("cf-connecting-ip") or "").strip()
+    if cf and _from_cloudflare(ip):  # the visitor behind Cloudflare's proxy, never a header from anyone else
+        ip = cf
+    return _net(ip)
 
 
 def _window(key: str) -> float:
@@ -853,12 +876,12 @@ class PasswordGate:
 
 
 def _request_base(scope) -> str:
-    """This request's own address (scheme + host), so the Google redirect comes back to the same site whose
-    cookies the browser holds (fly.dev or a custom domain)."""
+    """This request's own address (scheme, host and the path prefix it came in under, as https://bizomat.ai/cad), so
+    the Google redirect comes back to the same site whose cookies the browser holds (fly.dev or a custom domain)."""
     h = _headers(scope)
     host = h.get("x-forwarded-host") or h.get("host") or "127.0.0.1:8000"
     proto = h.get("x-forwarded-proto") or scope.get("scheme") or "http"
-    return f"{proto}://{host}"
+    return f"{proto}://{host}{scope.get('root_path') or ''}"
 
 
 async def _google_flow(path, scope, q, go, send):
