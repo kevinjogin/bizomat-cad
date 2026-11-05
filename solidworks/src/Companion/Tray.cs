@@ -416,7 +416,7 @@ namespace Kevos.Companion
             var g = gateway.Text.Trim().TrimEnd('/');
             if (!g.StartsWith("https://", StringComparison.OrdinalIgnoreCase) && !CloudLink.IsLoopback(g))
             {
-                info.Text = "The address must start with https:// (for example https://cad.bizomat.ai).";
+                info.Text = "The address must start with https:// (for example https://bizomat.ai/cad).";
                 return;
             }
             go.Enabled = false;

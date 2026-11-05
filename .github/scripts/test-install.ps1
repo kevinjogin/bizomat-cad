@@ -3,7 +3,7 @@
 # from an administrator PowerShell:
 #   powershell -ExecutionPolicy Bypass -File .github\scripts\test-install.ps1 -Msi <path to the .msi>
 # It undoes what it installs; per-user settings and pairing (HKCU, %LOCALAPPDATA%, the key store) are never touched.
-param([Parameter(Mandatory = $true)][string]$Msi, [string]$Gateway = 'https://cad.bizomat.ai')
+param([Parameter(Mandatory = $true)][string]$Msi, [string]$Gateway = 'https://bizomat.ai/cad')
 $ErrorActionPreference = 'Stop'
 $Msi = (Resolve-Path $Msi).Path
 $logs = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { $env:TEMP }

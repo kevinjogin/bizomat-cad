@@ -15,8 +15,8 @@
   (HKCU\Software\KEVOS, %LOCALAPPDATA%\KEVOS, the Windows key store) and are kept across upgrades, repairs and
   uninstalls. CAD files are never touched. Repair: msiexec /fa <the .msi> (or Apps > CADOS for SOLIDWORKS > Modify > Repair).
 
-  Properties: GATEWAY_URL=https://cad.bizomat.ai (the CADOS server the companion pairs with; optional, the pairing
-  window suggests https://cad.bizomat.ai otherwise).
+  Properties: GATEWAY_URL=https://bizomat.ai/cad (the CADOS server the companion pairs with; optional, the pairing
+  window suggests https://bizomat.ai/cad otherwise).
   Build: installer/build.ps1 (Windows, after solidworks/build.sh). Variables: Version, Source (the built files).
 -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
@@ -38,7 +38,7 @@
 
     <Property Id="GATEWAY_URL" Secure="yes" />
     <Property Id="ARPPRODUCTICON" Value="KevosIcon" />
-    <Property Id="ARPHELPLINK" Value="https://cad.bizomat.ai/docs" />
+    <Property Id="ARPHELPLINK" Value="https://bizomat.ai/cad/docs" />
     <Property Id="ARPURLINFOABOUT" Value="https://kevos.com/" />
     <Property Id="ARPCOMMENTS" Value="Settings and this computer's CADOS registration are kept when it is removed. Use the Start menu entry Remove this computer from CADOS first if the computer leaves your account." />
     <Icon Id="KevosIcon" SourceFile="$(var.Source)/KEVOS.Companion.exe" />

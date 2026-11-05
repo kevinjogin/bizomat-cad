@@ -2,7 +2,7 @@
 
 ## 0.12.3 (CADOS for SOLIDWORKS; test build)
 
-- CAD Automation's address is https://cad.bizomat.ai. The Companion's pairing window suggests it when no address
+- CAD Automation's address is https://bizomat.ai/cad. The Companion's pairing window suggests it when no address
   was set, the task pane links there until the computer is paired, and the installer's help link opens its
   documentation. Computers paired with https://cados.kevos.com keep that address and keep working.
 - Uninstalling removes the add-in's and the launcher's COM registration completely (0.12.2 left two empty keys).
