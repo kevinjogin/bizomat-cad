@@ -536,7 +536,16 @@ def _end_session(device_id: str, reason: str, message: str) -> None:
     for p in [p for p in _pending.values() if p.payload["device_id"] == device_id]:
         if p.status not in TERMINAL:
             _note(p, "unknown" if p.status == "running" else "failed", note=message)
-            _resolve(p.fut, exc=BridgeError(message, code="DEVICE_REVOKED" if reason == "revoked" else "SESSION_REPLACED"))
+            code = {"revoked": "DEVICE_REVOKED", "suspended": "ACCOUNT_SUSPENDED"}.get(reason, "SESSION_REPLACED")
+            _resolve(p.fut, exc=BridgeError(message, code=code))
+
+
+def suspend_person(user_id: str) -> None:
+    """The owner suspended this person: their computers' live sessions close (a held long poll answers 409 with
+    reason "suspended") and their waiting commands fail. The computers stay paired; their next request gets
+    ACCOUNT_SUSPENDED until the account is resumed."""
+    for d in devices_for({"id": user_id}):
+        _end_session(d["id"], "suspended", "This CADOS account is suspended. Ask your CADOS administrator.")
 
 
 def _clean_name(name) -> str:
@@ -634,13 +643,11 @@ def _client_ip(request: Request) -> str:
 
 
 def _open_and_remote(request: Request) -> bool:
-    """A server without a password or accounts (open mode, for one person on their own PC) takes pairing only from
-    the PC it runs on: nobody on the network can add a computer to it, and whoever runs it publicly must sign in."""
+    """No computer pairs with a server nobody owns yet (setup mode: no account, reached from elsewhere). A server for
+    one person on their own PC (open mode) takes pairing only from that PC (auth.mode treats any other request as
+    setup)."""
     from . import auth
-    if auth.mode() != "open":
-        return False
-    host = (request.client.host if request.client else "") or ""
-    return host not in ("127.0.0.1", "::1", "localhost")
+    return auth.mode(request.scope) == "setup"
 
 
 def authenticate(request: Request, body: bytes, pairing: bool = False) -> dict:
@@ -666,6 +673,11 @@ def authenticate(request: Request, body: bytes, pairing: bool = False) -> dict:
             raise BridgeAuthError(401, "DEVICE_UNKNOWN", "This computer is not registered. Pair it again in the KEVOS Companion.")
         if rec["revoked"]:
             raise BridgeAuthError(401, "DEVICE_REVOKED", "This computer was removed from your CADOS account. Pair it again.")
+        if rec["owner"] != "local":
+            from . import accounts
+            who = accounts.get_any(rec["owner"])
+            if who and who.get("suspended"):
+                raise BridgeAuthError(401, "ACCOUNT_SUSPENDED", "This CADOS account is suspended. Ask your CADOS administrator.")
     try:
         _, payload = jws_verify(compact, jwk_public_key(json.loads(rec["jwk"])))
         claims = json.loads(payload)
@@ -1229,8 +1241,8 @@ async def pair_start(request: Request):
     try:
         raw, body = await _json(request)
         if _open_and_remote(request):
-            raise BridgeAuthError(403, "FORBIDDEN", "This CADOS server has no sign-in yet: set a server password "
-                                                    "before computers pair with it over the network.")
+            raise BridgeAuthError(403, "FORBIDDEN", "This CADOS server is not set up yet. Create the administrator "
+                                                    "account on its website, then pair this computer.")
         if not mcpauth._rate_ok("pair:" + _client_ip(request), PAIR_LIMIT, 3600, _pair_hits):
             raise BridgeAuthError(429, "RATE_LIMITED", "Too many pairing attempts from this network. Try again in an hour.")
         out = start_pairing(body, _client_ip(request))
@@ -1276,6 +1288,8 @@ async def pair_password(request: Request):
             auth._failed(*keys)
             await asyncio.sleep(1)  # slow down guessing, as the sign-in page does
             raise BridgeAuthError(401, "INVALID_CREDENTIALS", "The email or password is wrong.")
+        if user.get("suspended"):
+            raise BridgeAuthError(403, "ACCOUNT_SUSPENDED", "This CADOS account is suspended. Ask your CADOS administrator.")
         if pair["status"] != "pending" or pair["expires"] < time.time():
             raise BridgeAuthError(410, "PAIRING_CLOSED", "This pairing expired or was already decided. Click Pair again.")
         try:
@@ -1481,7 +1495,7 @@ def pair_page(code: str = ""):
 async def pair_page_post(request: Request):
     from urllib.parse import parse_qs
     if _open_and_remote(request):
-        raise HTTPException(403, "Set a server password before adding computers over the network.")
+        raise HTTPException(403, "CADOS is not set up yet. Create the administrator account first.")
     raw = await request.body()
     form = {k: v[0] for k, v in parse_qs(raw.decode(errors="ignore")).items()} if len(raw) < 20000 else {}
     code = form.get("code", "")

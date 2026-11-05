@@ -95,7 +95,7 @@ DOWNLOAD = f"""<section class="section section-warm" id="download" aria-labelled
 <p class="lead">A native SOLIDWORKS add-in for Windows, installed with one installer. It appears in Tools &gt; Add-Ins and
 adds a CADOS tab, menu and task pane to SOLIDWORKS.</p>
 <div class="hero-cta"><a class="btn btn-primary btn-lg" href="/download/solidworks">{icon("download")}Download CADOS for SOLIDWORKS</a></div>
-<p class="small muted" style="margin-top:var(--s-3)">Sign in with your CADOS account to download. Your administrator gives you the account and password.</p>
+<p class="small muted" style="margin-top:var(--s-3)">Sign in with your CADOS account to download. No account yet? Create one, or ask your administrator.</p>
 <div class="download-links"><a href="/docs#install">Installation guide</a><a href="/docs#requirements">System requirements</a>
 <a href="/docs#versions">Supported SOLIDWORKS versions</a></div></div>
 <div class="card card-pad download-card"><h3>What the installer adds</h3><ul class="checks">
@@ -318,7 +318,7 @@ the connector address. If a client cannot sign in, use the private address in <a
 
 <section id="auth"><h2>Authentication</h2>
 <div class="table-wrap"><table><thead><tr><th>Who</th><th>How it signs in</th><th>How to revoke</th></tr></thead><tbody>
-<tr><td>You</td><td>Email and password, or Google where your administrator turned it on.</td><td>Sign out. An administrator can remove an account.</td></tr>
+<tr><td>You</td><td>Email and password, or Google where your administrator turned it on.</td><td>Sign out. An administrator can suspend or remove an account.</td></tr>
 <tr><td>AI assistants</td><td>OAuth 2.1 with PKCE. You approve each assistant on a CADOS consent page.</td><td>Disconnect it on the CAD Assistant page.</td></tr>
 <tr><td>Private address</td><td>A secret key in the address itself, for clients without sign-in.</td><td>Make a new address in Settings. The old one stops at once.</td></tr>
 <tr><td>Your computers</td><td>A pairing code you confirm, then a key held in the Windows key store. Every request is signed.</td><td>Remove the computer on the SOLIDWORKS page.</td></tr>

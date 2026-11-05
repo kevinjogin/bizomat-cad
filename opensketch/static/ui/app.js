@@ -254,7 +254,7 @@
       for (const u of d.people) {
         const tr = el('tr');
         const who = el('td'); who.append(el('span', '', u.name || u.email), el('span', 'meta', u.email));
-        const role = { owner: 'Owner', member: 'Member', tester: 'Tester' }[u.role] || u.role;
+        const role = ({ owner: 'Owner', member: 'Member', tester: 'Tester' }[u.role] || u.role) + (u.suspended ? ' (suspended)' : '');
         const pcs = u.computers ? u.computers + ' (' + u.online + ' online)' : 'None';
         const act = el('td'); act.style.whiteSpace = 'nowrap';
         if (u.role !== 'owner') {
@@ -270,7 +270,12 @@
             if (!confirm('Remove ' + u.email + '? Their account, AI assistant connections and paired computers stop working at once.')) return;
             try { await api('/api/account/users/' + encodeURIComponent(u.id), { method: 'DELETE' }); loadPeople(); } catch (er) { err(er.message); }
           });
-          act.append(pw, rm);
+          const sp = el('button', 'link-btn small', u.suspended ? 'Resume' : 'Suspend'); sp.type = 'button'; sp.style.marginLeft = '12px';
+          sp.addEventListener('click', async () => {
+            if (!u.suspended && !confirm('Suspend ' + u.email + '? They are signed out, and their AI assistants and computers stop working until you resume them.')) return;
+            try { await api('/api/account/users/' + encodeURIComponent(u.id) + '/suspend', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ suspended: !u.suspended }) }); loadPeople(); } catch (er) { err(er.message); }
+          });
+          act.append(pw, sp, rm);
         }
         tr.append(who, el('td', '', role), pwCell(u), el('td', '', pcs), el('td', '', u.apps.length ? u.apps.join(', ') : 'None'), act);
         body.append(tr);
@@ -315,9 +320,6 @@
       catch (er) { err(er.message); $('open-signup').checked = !$('open-signup').checked; }
     });
     loadPeople();
-    api('/api/admin/server-password').then((r) => {
-      if (r.server_password) $('spw').value = r.server_password; else $('spw-none').hidden = false;
-    }).catch((er) => err(er.message));
   }
 
   // ---------------------------------------------------------------- load and keep fresh
@@ -329,7 +331,7 @@
         if ($('server')) $('server').value = d.server;
         if ($('key')) $('key').value = d.key;
         if ($('purl')) { $('purl').value = d.private_url; if (!d.private_url) $('private').hidden = true; }
-        if ($('acc-name')) { $('acc-name').textContent = (d.user && d.user.name) || 'Server owner'; $('acc-email').textContent = (d.user && d.user.email) || 'No email (server password sign-in)'; }
+        if ($('acc-name')) { $('acc-name').textContent = (d.user && d.user.name) || 'Server owner'; $('acc-email').textContent = (d.user && d.user.email) || 'No account yet (this computer only)'; }
         if ($('acc-signout')) $('acc-signout').hidden = !d.signin;
         if ($('ownerpw')) $('ownerpw').hidden = !(d.user && d.user.password_by === 'owner');
         if ($('download') && !d.download) { $('download').setAttribute('aria-disabled', 'true'); $('no-download').hidden = false; }

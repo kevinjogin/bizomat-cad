@@ -188,7 +188,7 @@ async def _http_error(request: Request, exc: StarletteHTTPException):
     if (exc.status_code == 404 and request.method in ("GET", "HEAD") and "text/html" in request.headers.get("accept", "")
             and not request.url.path.startswith(NOT_FOUND_MACHINE)):
         from . import site
-        signed_in = auth.mode() == "open" or getattr(request.state, "user", None) is not None
+        signed_in = auth.mode(request.scope) == "open" or getattr(request.state, "user", None) is not None
         return Response(site.not_found(signed_in, _base(request)), status_code=404, media_type="text/html; charset=utf-8",
                         headers={"Cache-Control": "no-store"})
     return await http_exception_handler(request, exc)
@@ -229,9 +229,9 @@ def api_account(request: Request):
     """Who is signed in, for the account menu."""
     from . import accounts
     u = _user(request)
-    m = auth.mode()
+    m = auth.mode(request.scope)
     from . import oauth
-    out = {"mode": m, "user": u, "can_setup": m in ("open", "password"), "reset_with_server_password": bool(auth.password()),
+    out = {"mode": m, "user": u, "can_setup": m in ("open", "setup"),
            "google": oauth.enabled(), **accounts.settings()}
     if u and u.get("role") == "owner" and m == "accounts":
         out["users"] = accounts.list_users()
@@ -454,7 +454,7 @@ def api_set_user_password(user_id: str, req: NewPassword, request: Request):
     sign in again. The owner changes their own password in Settings (it needs the current one)."""
     from . import accounts
     me = _owner(request)
-    target = accounts.get(user_id)
+    target = accounts.get_any(user_id)
     if target is None:
         raise HTTPException(404, "No such account.")
     if target["role"] == "owner" or user_id == me["id"]:
@@ -466,12 +466,25 @@ def api_set_user_password(user_id: str, req: NewPassword, request: Request):
     return {"ok": True}
 
 
-@app.get("/api/admin/server-password")
-def api_admin_server_password(request: Request):
-    """Owner (Admin page): the server password, fetched only when the owner opens it (never in a page's source).
-    Nobody else needs it: people sign up and sign in with their own email and password."""
+class Suspend(BaseModel):
+    suspended: bool
+
+
+@app.post("/api/account/users/{user_id}/suspend")
+def api_suspend_user(user_id: str, req: Suspend, request: Request):
+    """Owner (Admin page): suspend a person or let them back in. While suspended they cannot sign in, and their AI
+    apps, private address, add-in key and paired computers are refused at once (accounts.get treats the account as
+    gone); nothing is deleted, so resuming needs no new setup."""
+    from . import accounts
     _owner(request)
-    return {"server_password": auth.password() or None}
+    try:
+        u = accounts.set_suspended(user_id, req.suspended)
+    except accounts.AccountError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    if req.suspended:
+        _forget(user_id)
+        devicebridge.suspend_person(user_id)  # held long polls and waiting commands end now, not at the next request
+    return {"user": u}
 
 
 @app.get("/api/admin/people")
@@ -829,7 +842,7 @@ async def settings_page(request: Request):
 
 
 def _signed_in(request: Request) -> bool:
-    return auth.mode() == "open" or _user(request) is not None
+    return auth.mode(request.scope) == "open" or _user(request) is not None
 
 
 @app.get("/overview")
@@ -856,7 +869,7 @@ def api_solidworks(request: Request):
     path = mcp_server.PATHS[0]
     return {"server": base, "key": swbridge.key_for(u), "status": swbridge.status(u), "download": SW_DOWNLOAD.is_file(),
             "url": base + path, "private_url": f"{base}{path}/{auth.mcp_token_for(u)}",
-            "signin": auth.mode() != "open", "apps": mcpauth.grants_for(u["id"] if u else "local"),
+            "signin": auth.mode(request.scope) != "open", "apps": mcpauth.grants_for(u["id"] if u else "local"),
             "user": {"name": u.get("name"), "email": u.get("email"), "password_by": u.get("password_by")}
             if u and not u.get("legacy") else None}
 
@@ -926,6 +939,8 @@ async def _oauth_client_call(request: Request, fn):
         raise mcpauth.OAuthError("temporarily_unavailable", "Too many requests from this address. Try again in a minute.", 429)
     form = await _body_form(request)
     await mcpauth.ensure_client(form.get("client_id"))
+    if fn is mcpauth.token:
+        return await run_in_threadpool(fn, form, request.headers.get("authorization", ""), request.scope)
     return await run_in_threadpool(fn, form, request.headers.get("authorization", ""))
 
 

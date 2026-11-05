@@ -91,11 +91,25 @@ notes). The MSI builds unsigned on Windows in CI (`installer` job); signing wait
   memory for 30 minutes (`auth.hold_new_password`) so Home shows it once (`GET/DELETE /api/account/new-password`).
   Each account records who chose its password (`pw_by`: self, suggested, owner; `pw_at`), shown on Admin; only the
   scrypt hash is kept, so nobody (the owner included) can read a password back. A member whose password the owner
-  set sees "Choose your own in Settings" on Home. The server password is asked only on the setup page (and /reset);
-  spaces and one pair of quotes around it are forgiven (`auth._loose`). The setup page's "Anyone can create their
-  own account" box (ticked by default) turns on open sign-up with the owner account; the page tells other visitors
-  CADOS is not set up yet. After sign-in the owner sees the server password on Admin (`GET /api/admin/server-password`,
-  owner only, fetched on Show/Copy load, never in page source); people never need it.
+  set sees "Choose your own in Settings" on Home. No server password anywhere: `auth.mode(scope)` is accounts
+  (any account exists), setup (no account and the server is `reachable_by_others()`: OPENSKETCH_PUBLIC_URL on a
+  non-loopback host, OPENSKETCH_REQUIRE_SIGNIN, or the legacy OPENSKETCH_PASSWORD still set; or the request is not
+  `is_local`: a non-loopback client, any forwarding header, a non-loopback Host (DNS rebinding) or an Origin of
+  another site; `mode()` without a scope never reads open) or open (no account, the machine itself only). In
+  setup mode only /setup, the product pages and static files answer (no MCP, API, pairing, sign-up, add-in link,
+  and no AI app grant made before accounts: "local" grants work only in open mode, "server" ones never without an
+  owner); on a server not `reachable_by_others()` /setup itself is taken only from the machine (403 otherwise).
+  PasswordGate refuses paths with `.`/`..` segments, `//` or a backslash (400). The first person to submit /setup (name, email, password, "Anyone can create their own account", ticked by default) owns the
+  server. OPENSKETCH_PASSWORD is read only as the seed of an old owner's server-wide private address
+  (`_legacy_password`). No /reset page: the owner resets people on Admin, and their own password with
+  `python -m opensketch --reset-password EMAIL` on the server (`fly ssh console`). Suspension (`accounts.set_suspended`,
+  Admin Suspend/Resume, `POST /api/account/users/<id>/suspend`, never the owner): `accounts.get` returns None for a
+  suspended account, so sessions, OAuth tokens and refreshes, the private address, the add-in key (`swbridge.resolve`)
+  and paired computers (`ACCOUNT_SUSPENDED`, 401; `devicebridge.suspend_person` closes live sessions (409 reason
+  suspended) and fails waiting commands; the Companion keeps its pairing and retries) stop at once; OAuth grants are
+  kept (refresh says suspended, works again after Resume); sign-in
+  (password, Google, Companion password pairing) says it is suspended; `get_any` is for the owner's views.
+  `tests/test_mcp_access.py` covers setup mode, per-person MCP, suspension, expiry and no shared password.
 - Pages: `/` is the product page for visitors (`site.landing`) and the app's Home for a signed-in person (and on an
   open server); `/overview` (product page) and `/docs` (setup, connection, auth, verify, self test, troubleshooting,
   security) are public (`auth.PUBLIC_PAGES`), as are `/privacy` and the design system under `/ui/` (`cados.css`,
@@ -111,7 +125,7 @@ notes). The MSI builds unsigned on Windows in CI (`installer` job); signing wait
   to the registered tools), History (`/history`: `GET /api/commands`, the person's commands to paired computers from
   bridge.sqlite; direct-link commands are not recorded), Settings (`/settings`: account, private address and add-in
   key with Show / Copy / New, change password, sign out), Admin (`/admin`, the owner only; anyone else is sent to
-  Home: add a person with a suggested password the owner can change, shown once after adding (`POST /api/account/users`, role member), set someone's password
+  Home: add a person with a suggested password the owner can change, shown once after adding (`POST /api/account/users`, role member), suspend or resume a person, set someone's password
   (`POST /api/account/users/<id>/password`: signs them out everywhere and ends their AI apps' sign-ins), remove a
   person (also revokes their paired computers), people with their computers and AI apps (`GET /api/admin/people`),
   invite links, open sign-up). People sign in with that password when the installer's pairing step opens the
@@ -220,10 +234,11 @@ notes). The MSI builds unsigned on Windows in CI (`installer` job); signing wait
   app `cados`, Sydney, first made with Fly Launch from GitHub on 4 Nov 2026); the deploy health checks use it.
   One deploy source: the app is linked to this repository in Fly (Fly builds and deploys every push to main itself;
   /healthz then reports version "dev", as no commit is passed in). On a push `deploy.yml` only runs the tests (unless
-  the repository variable DEPLOY_ON_PUSH is "true"); run by hand it deploys from Actions and makes a missing volume
-  and password secret. `fly-status.yml` (run by hand, changes nothing) prints the app's machines, volumes, secret
+  the repository variable DEPLOY_ON_PUSH is "true"); run by hand it deploys from Actions and makes a missing volume.
+  `fly-status.yml` (run by hand, changes nothing) prints the app's machines, volumes, secret
   names, releases, logs and /healthz: both need the repository secret FLY_API_TOKEN (a deploy token for cados).
-  The OPENSKETCH_PASSWORD secret must be set on the Fly app. The Windows PC server (`windows/`) is the other way to run it.
+  No password secret is needed on Fly (fly.toml sets OPENSKETCH_PUBLIC_URL, so a fresh server waits in setup mode);
+  an old OPENSKETCH_PASSWORD secret can be unset. The Windows PC server (`windows/`) is the other way to run it.
 - fly.toml: app `cados`, performance-1x (one dedicated core, 2 GB), `auto_stop_machines = "suspend"`, kill_timeout 15, volume
   `opensketch_data` at /data. The add-in's long poll keeps the machine awake while SOLIDWORKS is linked.
 - `supervisor.py` (`python -m opensketch --supervise`, the image's CMD): asks /healthz every 5 s, restarts the server
@@ -233,8 +248,8 @@ notes). The MSI builds unsigned on Windows in CI (`installer` job); signing wait
   threads (tests/conftest.py sets it).
 
 - One Windows PC (`windows/`): `setup.ps1` (Python 3.12 venv, pinned packages, copies the add-in zip from
-  Downloads), `start.ps1` (asks for the server password, kept only in that window, and an optional public https
-  address for a tunnel; runs on port 8000), `update-addin.ps1` (newest add-in zip from Downloads, checked >= 0.10.0, into `%LOCALAPPDATA%\OpenSketch\AddIn`,
+  Downloads), `start.ps1` (asks for an optional public https address for a tunnel; no server password; runs on port
+  8000), `update-addin.ps1` (newest add-in zip from Downloads, checked >= 0.10.0, into `%LOCALAPPDATA%\OpenSketch\AddIn`,
   `OpenSketchSW.exe --install`, prints the registered CodeBase and its version), `connect-claude.ps1` (adds the private address to Claude Desktop's config through
   `cmd /c npx mcp-remote`, with a backup, and restarts it), `README.md` (steps: add-in from the Actions artifact, the
   macro, Claude Desktop, Cloudflare Tunnel for web AI apps). The add-in's default address is `http://127.0.0.1:8000` (`Settings.DefaultServer`).

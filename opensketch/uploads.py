@@ -6,7 +6,7 @@ breaks the file). Instead the client asks for a link, sends the file's bytes to 
 (`curl -T model.step '<url>'`), and passes the upload_id to sw_import.
 
 - The link is a capability for one upload, like an artifact download link: signed with the data-folder secret
-  and the connector address (a new server password voids it), valid LINK_LIFETIME seconds, used once.
+  and the server-wide connector address, valid LINK_LIFETIME seconds, used once.
   It carries no MCP credential and opens nothing else.
 - The upload belongs to the person whose connector asked for it; sw_import refuses anyone else's id.
 - The file is capped at the import limit (32 MiB, the same as base64 imports), after unzipping a gzip body.

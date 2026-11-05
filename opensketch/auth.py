@@ -1,19 +1,20 @@
 """Sign-in for the whole site, and the secret address of the MCP endpoint.
 
 Three modes:
-- accounts: at least one account exists (accounts.py). Every page and API call needs a signed-in person
-  (email + password, server-side sessions). The owner invites other people with links.
-- password: OPENSKETCH_PASSWORD is set but nobody has an account yet. The sign-in page asks to create the
-  owner account, with the server password as the key. The old password-only sign-in still works until then.
-- open: no password and no accounts (a server only you can reach). Anyone who reaches the server can use it;
-  creating the owner account (/setup) turns sign-in on.
+- accounts: at least one account exists (accounts.py). Every page, API call and MCP request needs a signed-in person
+  (email + password or Google, server-side sessions; AI apps sign in with OAuth, mcpauth.py). The owner adds or
+  invites people, or turns on open sign-up.
+- setup: no account yet on a server others can reach (a public address is set, or the request did not come from
+  this machine). Only the setup page works: the first person to create an account there becomes the owner. Nothing
+  else (pages, APIs, MCP, pairing) answers until then. There is no server password.
+- open: no account yet and the request comes from this machine itself (a server for one person on their own PC,
+  started without a public address). Creating the owner account (/setup) turns sign-in on.
 
 The private MCP address is /mcp/<token> (for AI apps that cannot sign in; the others use /mcp with OAuth, mcpauth.py):
-the address itself is the key. The server owner keeps the server-wide token from before accounts (derived from the
-password, or from a random secret kept in the data folder when there is no password, or set directly with
-OPENSKETCH_MCP_TOKEN), so connectors added then keep working. Every other person's token is keyed by the data
-folder's random secret (data_secret) and a counter: never by the server password, which would let anyone holding
-their own address guess the password offline. A new address (New address on the home page, or a password change) bumps
+the address itself is the key. The server owner keeps the server-wide token from before accounts (from a random secret kept in the data folder,
+or set directly with OPENSKETCH_MCP_TOKEN; servers that were once started with the old OPENSKETCH_PASSWORD keep the
+address derived from it, so connectors added then keep working). Every other person's token is keyed by the data
+folder's random secret (data_secret) and a counter. A new address (New address on the home page, or a password change) bumps
 the counter; the owner's first new address leaves the server-wide token too.
 """
 
@@ -35,13 +36,16 @@ PUBLIC_DIRS = ("/fonts/", "/ui/")  # the self-hosted fonts and the design system
 PUBLIC_PAGES = ("/overview", "/docs")  # the product page and the documentation: no data, for everyone (the installer download needs sign-in)
 
 
-def password() -> str:
+def _legacy_password() -> str:
+    """The old server password (OPENSKETCH_PASSWORD). Nothing asks for it any more. When a server still has it set,
+    it only (1) keeps the owner's old private MCP address working (its seed) and (2) marks the server as one others
+    can reach, so it waits in setup mode rather than open mode while it has no account."""
     return os.environ.get("OPENSKETCH_PASSWORD", "")
 
 
 def _base_secret() -> bytes:
-    if password():
-        return password().encode()
+    if _legacy_password():
+        return _legacy_password().encode()
     from . import store
     p = store.data_dir() / "secret"
     if not p.exists():
@@ -87,12 +91,8 @@ def mcp_token() -> str:
     return os.environ.get("OPENSKETCH_MCP_TOKEN") or _mac("mcp", 32)
 
 
-def session_value() -> str:
-    return _mac("session", 40)
-
-
-def check_token(token: str) -> bool:
-    return resolve_mcp(token)[0]
+def check_token(token: str, scope=None) -> bool:
+    return resolve_mcp(token, scope)[0]
 
 
 def _person_token(user_id: str, n: int) -> str:
@@ -123,7 +123,7 @@ def _address_index(data: dict) -> dict:
     return out
 
 
-def resolve_mcp(token: str) -> tuple[bool, dict | None]:
+def resolve_mcp(token: str, scope=None) -> tuple[bool, dict | None]:
     """(valid, person) for an MCP address key. The server-wide key acts as the server owner once accounts
     exist (until the owner makes a new address); None as the person means no accounts (everything is shared).
     A lookup by the key's hash: no work per account on a request (anyone can send one)."""
@@ -131,6 +131,8 @@ def resolve_mcp(token: str) -> tuple[bool, dict | None]:
         return False, None
     from . import accounts
     owner = accounts.owner()
+    if owner is None and not accounts.any_users() and mode(scope) != "open":
+        return False, None  # setup mode: no AI app until someone owns this server
     if (owner is None or accounts.mcp_counter(owner["id"]) == 0) and _eq(token, mcp_token()):
         return True, owner
     uid = accounts.derived("mcp-addresses", _address_index).get(hashlib.sha256(token.encode()).hexdigest())
@@ -160,11 +162,57 @@ def _headers(scope) -> dict:
 
 
 
-def mode() -> str:
+FORWARDED = ("x-forwarded-for", "forwarded", "x-real-ip", "cf-connecting-ip", "fly-client-ip", "true-client-ip")
+
+
+def reachable_by_others() -> bool:
+    """A server set up to be reached from elsewhere: a public address (OPENSKETCH_PUBLIC_URL, set on Fly and for a
+    tunnel; not one on this machine), OPENSKETCH_REQUIRE_SIGNIN, or the old OPENSKETCH_PASSWORD still set."""
+    from urllib.parse import urlsplit
+    url = os.environ.get("OPENSKETCH_PUBLIC_URL", "")
+    public = bool(url) and (urlsplit(url).hostname or "") not in ("127.0.0.1", "::1", "localhost")
+    return bool(public or os.environ.get("OPENSKETCH_REQUIRE_SIGNIN") or _legacy_password())
+
+
+LOOPBACK = ("127.0.0.1", "::1", "localhost")
+
+
+def _host_name(value: str) -> str:
+    """The host of a Host header or an Origin, without scheme, port or IPv6 brackets."""
+    from urllib.parse import urlsplit
+    v = (value or "").strip().lower()
+    return (urlsplit(v if "://" in v else "//" + v).hostname or "") if v else ""
+
+
+def is_local(scope) -> bool:
+    """The request came from this machine itself, from a program or a page on this machine: a loopback client, no
+    forwarding header (proxies and tunnels add one), a loopback Host (a DNS-rebinding page has its own name there) and
+    no Origin of another site (a page elsewhere fetching this server). The in-process test client is "testclient"
+    talking to "testserver", names no network request can carry together."""
+    if not scope:
+        return False
+    client = (scope.get("client") or ("",))[0] or ""
+    h = _headers(scope)
+    if any(k in h for k in FORWARDED):
+        return False
+    test = client == "testclient"
+    if client not in LOOPBACK and not test:
+        return False
+    if _host_name(h.get("host", "")) not in LOOPBACK + (("testserver",) if test else ()):
+        return False
+    origin = h.get("origin", "")
+    return not origin or _host_name(origin) in LOOPBACK + (("testserver",) if test else ())
+
+
+def mode(scope=None) -> str:
+    """accounts, setup or open (see the top of this file). Open needs a request from this machine itself, so a call
+    without the request (scope) never gets it: it reads setup."""
     from . import accounts
     if accounts.any_users():
         return "accounts"
-    return "password" if password() else "open"
+    if reachable_by_others() or not is_local(scope):
+        return "setup"
+    return "open"
 
 
 def _cookie(scope, name: str) -> str:
@@ -180,26 +228,22 @@ def _cookie(scope, name: str) -> str:
 def current_user(scope, m: str | None = None) -> dict | None:
     """The signed-in person, or None. In password mode the old password cookie stands for the server."""
     from . import accounts
-    m = m or mode()
+    m = m or mode(scope)
     if m == "accounts":
         return accounts.session_user(_cookie(scope, ACCOUNT_COOKIE))
-    if m == "password":
-        v = _cookie(scope, COOKIE)
-        if v and _eq(v, session_value()):
-            return {"id": "server", "email": "", "name": "Server password", "role": "owner", "legacy": True}
     return None
 
 
 def _signed_in_quietly(scope) -> bool:
     """For the public pages' header (Sign in or Dashboard): never fails, never opens anything."""
     try:
-        return mode() == "open" or current_user(scope) is not None
+        return mode(scope) == "open" or current_user(scope) is not None
     except Exception:
         return False
 
 
 def logged_in(scope) -> bool:
-    return mode() == "open" or current_user(scope) is not None
+    return mode(scope) == "open" or current_user(scope) is not None
 
 
 # ---------------------------------------------------------------- pages
@@ -353,9 +397,7 @@ def _page(title, sub, action, fields, button, nxt="/", error="", links="", top="
 
 def _login_page(nxt, error="", email=""):
     from . import accounts
-    forgot = ('<span class="note">Forgot your password? Ask the person who invited you. '
-              '<a href="/reset">Administrator?</a></span>' if password() else
-              '<span class="note">Forgot your password? Ask your CADOS administrator.</span>')
+    forgot = '<span class="note">Forgot your password? Ask your CADOS administrator.</span>'
     signup = '<a href="/signup">Create an account</a>' if accounts.settings()["open_signup"] else ""
     links = f'<div class="links">{forgot}{signup}</div>'
     if accounts.access_code():  # keeps `next`, so an AI app's sign-in (/oauth/authorize) carries on after the code
@@ -455,10 +497,6 @@ def _setup_page(nxt, error="", form=None):
     f = [_field("name", "Your name", "text", "name", True, form.get("name", "")),
          _field("email", "Email", "email", "username", False, form.get("email", "")),
          _new_password_field()]
-    if password():
-        f.append(_field("server_password", "Server password", "password", "off",
-                        note="The password set on the server when CADOS was installed. It proves you run this server. "
-                             "Needed only this once."))
     on = form.get("open_signup", "on" if not form else "") == "on"
     f.append('<label class="check"><input type="checkbox" name="open_signup" value="on"' + (" checked" if on else "")
              + '> Anyone can create their own account. You can change this on the Admin page.</label>')
@@ -478,19 +516,12 @@ def _join_page(token, error="", form=None):
                  _google_block("/", token, "Join with Google"))
 
 
-def _reset_page(error="", email=""):
-    return _page("Reset a password", "For administrators: the server password sets a new password for any account. Everyone else: ask the person who invited you.", "/reset",
-                 [_field("email", "Email", "email", "username", True, email),
-                  _field("server_password", "Server password", "password", "off"),
-                  _field("new_password", "New password", "password", "new-password", note="At least 8 characters.")],
-                 "Set new password", "/", error, '<div class="links"><a href="/login">Back to sign in</a></div>')
-
-
 async def _send(send, status: int, body: bytes, headers: list) -> None:
     await send({"type": "http.response.start", "status": status, "headers": headers})
     await send({"type": "http.response.body", "body": body})
 
 
+SUSPENDED = "This account is suspended. Ask your CADOS administrator."
 TOO_MANY = "Too many tries. Wait a few minutes, then try again."
 TOO_MANY_NEW = "Too many new accounts from this network. Try again in an hour."
 HTML = [(b"content-type", b"text/html; charset=utf-8"), (b"cache-control", b"no-store"),
@@ -646,22 +677,6 @@ def _same_origin(scope) -> bool:
     return origin != "null"
 
 
-def _loose(v: str) -> str:
-    """A pasted or typed server password: no spaces around it, and no one pair of quotes around it (a secret set from
-    Windows cmd with 'single quotes' keeps them)."""
-    v = (v or "").strip()
-    if len(v) >= 2 and v[0] == v[-1] and v[0] in "'\"":
-        v = v[1:-1].strip()
-    return v
-
-
-def _server_password_ok(given: str) -> bool:
-    if not password():
-        return False
-    return (hmac.compare_digest((given or "").encode(), password().encode())
-            or (bool(_loose(given)) and hmac.compare_digest(_loose(given).encode(), _loose(password()).encode())))
-
-
 class PasswordGate:
     """ASGI middleware: sign-in pages, the session check, sign-out. MCP paths (and the add-in's link) are
     checked by their own tokens instead. Puts the signed-in person in scope["state"]["user"]."""
@@ -673,6 +688,9 @@ class PasswordGate:
         if scope["type"] != "http":
             return await self.app(scope, receive, send)
         path = scope.get("path", "")
+        if any(seg in (".", "..") for seg in path.split("/")) or "//" in path or "\\" in path:
+            # "/mcp/../x" would count as a machine path here and then reach a file: never pass such a path on
+            return await _send(send, 400, b'{"error":"Bad path."}', [(b"content-type", b"application/json")])
         if scope.get("method") not in ("GET", "HEAD", "OPTIONS") and not _machine_path(path) and not _same_origin(scope):
             return await _send(send, 403, b'{"error":"This request did not come from a CADOS page."}', [(b"content-type", b"application/json")])
         if path == "/healthz" and scope.get("method") in ("GET", "HEAD"):  # the supervisor's check: no data, no sign-in
@@ -682,7 +700,7 @@ class PasswordGate:
                                [(b"content-type", b"text/html; charset=utf-8"), (b"cache-control", b"no-cache")])
         from . import accounts
         try:
-            m = mode()
+            m = mode(scope)
         except accounts.AccountError as e:  # damaged or missing accounts file: closed, never open
             return await _send(send, 503, json.dumps({"error": str(e)}).encode(), [(b"content-type", b"application/json")])
         if path in ("/login", "/setup", "/reset", "/logout", "/signup", "/access") or path.startswith("/join/") or path.startswith("/auth/google"):
@@ -694,6 +712,13 @@ class PasswordGate:
         # The favicon and fonts hold no data.
         if scope.get("method") in ("GET", "HEAD") and (path in PUBLIC_FILES or path.startswith(PUBLIC_DIRS)):
             return await self.app(scope, receive, send)
+        if m == "setup":  # nobody owns this server yet: the product pages and the setup page only
+            scope.setdefault("state", {})["user"] = None
+            if scope.get("method") in ("GET", "HEAD") and (path == "/" or path in PUBLIC_PAGES):
+                return await self.app(scope, receive, send)
+            if scope.get("method") == "GET" and not path.startswith("/api/"):
+                return await _send(send, 303, b"", [(b"location", b"/setup")])
+            return await _send(send, 401, b'{"error":"CADOS is not set up yet."}', [(b"content-type", b"application/json")])
         user = current_user(scope, m)
         scope.setdefault("state", {})["user"] = user
         if m == "open" or user is not None:
@@ -715,7 +740,7 @@ class PasswordGate:
         post = scope.get("method") == "POST"
         form = await _form(receive) if post else {}
         nxt = _safe_next(form.get("next") or q.get("next") or "/")
-        m = mode()
+        m = mode(scope)
 
         def go(location: str, *cookies: bytes):
             return _send(send, 303, b"", [(b"location", location.encode())] + [(b"set-cookie", c) for c in cookies])
@@ -726,12 +751,15 @@ class PasswordGate:
                 await asyncio.to_thread(accounts.end_session, tok)
             return await go("/login" if m != "open" else "/", _clear(ACCOUNT_COOKIE), _clear(COOKIE))
 
+        if m == "setup" and path != "/setup":  # sign-up, invites, early access and sign-in wait for the owner
+            return await go("/setup")
+
         if path == "/auth/google" or path == "/auth/google/callback":
             return await self._google(path, scope, q, go, send)
 
         if path == "/access":
             if m != "accounts":
-                return await go("/login" if m == "password" else "/")
+                return await go("/")
             if not accounts.access_code():
                 return await _send(send, 410, _access_closed_page(), HTML)
             if not post:
@@ -784,17 +812,14 @@ class PasswordGate:
         if path == "/setup":
             if m == "accounts":
                 return await go("/login")
+            if not reachable_by_others() and not is_local(scope):
+                # a server set up for its own machine only (no public address) is set up from that machine, never
+                # from elsewhere, nor by a page of another site open in its browser
+                return await _send(send, 403, notice_page("Set up CADOS on its own computer",
+                                                          "Open CADOS on the computer it runs on to create the administrator account."), HTML)
             if not post:
                 return await _send(send, 200, _setup_page(nxt), HTML)
-            ip = "ip:" + _client(scope)
-            if password() and _limited(ip):
-                return await _send(send, 429, _setup_page(nxt, TOO_MANY, form), HTML)
-            if password() and not _server_password_ok(form.get("server_password", "")):
-                _failed(ip)
-                await asyncio.sleep(1)
-                return await _send(send, 401, _setup_page(nxt, "The server password is wrong. If you lost it, set a new one on the "
-                                                                "server, then try again.", form), HTML)
-            try:
+            try:  # once only: create_owner refuses as soon as any account exists (under the accounts lock)
                 u = await asyncio.to_thread(accounts.create_owner, form.get("email", ""), form.get("name", ""), form.get("new_password", ""),
                                             by=_password_by(form))
             except accounts.AccountError as e:
@@ -803,39 +828,12 @@ class PasswordGate:
                 await asyncio.to_thread(accounts.set_open_signup, True)
             return await go(nxt, await _new_account_cookie(scope, u, form), _clear(COOKIE))
 
-        if path == "/reset":
-            if m != "accounts" or not password():
-                return await go("/login")
-            if not post:
-                return await _send(send, 200, _reset_page(), HTML)
-            keys = ("ip:" + _client(scope), "email:" + form.get("email", "").strip().lower())
-            if _limited(*keys):
-                return await _send(send, 429, _reset_page(TOO_MANY, form.get("email", "")), HTML)
-            u = accounts.find_by_email(form.get("email", ""))
-            if not _server_password_ok(form.get("server_password", "")) or u is None:
-                _failed(*keys)
-                await asyncio.sleep(1)
-                return await _send(send, 401, _reset_page("The email or the server password is wrong.", form.get("email", "")), HTML)
-            try:
-                await asyncio.to_thread(accounts.set_password, u["id"], form.get("new_password", ""), None, "owner")
-            except accounts.AccountError as e:
-                return await _send(send, 400, _reset_page(str(e), form.get("email", "")), HTML)
-            return await go("/", _set_account_cookie(scope, await asyncio.to_thread(accounts.start_session, u["id"])))
+        if path == "/reset":  # the old reset with the server password: the owner resets passwords on Admin now
+            return await go("/login")
 
         # /login
         if m == "open":
             return await go("/setup" if not post else "/")
-        if m == "password":
-            if post and "password" in form and "email" not in form:  # the old password-only sign-in
-                if _limited("ip:" + _client(scope)):
-                    return await _send(send, 429, _setup_page(nxt, TOO_MANY), HTML)
-                if hmac.compare_digest(form["password"].encode(), password().encode()):
-                    cookie = f"{COOKIE}={session_value()}; Path=/; Max-Age={90 * 86400}; HttpOnly; SameSite=Lax{_secure(scope)}"
-                    return await go(nxt, cookie.encode())
-                _failed("ip:" + _client(scope))
-                await asyncio.sleep(1)
-                return await _send(send, 401, _setup_page(nxt, "Wrong password."), HTML)
-            return await _send(send, 200, _setup_page(nxt), HTML)
         if not post:
             if current_user(scope, m) is not None:
                 return await go(nxt)  # already signed in on this browser: straight back to work
@@ -849,6 +847,8 @@ class PasswordGate:
             _failed(*keys)
             await asyncio.sleep(1)  # slow down guessing
             return await _send(send, 401, _login_page(nxt, "The email or password is wrong.", form.get("email", "")), HTML)
+        if u.get("suspended"):  # told only after the right password
+            return await _send(send, 403, _login_page(nxt, SUSPENDED, form.get("email", "")), HTML)
         return await go(nxt, _set_account_cookie(scope, await asyncio.to_thread(accounts.start_session, u["id"])))
 
 
@@ -876,7 +876,7 @@ async def _google_flow(path, scope, q, go, send):
     st = oauth.read_state(_cookie(scope, oauth.STATE_COOKIE))
 
     async def fail(msg, status=400):
-        return await _send(send, status, _login_page((st or {}).get("n", "/"), msg) if mode() == "accounts" else
+        return await _send(send, status, _login_page((st or {}).get("n", "/"), msg) if mode(scope) == "accounts" else
                            _setup_page("/", msg), HTML + [(b"set-cookie", clear)])
 
     if q.get("error"):
@@ -926,6 +926,8 @@ async def _google_flow(path, scope, q, go, send):
             if "invite-only" in msg:
                 msg = f"There is no account for {info['email']}. This server is invite-only: ask the owner for an invite link."
             return await fail(msg, 403)
+    if u.get("suspended"):
+        return await fail(SUSPENDED, 403)
     return await go(_safe_next(st.get("n") or "/"), _set_account_cookie(scope, await asyncio.to_thread(accounts.start_session, u["id"])), clear)
 
 

@@ -88,15 +88,17 @@ pip install -r requirements-dev.txt && pip install --no-deps -e .
 python -m opensketch --no-browser      # http://127.0.0.1:8000
 ```
 
-Needs Python 3.12 and Node.js 20 or newer (the sketch solver runs in node). The first visit asks you to create the
-owner account when `OPENSKETCH_PASSWORD` is set; without it, the server is open (fine on your own machine only).
+Needs Python 3.12 and Node.js 20 or newer (the sketch solver runs in node). There is no server password. Until the
+first account exists, the server is open only to this machine itself; any other request (another address, a proxy
+or a tunnel, or any request once `OPENSKETCH_PUBLIC_URL` is set) gets only the setup page, where the first person to
+create an account becomes the owner. Create it right after you start a public server.
 An AI app needs a public https address to reach the server, so for real use, host it.
 
 ### Docker
 
 ```bash
 docker build -t opensketch .
-docker run -p 8080:8080 -e OPENSKETCH_PASSWORD=choose-one -v opensketch-data:/data opensketch
+docker run -p 8080:8080 -e OPENSKETCH_PUBLIC_URL=https://cados.example.com -v opensketch-data:/data opensketch
 ```
 
 The image also builds the add-in, so the home page can offer it for download.
@@ -104,8 +106,7 @@ The image also builds the add-in, so the home page can offer it for download.
 ### Fly.io
 
 `fly.toml` and `.github/workflows/deploy.yml` deploy it on every push to `main` once the tests pass. Set the
-repository secrets `FLY_API_TOKEN` and `OPENSKETCH_PASSWORD` (optionally `GOOGLE_CLIENT_ID` and
-`GOOGLE_CLIENT_SECRET` for Sign in with Google), and the repository variable `FLY_APP` to your app's name. For your
+repository secret `FLY_API_TOKEN` (optionally `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` for Sign in with Google), and the repository variable `FLY_APP` to your app's name. For your
 own domain, add a certificate in the Fly dashboard and set the variable `PUBLIC_URL`.
 
 ### Settings
@@ -113,8 +114,8 @@ own domain, add a certificate in the Fly dashboard and set the variable `PUBLIC_
 | Variable | Meaning |
 |---|---|
 | `OPENSKETCH_DATA` | Data folder: accounts, connections, keys, short-lived uploads (default `~/opensketch-data`) |
-| `OPENSKETCH_PASSWORD` | Server password: creates the owner account and resets passwords |
-| `OPENSKETCH_PUBLIC_URL` | The server's public address, when it cannot tell from the request |
+| `OPENSKETCH_PUBLIC_URL` | The server's public address. Set it on any public server: until the owner account exists, only the setup page answers |
+| `OPENSKETCH_REQUIRE_SIGNIN` | Any value: treat the server as public (setup page first) even without a public address |
 | `OPENSKETCH_ACCESS_CODE` | Optional early access code: people who type it skip sign-up |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Optional Sign in with Google (redirect `https://<server>/auth/google/callback`) |
 | `OPENSKETCH_KEY_SECRET` | Optional key for the secrets stored on the server (else a random one in the data folder) |
