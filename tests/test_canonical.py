@@ -1,12 +1,12 @@
-"""Host names: the canonical address (OPENSKETCH_PUBLIC_URL), old hosts that send browsers there with a 301 keeping the
-path and the query (OPENSKETCH_REDIRECT_HOSTS), and alias hosts served as they are (OPENSKETCH_ALIAS_HOSTS). Programs on
-an old or alias host (health checks, MCP, OAuth, the device and add-in links, the page API) are served as before and
-their OAuth metadata and links keep naming that host. The canonical host is ignored in both lists, so moving it is a
-change of OPENSKETCH_PUBLIC_URL alone.
+"""CAD Automation under the BIZOMAT website's address: OPENSKETCH_PUBLIC_URL = https://bizomat.ai/cad.
 
-Phase A (now): canonical cados.kevos.com, old cados.fly.dev, alias cad.bizomat.ai (its DNS is still to be made).
-Phase B (after DNS): canonical cad.bizomat.ai; cados.kevos.com and cados.fly.dev old. bizomat.ai is the BIZOMAT
-website's address: the CAD app never names it."""
+- Requests under /cad are served with the prefix taken off (the app sees its own paths) and every root path the app
+  writes gets it back: links in HTML, Location headers, cookie paths. No link on any page leaves /cad.
+- The OAuth metadata of https://bizomat.ai/cad/mcp is where RFC 8414 and RFC 9728 put it, at the root of the host.
+- On bizomat.ai, /CAD answers 301 to /cad, and a page outside /cad answers 302 into it.
+- The old hosts (cados.kevos.com, cados.fly.dev, cad.bizomat.ai) send pages to https://bizomat.ai/cad with a 301 and
+  keep serving programs (MCP, OAuth, the add-in link, the Companion API) at their root with their own address.
+- Connectors set up with either the new or an old address sign in and keep working."""
 import base64
 import contextvars
 import hashlib
@@ -19,64 +19,137 @@ from fastapi.testclient import TestClient
 
 from opensketch import canonical, mcpauth, server, uploads
 
-KEVOS, FLYDEV, CAD = "cados.kevos.com", "cados.fly.dev", "cad.bizomat.ai"
+SITE, PRE, NEW = "bizomat.ai", "/cad", "https://bizomat.ai/cad"
+OLD = ("cados.kevos.com", "cados.fly.dev", "cad.bizomat.ai")
 ACCEPT = {"Accept": "application/json, text/event-stream"}
-
-
-def phase(monkeypatch, public):
-    monkeypatch.setenv("OPENSKETCH_PUBLIC_URL", "https://" + public)
-    monkeypatch.setenv("OPENSKETCH_REDIRECT_HOSTS", f"{FLYDEV},{KEVOS}")
-    monkeypatch.setenv("OPENSKETCH_ALIAS_HOSTS", CAD)
 
 
 @pytest.fixture(autouse=True)
 def env(tmp_path, monkeypatch):
     monkeypatch.setenv("OPENSKETCH_DATA", str(tmp_path / "data"))
-    for k in ("OPENSKETCH_PASSWORD", "OPENSKETCH_MCP_TOKEN"):
+    for k in ("OPENSKETCH_PASSWORD", "OPENSKETCH_MCP_TOKEN", "OPENSKETCH_ALIAS_HOSTS"):
         monkeypatch.delenv(k, raising=False)
-    phase(monkeypatch, KEVOS)
+    monkeypatch.setenv("OPENSKETCH_PUBLIC_URL", NEW)
+    monkeypatch.setenv("OPENSKETCH_REDIRECT_HOSTS", ",".join(OLD))
     mcpauth._codes.clear()
     mcpauth._reg_hits.clear()
 
 
-def _get(path, host=FLYDEV, method="GET", **kw):
-    c = TestClient(server.app, base_url="https://" + host)
-    return c.request(method, path, headers={"host": host, **kw.pop("headers", {})}, follow_redirects=False, **kw)
+def _client(host=SITE):
+    return TestClient(server.app, base_url="https://" + host)
 
 
-PAGES = ["/", "/docs", "/overview", "/login?next=dashboard", "/login?next=%2Fdashboard&x=a%20b&x=2", "/dashboard",
-         "/privacy", "/download/solidworks", "/oauth/authorize?client_id=c&state=s", "/devices/pair?code=ABCD-EFGH",
+def _get(path, host=SITE, method="GET", **kw):
+    return _client(host).request(method, path, headers={"host": host, **kw.pop("headers", {})},
+                                 follow_redirects=False, **kw)
+
+
+PAGES = ["/", "/docs", "/overview", "/privacy", "/login?next=dashboard", "/login?next=%2Fdashboard&x=a%20b&x=2",
+         "/dashboard", "/download/solidworks", "/oauth/authorize?client_id=c&state=s", "/devices/pair?code=ABCD-EFGH",
          "/ui/cados.css", "/a%2Fb"]
 PROGRAMS = ["/healthz", "/mcp", "/mcp/", "/mcp/some-private-key", "/solidworks/mcp",
             "/.well-known/oauth-protected-resource", "/.well-known/oauth-authorization-server/mcp", "/v2/keys",
             "/v2/bridge/update.json", "/v2/device/next", "/mcp/sw/next", "/mcp/artifacts/x/y", "/mcp/uploads/x",
             "/api/solidworks", "/oauth/token", "/oauth/register", "/oauth/revoke"]
+LINK = re.compile(r"""(?:href|src|action|formaction)\s*=\s*["']([^"']*)["']|url\(\s*["']?([^)"']*)""")
 
 
-# ----------------------------------------------------------------------------- phase A: now
+def _outside(html: str) -> list[str]:
+    """Links in a page that are root paths outside /cad (absolute https links and #fragments are fine)."""
+    found = [a or b for a, b in LINK.findall(html)]
+    return [u for u in found if u.startswith("/") and not u.startswith("//")
+            and not (u == PRE or u.startswith(PRE + "/") or u.startswith(PRE + "?") or u.startswith(PRE + "#"))]
 
-@pytest.mark.parametrize("path", PAGES)
-def test_phase_a_the_fly_origin_redirects_pages_keeping_path_and_query(path):
+
+# ----------------------------------------------------------------------------- the address and its parts
+
+def test_the_public_address_may_carry_a_lowercase_path(monkeypatch):
+    assert canonical.canonical() == (SITE, NEW) and canonical.prefix() == PRE
+    assert canonical.settings() == (frozenset(OLD), NEW)
+    for good, pre in (("https://bizomat.ai/cad/", "/cad"), ("https://bizomat.ai", ""), ("https://bizomat.ai/a/b-2", "/a/b-2")):
+        monkeypatch.setenv("OPENSKETCH_PUBLIC_URL", good)
+        assert canonical.prefix() == pre, good
+    for bad in ("https://bizomat.ai/CAD", "https://bizomat.ai/c d", "https://bizomat.ai/cad?x=1", "ftp://bizomat.ai/cad",
+                "https://bizomat.ai/-cad"):
+        monkeypatch.setenv("OPENSKETCH_PUBLIC_URL", bad)
+        assert canonical.canonical() == ("", "") and canonical.settings() == (frozenset(), ""), bad
+
+
+def test_root_paths_written_by_the_app_get_the_prefix():
+    page = (b'<a href="/docs">x</a><link href="/ui/cados.css"><script src=\'/ui/app.js\'></script>'
+            b'<form action="/login"><a href="//cdn.example/x"><a href="/cad/docs"><a href="/cadence">'
+            b'<a href="https://bizomat.ai/docs"><a href="#top"><p>Use /docs and href=/x in prose</p>'
+            b'<div style="background:url(/ui/a.png)"><a href="/cad">')
+    out = canonical.rewrite_html(page, PRE).decode()
+    assert 'href="/cad/docs"' in out and 'href="/cad/ui/cados.css"' in out and "src='/cad/ui/app.js'" in out
+    assert 'action="/cad/login"' in out and 'href="//cdn.example/x"' in out and 'href="/cad/cadence"' in out
+    assert out.count('href="/cad/docs"') == 2 and 'href="https://bizomat.ai/docs"' in out and 'href="#top"' in out
+    assert "Use /docs and href=/x in prose" in out and "url(/cad/ui/a.png)" in out and 'href="/cad"' in out
+    assert canonical.add_prefix("/login?next=/x", PRE) == "/cad/login?next=/x"
+    assert canonical.add_prefix("/cad/x", PRE) == "/cad/x" and canonical.add_prefix("https://x/y", PRE) == "https://x/y"
+
+
+# ----------------------------------------------------------------------------- bizomat.ai/cad
+
+@pytest.mark.parametrize("path", ["/cad", "/cad/", "/cad/docs", "/cad/overview", "/cad/privacy", "/cad/setup",
+                                  "/cad/ui/cados.css", "/cad/ui/app.js", "/cad/fonts/fonts.css", "/cad/favicon.svg",
+                                  "/cad/healthz"])
+def test_the_app_is_served_under_cad(path):
     r = _get(path)
-    assert r.status_code == 301 and r.headers["location"] == "https://" + KEVOS + path
-    h = _get(path, method="HEAD")
-    assert h.status_code == 301 and h.headers["location"] == "https://" + KEVOS + path and h.content == b""
+    assert r.status_code == 200, (path, r.status_code, r.headers.get("location"))
 
 
-@pytest.mark.parametrize("host", [KEVOS, CAD, "bizomat.ai", "evil.cados.fly.dev", "127.0.0.1:8080"])
-def test_phase_a_the_canonical_alias_and_other_hosts_are_served(host):
-    assert _get("/docs", host).status_code == 200
-    assert _get("/", host).status_code in (200, 303)  # 303: setup first, on a server with no account yet
+def test_the_rest_of_bizomat_ai_is_sent_into_cad():
+    r = _get("/docs?x=1")
+    assert r.status_code == 302 and r.headers["location"] == "/cad/docs?x=1" and r.headers["cache-control"] == "no-store"
+    assert _get("/").headers["location"] == "/cad/"
+    for path, want in (("/CAD/docs", "/cad/docs"), ("/Cad", "/cad"), ("/CAD/", "/cad/")):
+        r = _get(path)
+        assert r.status_code == 301 and r.headers["location"] == want, path
+    assert _get("/healthz").status_code == 200  # the deploy check, on any host
+    assert _get("/mcp", method="POST", json={}).status_code not in (301, 302)  # a program at the root is never moved
 
 
-def test_host_header_case_port_and_trailing_dot():
-    for host in ("CADOS.FLY.DEV", "cados.fly.dev:443", "cados.fly.dev."):
-        assert _get("/docs", host).headers["location"] == "https://" + KEVOS + "/docs", host
+def test_no_link_on_any_page_leaves_cad():
+    for path in ("/cad/", "/cad/docs", "/cad/overview", "/cad/privacy", "/cad/setup", "/cad/no-such-page"):
+        r = _client().get(path, headers={"accept": "text/html"})
+        assert not _outside(r.text), (path, _outside(r.text)[:5])
+    owner = _client()
+    r = owner.post("/cad/setup", data={"name": "Owner", "email": "owner@example.com", "new_password": "correct horse",
+                                       "next": "/"}, follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/cad/"
+    assert all("Path=/cad;" in c for c in r.headers.get_list("set-cookie") if "Path=" in c), r.headers.get_list("set-cookie")
+    for path in ("/cad/", "/cad/dashboard", "/cad/assistant", "/cad/solidworks", "/cad/tools", "/cad/history",
+                 "/cad/settings", "/cad/admin", "/cad/devices/pair", "/cad/login"):
+        r = owner.get(path, follow_redirects=False)
+        assert r.status_code in (200, 303), (path, r.status_code)
+        assert not _outside(r.text), (path, _outside(r.text)[:5])
+        if r.status_code == 303:
+            assert r.headers["location"].startswith("/cad"), (path, r.headers["location"])
+    r = _client().get("/cad/dashboard", follow_redirects=False)  # signed out: sign-in under /cad, coming back to /cad
+    assert r.status_code == 303 and r.headers["location"].startswith("/cad/login")
 
 
-@pytest.mark.parametrize("host", [FLYDEV, KEVOS, CAD])
+def test_the_script_takes_the_prefix_from_its_own_address():
+    js = _get("/cad/ui/app.js").text
+    assert "new URL(document.currentScript.src).pathname" in js and "fetch(BASE + path" in js
+    assert "location.href = '/" not in js  # every page change goes through BASE
+
+
+# ----------------------------------------------------------------------------- old hosts
+
+@pytest.mark.parametrize("host", OLD)
+@pytest.mark.parametrize("path", PAGES)
+def test_old_hosts_send_pages_to_bizomat_ai_cad(host, path):
+    r = _get(path, host)
+    assert r.status_code == 301 and r.headers["location"] == NEW + path
+    h = _get(path, host, method="HEAD")
+    assert h.status_code == 301 and h.headers["location"] == NEW + path and h.content == b""
+
+
+@pytest.mark.parametrize("host", OLD)
 @pytest.mark.parametrize("path", PROGRAMS)
-def test_programs_are_never_redirected(host, path):
+def test_programs_on_old_hosts_are_never_redirected(host, path):
     scope = {"type": "http", "method": "GET", "path": path, "raw_path": path.encode(), "query_string": b"x=1",
              "headers": [(b"host", host.encode())]}
     assert canonical.location(scope) is None, path
@@ -84,98 +157,45 @@ def test_programs_are_never_redirected(host, path):
         assert _get(path, host).status_code != 301, path
 
 
-def test_only_get_and_head_are_redirected():
+def test_only_get_and_head_are_redirected_and_forwarded_hosts_are_not_trusted():
     for method in ("POST", "PUT", "DELETE", "OPTIONS"):
-        assert _get("/login", method=method).status_code != 301, method
+        assert _get("/login", "cados.kevos.com", method=method).status_code != 301, method
+    r = _get("/docs", "cados.kevos.com", headers={"x-forwarded-host": SITE})
+    assert r.status_code == 301 and r.headers["location"] == NEW + "/docs"
+    assert _get("/cad/docs", "evil.example").status_code == 200  # another host: served, its Host never echoed
 
 
-def test_forwarded_host_is_not_trusted():
-    assert _get("/docs", KEVOS, headers={"x-forwarded-host": FLYDEV}).status_code == 200
-    r = _get("/docs", FLYDEV, headers={"x-forwarded-host": KEVOS})
-    assert r.status_code == 301 and r.headers["location"] == "https://" + KEVOS + "/docs"
+# ----------------------------------------------------------------------------- OAuth
 
-
-def test_the_canonical_host_is_ignored_in_both_lists_and_off_unless_set(monkeypatch):
-    assert canonical.settings() == (frozenset({FLYDEV}), "https://" + KEVOS)
-    assert canonical.alias_hosts() == frozenset({CAD})
-    monkeypatch.setenv("OPENSKETCH_ALIAS_HOSTS", f"{CAD},{KEVOS},{FLYDEV}")  # canonical and old hosts are not aliases
-    assert canonical.alias_hosts() == frozenset({CAD})
-    monkeypatch.setenv("OPENSKETCH_REDIRECT_HOSTS", KEVOS)  # only the canonical host: nothing to redirect
-    assert canonical.settings() == (frozenset(), "") and _get("/docs", KEVOS).status_code == 200
-    monkeypatch.setenv("OPENSKETCH_REDIRECT_HOSTS", FLYDEV)
-    monkeypatch.setenv("OPENSKETCH_PUBLIC_URL", "https://cados.kevos.com/sub")  # not a bare origin
-    assert _get("/docs").status_code == 200 and canonical.legacy_bases() == []
-    monkeypatch.delenv("OPENSKETCH_PUBLIC_URL")
-    assert _get("/docs").status_code == 200 and canonical.machine_base({"host": CAD}) == ""
-
-
-def test_canonical_tags_name_the_public_address_on_every_host():
-    for host in (KEVOS, CAD, "bizomat.ai"):
-        html = _get("/docs", host).text
-        assert '<link rel="canonical" href="https://cados.kevos.com/docs">' in html, host
-        assert "GATEWAY_URL=https://cados.kevos.com" in html, host  # the docs give this server's own address
-
-
-# ----------------------------------------------------------------------------- phase B: after cad.bizomat.ai's DNS
-
-@pytest.mark.parametrize("old", [KEVOS, FLYDEV])
-@pytest.mark.parametrize("path", PAGES)
-def test_phase_b_old_hosts_redirect_pages_to_cad_bizomat_ai(monkeypatch, old, path):
-    phase(monkeypatch, CAD)  # the only change: OPENSKETCH_PUBLIC_URL
-    r = _get(path, old)
-    assert r.status_code == 301 and r.headers["location"] == "https://" + CAD + path
-
-
-def test_phase_b_serves_cad_bizomat_ai_and_names_it_everywhere(monkeypatch):
-    phase(monkeypatch, CAD)
-    assert canonical.settings() == (frozenset({FLYDEV, KEVOS}), "https://" + CAD) and canonical.alias_hosts() == frozenset()
-    r = _get("/docs", CAD)
-    assert r.status_code == 200
-    assert '<link rel="canonical" href="https://cad.bizomat.ai/docs">' in r.text and "GATEWAY_URL=https://cad.bizomat.ai" in r.text
-    assert "//bizomat.ai" not in r.text  # never the website's address
-    assert _get("/docs", "bizomat.ai").status_code == 200  # not an old host: served until its DNS moves to the website
-
-
-# ----------------------------------------------------------------------------- programs set up with each address
-
-def _browser(host):
-    return TestClient(server.app, base_url="https://" + host)
-
-
-def _setup_owner(host):
-    b = _browser(host)
-    r = b.post("/setup", data={"name": "Owner", "email": "owner@example.com", "new_password": "correct horse",
-                               "next": "/"}, headers={"host": host}, follow_redirects=False)
-    assert r.status_code in (302, 303), r.text[:300]
+def _setup_owner(host=SITE, prefix=PRE):
+    b = _client(host)
+    r = b.post(prefix + "/setup", data={"name": "Owner", "email": "owner@example.com", "new_password": "correct horse",
+                                        "next": "/"}, headers={"host": host}, follow_redirects=False)
+    assert r.status_code == 303, r.text[:300]
     return b
 
 
-def _signed_in(host):
-    b = _browser(host)
-    r = b.post("/login", data={"email": "owner@example.com", "password": "correct horse", "next": "/"},
-               headers={"host": host}, follow_redirects=False)
-    assert r.status_code in (302, 303), r.text[:300]
-    return b
-
-
-@pytest.mark.parametrize("public", [KEVOS, CAD])
-def test_oauth_metadata_names_the_address_the_app_connected_to(monkeypatch, public):
-    phase(monkeypatch, public)
-    _setup_owner(public)
-    for host in (KEVOS, FLYDEV, CAD, "bizomat.ai"):
-        base = "https://" + (host if host != "bizomat.ai" else public)  # an unlisted host gets the canonical address
-        for path in ("/mcp", "/solidworks/mcp"):
-            pr = _get("/.well-known/oauth-protected-resource" + path, host)
-            assert pr.status_code == 200, pr.text
-            assert pr.json()["resource"] == base + path and pr.json()["authorization_servers"] == [base], (host, path)
-        md = _get("/.well-known/oauth-authorization-server", host).json()
-        assert md["issuer"] == base
+def test_oauth_metadata_sits_where_rfc_8414_and_9728_put_it():
+    _setup_owner()
+    for url in ("/.well-known/oauth-protected-resource/cad/mcp", "/cad/.well-known/oauth-protected-resource/mcp"):
+        pr = _get(url).json()
+        assert pr["resource"] == NEW + "/mcp" and pr["authorization_servers"] == [NEW], url
+    sw = _get("/.well-known/oauth-protected-resource/cad/solidworks/mcp").json()
+    assert sw["resource"] == NEW + "/solidworks/mcp"
+    for url in ("/.well-known/oauth-authorization-server/cad", "/cad/.well-known/oauth-authorization-server",
+                "/.well-known/openid-configuration/cad"):
+        md = _get(url).json()
+        assert md["issuer"] == NEW, url
         for k in ("authorization_endpoint", "token_endpoint", "registration_endpoint", "revocation_endpoint"):
-            assert md[k].startswith(base + "/oauth/"), (host, k, md[k])
-        r = _get("/mcp", host, method="POST", json={"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
-                 headers=ACCEPT)
-        assert r.status_code == 401
-        assert f'resource_metadata="{base}/.well-known/oauth-protected-resource/mcp"' in r.headers["www-authenticate"]
+            assert md[k].startswith(NEW + "/oauth/"), (url, k)
+    r = _get("/cad/mcp", method="POST", json={"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
+             headers=ACCEPT)
+    assert r.status_code == 401
+    assert 'resource_metadata="https://bizomat.ai/.well-known/oauth-protected-resource/cad/mcp"' in r.headers["www-authenticate"]
+    for host in ("cados.kevos.com", "cados.fly.dev"):  # old hosts keep naming themselves for their connectors
+        pr = _get("/.well-known/oauth-protected-resource/mcp", host).json()
+        assert pr["resource"] == f"https://{host}/mcp" and pr["authorization_servers"] == [f"https://{host}"]
+        assert _get("/.well-known/oauth-authorization-server", host).json()["issuer"] == f"https://{host}"
 
 
 def _pkce():
@@ -186,73 +206,62 @@ def _pkce():
 CALLBACK = "https://claude.ai/api/mcp/auth_callback"
 
 
-def _sign_in(app, browsers, host, public):
-    """An AI app set up with https://<host>/mcp signs in: discovery, registration and the token on that host; on an
-    old host the person's browser is sent on to the canonical address for sign-in and consent."""
-    base, canon = "https://" + host, "https://" + public
+def _sign_in(app, browser, resource_base, api_prefix, host):
+    """An AI app set up with <resource_base>/mcp: registration and token on that address; consent in the browser,
+    which an old host sends on to bizomat.ai/cad."""
     hdr = {"host": host}
-    reg = app.post("/oauth/register", json={"client_name": "Claude", "redirect_uris": [CALLBACK]}, headers=hdr)
+    reg = app.post(api_prefix + "/oauth/register", json={"client_name": "Claude", "redirect_uris": [CALLBACK]}, headers=hdr)
     assert reg.status_code == 201, reg.text
     cid = reg.json()["client_id"]
     verifier, chal = _pkce()
     q = {"response_type": "code", "client_id": cid, "redirect_uri": CALLBACK, "state": "s1", "code_challenge": chal,
-         "code_challenge_method": "S256", "scope": "opensketch", "resource": base + "/mcp"}
-    page_host = host
-    r = browsers[host].get(base + "/oauth/authorize", params=q, headers=hdr, follow_redirects=False)
-    if r.status_code == 301:  # an old host: the same request on the canonical address
-        assert r.headers["location"].startswith(canon + "/oauth/authorize?")
-        page_host = public
-        r = browsers[public].get(r.headers["location"], headers={"host": public}, follow_redirects=False)
+         "code_challenge_method": "S256", "scope": "opensketch", "resource": resource_base + "/mcp"}
+    r = browser.get(f"https://{host}{api_prefix}/oauth/authorize", params=q, headers=hdr, follow_redirects=False)
+    if r.status_code == 301:
+        assert r.headers["location"].startswith(NEW + "/oauth/authorize?")
+        r = browser.get(r.headers["location"], headers={"host": SITE}, follow_redirects=False)
     assert r.status_code == 200 and b"Allow" in r.content, r.text[:300]
     req = re.search(r'name="req" value="([^"]+)"', r.text).group(1)
-    r = browsers[page_host].post(f"https://{page_host}/oauth/authorize", data={"req": req}, headers={"host": page_host},
-                                 follow_redirects=False)
+    r = browser.post(NEW + "/oauth/authorize", data={"req": req}, headers={"host": SITE}, follow_redirects=False)
     assert r.status_code == 303
     back = parse_qs(urlparse(r.headers["location"]).query)
-    assert back["state"] == ["s1"]
-    tok = app.post("/oauth/token", headers=hdr, data={
+    tok = app.post(api_prefix + "/oauth/token", headers=hdr, data={
         "grant_type": "authorization_code", "code": back["code"][0], "redirect_uri": CALLBACK, "client_id": cid,
-        "code_verifier": verifier, "resource": base + "/mcp"})
+        "code_verifier": verifier, "resource": resource_base + "/mcp"})
     assert tok.status_code == 200, tok.text
     return tok.json(), back["iss"][0], cid
 
 
-def _initialize(app, host, access):
+def _initialize(app, host, path, access):
     body = {"jsonrpc": "2.0", "id": 1, "method": "initialize",
             "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "t", "version": "1"}}}
-    return app.post("/mcp", json=body, headers={**ACCEPT, "host": host, "Authorization": f"Bearer {access}"})
+    return app.post(path, json=body, headers={**ACCEPT, "host": host, "Authorization": f"Bearer {access}"})
 
 
-@pytest.mark.parametrize("public", [KEVOS, CAD])
-def test_apps_set_up_with_any_address_sign_in_and_keep_working(monkeypatch, public):
-    phase(monkeypatch, public)
-    _setup_owner(public)
-    # sessions are per host: the person is signed in wherever the consent page is shown (canonical and alias hosts)
-    browsers = {h: _signed_in(h) for h in (KEVOS, CAD)}
-    browsers[FLYDEV] = _browser(FLYDEV)
-    with TestClient(server.app, base_url="https://" + public) as app:
-        for host in (KEVOS, FLYDEV, CAD):
-            tok, iss, cid = _sign_in(app, browsers, host, public)
-            assert iss == "https://" + host, (public, host)  # RFC 9207: the issuer whose metadata it read
-            assert _initialize(app, host, tok["access_token"]).status_code == 200, (public, host)
-            assert _initialize(app, public, tok["access_token"]).status_code == 200, (public, host)  # not tied to a host
-            refreshed = app.post("/oauth/token", headers={"host": host}, data={
+def test_apps_set_up_with_the_new_or_an_old_address_sign_in_and_keep_working():
+    browser = _setup_owner()
+    with TestClient(server.app, base_url="https://" + SITE) as app:
+        for host, resource_base, api_prefix in ((SITE, NEW, PRE), ("cados.kevos.com", "https://cados.kevos.com", ""),
+                                                ("cados.fly.dev", "https://cados.fly.dev", "")):
+            tok, iss, cid = _sign_in(app, browser, resource_base, api_prefix, host)
+            assert iss == resource_base, host  # RFC 9207: the issuer whose metadata it read
+            assert _initialize(app, host, api_prefix + "/mcp", tok["access_token"]).status_code == 200, host
+            assert _initialize(app, SITE, "/cad/mcp", tok["access_token"]).status_code == 200, host  # not tied to a host
+            refreshed = app.post(api_prefix + "/oauth/token", headers={"host": host}, data={
                 "grant_type": "refresh_token", "refresh_token": tok["refresh_token"], "client_id": cid,
-                "resource": "https://" + host + "/mcp"})
+                "resource": resource_base + "/mcp"})
             assert refreshed.status_code == 200, refreshed.text
-            assert _initialize(app, host, refreshed.json()["access_token"]).status_code == 200
 
 
 def test_sign_in_to_another_server_is_refused():
-    browser = _setup_owner(KEVOS)
-    reg = browser.post("/oauth/register", json={"client_name": "Claude", "redirect_uris": [CALLBACK]},
-                       headers={"host": KEVOS}).json()
+    browser = _setup_owner()
+    reg = browser.post("/cad/oauth/register", json={"client_name": "Claude", "redirect_uris": [CALLBACK]}).json()
     _, chal = _pkce()
-    for res in ("https://evil.example/mcp", "https://cados.kevos.com.evil.example/mcp", "https://bizomat.ai/mcp",
-                "https://kevos.com/mcp"):
+    for res in ("https://evil.example/mcp", "https://bizomat.ai/mcp", "https://bizomat.ai/cadx/mcp",
+                "https://cados.kevos.com.evil.example/mcp", "https://kevos.com/mcp"):
         q = {"response_type": "code", "client_id": reg["client_id"], "redirect_uri": CALLBACK, "state": "s",
              "code_challenge": chal, "code_challenge_method": "S256", "resource": res}
-        r = browser.get("/oauth/authorize", params=q, headers={"host": KEVOS}, follow_redirects=False)
+        r = browser.get("/cad/oauth/authorize", params=q, follow_redirects=False)
         assert r.status_code == 400 and "location" not in r.headers, res
 
 
@@ -260,16 +269,27 @@ def test_links_for_programs_use_the_address_of_the_request():
     seen = []
 
     async def app(scope, receive, send):
-        seen.append(canonical.machine_base())
+        seen.append((canonical.machine_base(), scope["path"], scope.get("root_path")))
         await send({"type": "http.response.start", "status": 200, "headers": []})
         await send({"type": "http.response.body", "body": b""})
 
     c = TestClient(canonical.CanonicalHost(app))
-    for host in (FLYDEV, CAD, KEVOS, "bizomat.ai", "evil.example"):
-        c.post("/mcp", headers={"host": host})
-    assert seen == ["https://cados.fly.dev", "https://cad.bizomat.ai", "", "", ""] and canonical.machine_base() == ""
+    for host, path in (("cados.fly.dev", "/mcp"), (SITE, "/cad/mcp"), ("cados.kevos.com", "/v2/device/next"),
+                       (SITE, "/.well-known/oauth-protected-resource/cad/mcp")):
+        c.post(path, headers={"host": host})
+    assert seen == [("https://cados.fly.dev", "/mcp", ""), ("", "/mcp", "/cad"), ("https://cados.kevos.com", "/v2/device/next", ""),
+                    ("", "/.well-known/oauth-protected-resource/mcp", "/cad")]
     ctx = contextvars.copy_context()
-    ctx.run(canonical._machine_base.set, "https://cad.bizomat.ai")
-    assert ctx.run(uploads.create, None, "plate.step", 2**20)["upload_url"].startswith("https://cad.bizomat.ai/mcp/uploads/")
-    assert uploads.create(None, "plate.step", 2**20)["upload_url"].startswith("https://cados.kevos.com/mcp/uploads/")
-    assert canonical.legacy_bases() == ["https://cad.bizomat.ai", "https://cados.fly.dev"]
+    ctx.run(canonical._machine_base.set, "https://cados.kevos.com")
+    assert ctx.run(uploads.create, None, "plate.step", 2**20)["upload_url"].startswith("https://cados.kevos.com/mcp/uploads/")
+    assert uploads.create(None, "plate.step", 2**20)["upload_url"].startswith(NEW + "/mcp/uploads/")
+
+
+def test_visitors_behind_cloudflare_count_by_their_own_address():
+    from opensketch import auth
+    cf = {"type": "http", "client": ("10.0.0.1", 1), "headers": [(b"fly-client-ip", b"172.70.1.2"),
+                                                                  (b"cf-connecting-ip", b"203.0.113.7")]}
+    assert auth._client(cf) == "203.0.113.7"
+    spoof = {"type": "http", "client": ("10.0.0.1", 1), "headers": [(b"fly-client-ip", b"198.51.100.4"),
+                                                                     (b"cf-connecting-ip", b"203.0.113.7")]}
+    assert auth._client(spoof) == "198.51.100.4"  # not from Cloudflare: the header is not believed

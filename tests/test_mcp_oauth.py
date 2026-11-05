@@ -317,6 +317,90 @@ def test_the_official_mcp_client_signs_in_and_works():
         th.join(timeout=10)
 
 
+def test_the_official_mcp_client_signs_in_under_a_path_prefix(monkeypatch):
+    """The same, with the server at a path (https://bizomat.ai/cad): the SDK finds the protected-resource metadata at
+    /.well-known/oauth-protected-resource/cad/mcp and the authorization server's at
+    /.well-known/oauth-authorization-server/cad (RFC 9728 and RFC 8414), and checks the issuer that comes back."""
+    import anyio
+    import httpx
+    import uvicorn
+    from mcp import ClientSession
+    from mcp.client.auth import OAuthClientProvider
+    from mcp.client.streamable_http import create_mcp_http_client, streamable_http_client
+    from mcp.shared.auth import AuthorizationCodeResult, OAuthClientMetadata
+
+    port = _free_port()
+    srv = uvicorn.Server(uvicorn.Config(server.app, host="127.0.0.1", port=port, log_level="error"))
+    th = threading.Thread(target=srv.run, daemon=True)
+    th.start()
+    base = f"http://127.0.0.1:{port}"
+    monkeypatch.setenv("OPENSKETCH_PUBLIC_URL", base + "/cad")
+    for _ in range(100):
+        try:
+            httpx.get(base + "/.well-known/oauth-authorization-server", timeout=1)
+            break
+        except Exception:
+            time.sleep(0.05)
+    try:
+        browser = httpx.Client(base_url=base, timeout=20)
+        browser.post("/cad/setup", data={"name": "Owner", "email": "owner@example.com", "new_password": "correct horse", "next": "/"},
+                     headers={"Origin": base})
+        seen = {}
+
+        async def redirect_handler(url: str):
+            page = browser.get(url)
+            assert page.status_code == 200, page.text[:200]
+            req = re.search(r'name="req" value="([^"]+)"', page.text).group(1)
+            r = browser.post("/cad/oauth/authorize", data={"req": req}, headers={"Origin": base})
+            seen["location"] = r.headers["location"]
+
+        async def callback_handler():
+            q = parse_qs(urlparse(seen["location"]).query)
+            return AuthorizationCodeResult(code=q["code"][0], state=q.get("state", [None])[0], iss=q.get("iss", [None])[0])
+
+        class Mem:
+            tokens = client = None
+
+            async def get_tokens(self):
+                return self.tokens
+
+            async def set_tokens(self, t):
+                self.tokens = t
+
+            async def get_client_info(self):
+                return self.client
+
+            async def set_client_info(self, c):
+                self.client = c
+
+        storage = Mem()
+        provider = OAuthClientProvider(
+            server_url=base + "/cad/mcp",
+            client_metadata=OAuthClientMetadata(client_name="SDK test", redirect_uris=["http://localhost:3999/callback"],
+                                                grant_types=["authorization_code", "refresh_token"],
+                                                response_types=["code"], token_endpoint_auth_method="none"),
+            storage=storage, redirect_handler=redirect_handler, callback_handler=callback_handler)
+
+        async def run():
+            async with create_mcp_http_client(auth=provider) as http:
+                async with streamable_http_client(base + "/cad/mcp", http_client=http) as streams:
+                    async with ClientSession(streams[0], streams[1]) as s:
+                        await s.initialize()
+                        tools = await s.list_tools()
+                        assert any(t.name == "sw_status" for t in tools.tools)
+                        res = await s.call_tool("sw_status", {})
+                        return json.dumps(res.model_dump())
+
+        out = anyio.run(run)
+        assert "connected" in out and "isError\": true" not in out
+        assert storage.tokens.access_token.startswith("osa_") and storage.tokens.refresh_token.startswith("osr_")
+        apps = browser.get("/cad/api/account/apps").json()["apps"]
+        assert apps and apps[0]["name"] == "SDK test" and apps[0]["host"] == "localhost"
+    finally:
+        srv.should_exit = True
+        th.join(timeout=10)
+
+
 def test_apps_that_describe_themselves_with_a_metadata_url(monkeypatch, app):
     """Client ID Metadata Documents (ChatGPT's way): the client_id is an https URL; OpenSketch reads it from the
     checked public address (pinned, no redirects) and accepts only the return addresses it lists."""

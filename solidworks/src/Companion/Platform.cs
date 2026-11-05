@@ -80,7 +80,7 @@ namespace Kevos.Companion
         const string Path_ = @"SOFTWARE\KEVOS\Bridge";
 
         /// <summary>The address the pairing window suggests when neither the installer (GATEWAY_URL) nor the person set one.</summary>
-        public const string DefaultGateway = "https://cados.kevos.com";
+        public const string DefaultGateway = "https://cad.bizomat.ai";
 
         static object Read(string name)
         {

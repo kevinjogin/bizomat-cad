@@ -567,3 +567,40 @@ def test_the_update_manifest_reaches_computers_on_a_server_with_accounts(monkeyp
     r = anon.get("/v2/bridge/update.json", follow_redirects=False)
     assert r.status_code == 401 and r.headers["content-type"].startswith("application/json"), (r.status_code, r.headers)
     assert anon.get("/dashboard", follow_redirects=False).status_code == 303  # pages still need sign-in
+
+
+@pytest.fixture()
+def cad_base(monkeypatch):
+    """The server as bizomat.ai/cad runs it: its public address carries the path /cad."""
+    import uvicorn
+    port = _free_port()
+    monkeypatch.setenv("OPENSKETCH_PUBLIC_URL", f"http://127.0.0.1:{port}/cad")
+    srv = uvicorn.Server(uvicorn.Config(server.app, host="127.0.0.1", port=port, log_level="error"))
+    th = threading.Thread(target=srv.run, daemon=True)
+    th.start()
+    url = f"http://127.0.0.1:{port}"
+    for _ in range(100):
+        try:
+            httpx.get(url + "/healthz", timeout=1)
+            break
+        except httpx.HTTPError:
+            time.sleep(0.05)
+    yield url + "/cad"
+    srv.should_exit = True
+    th.join(5)
+
+
+def test_a_computer_paired_under_a_path_works_as_on_a_host_of_its_own(cad_base, companions):
+    """The Companion signs each request's path relative to the address it paired with (https://bizomat.ai/cad), as it
+    always has; the server checks that path below the prefix. Pairing, the long poll, a command and the update
+    manifest all work under /cad."""
+    pc = FakeCompanion(cad_base, Canned())
+    companions.append(pc)
+    assert pc.pair["verification_uri"] == cad_base + "/devices/pair"
+    assert _mcp(cad_base, "sw_get_document", {})[1]["op"] == "read"
+    r = pc.post("/v2/device/hello", {"protocol": {"min": "2.0", "max": "2.0"}})
+    assert r.status_code == 200, r.text
+    assert pc.get("/v2/bridge/update.json").status_code == 404  # reached the route: nothing published
+    bad = pc.http.post(cad_base + "/v2/device/hello", content=b"{}",
+                       headers={"Authorization": pc.proof("POST", "/cad/v2/device/hello", b"{}")})
+    assert bad.status_code == 401  # a proof is for the path below the address, never the prefixed one
