@@ -52,6 +52,20 @@ PROGRAMS = ["/healthz", "/mcp", "/mcp/", "/mcp/some-private-key", "/solidworks/m
             "/v2/bridge/update.json", "/v2/device/next", "/mcp/sw/next", "/mcp/artifacts/x/y", "/mcp/uploads/x",
             "/api/solidworks", "/oauth/token", "/oauth/register", "/oauth/revoke"]
 LINK = re.compile(r"""(?:href|src|action|formaction)\s*=\s*["']([^"']*)["']|url\(\s*["']?([^)"']*)""")
+INLINE = re.compile(r"<script>(.*?)</script>", re.S)
+
+
+def _policy_holds(r) -> None:
+    """A page runs only scripts its Content Security Policy names: its file, and each inline script by its hash."""
+    if not r.headers.get("content-type", "").startswith("text/html"):
+        return
+    csp = r.headers.get("content-security-policy", "")
+    assert "script-src 'self'" in csp and "frame-ancestors 'none'" in csp, (r.url, csp)
+    assert "'unsafe-inline'" not in csp.split("script-src")[1].split(";")[0], csp
+    for body in INLINE.findall(r.text):
+        h = "'sha256-" + base64.b64encode(hashlib.sha256(body.encode()).digest()).decode() + "'"
+        assert h in csp, (r.url, body[:60])
+    assert re.findall(r"<script(?![^>]*\bsrc=)(?!>)[^>]*>", r.text) == [], r.url  # no other inline script
 
 
 def _outside(html: str) -> list[str]:
@@ -111,9 +125,11 @@ def test_the_rest_of_bizomat_ai_is_sent_into_cad():
 
 
 def test_no_link_on_any_page_leaves_cad():
+    """Every page, signed out and signed in, keeps its links under /cad and runs only the scripts its policy names."""
     for path in ("/cad/", "/cad/docs", "/cad/overview", "/cad/privacy", "/cad/setup", "/cad/no-such-page"):
         r = _client().get(path, headers={"accept": "text/html"})
         assert not _outside(r.text), (path, _outside(r.text)[:5])
+        _policy_holds(r)
     owner = _client()
     r = owner.post("/cad/setup", data={"name": "Owner", "email": "owner@example.com", "new_password": "correct horse",
                                        "next": "/"}, follow_redirects=False)
@@ -124,6 +140,7 @@ def test_no_link_on_any_page_leaves_cad():
         r = owner.get(path, follow_redirects=False)
         assert r.status_code in (200, 303), (path, r.status_code)
         assert not _outside(r.text), (path, _outside(r.text)[:5])
+        _policy_holds(r)
         if r.status_code == 303:
             assert r.headers["location"].startswith("/cad"), (path, r.headers["location"])
     r = _client().get("/cad/dashboard", follow_redirects=False)  # signed out: sign-in under /cad, coming back to /cad
