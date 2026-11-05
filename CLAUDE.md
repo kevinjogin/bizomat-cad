@@ -11,7 +11,7 @@ calls the `sw_` MCP tools; the server checks each sketch and feature with OpenSk
 kernel, queues the work, and the OpenSketch add-in in SOLIDWORKS (`solidworks/`, C#) fetches it over outgoing HTTPS
 and makes native SOLIDWORKS features. A home page sets it up. License: AGPL-3.0-only.
 
-CADOS for SOLIDWORKS (0.12.2; called KEVOS Bridge up to 0.11) builds on it: the server is the CADOS gateway; each
+CADOS for SOLIDWORKS (0.12.3; called KEVOS Bridge up to 0.11) builds on it: the server is the CADOS gateway; each
 Windows computer runs the native CADOS add-in (COM `ISwAddin`, Tools > Add-Ins > CADOS, CADOS tab, menu and task pane)
 and the KEVOS Companion (tray app, starts with Windows, registered by pairing) which holds a signed outbound link to the
 gateway and hands commands to the add-in over a local named pipe; one MSI ("CADOS for SOLIDWORKS") installs both.
@@ -55,7 +55,7 @@ notes). The MSI builds unsigned on Windows in CI (`installer` job); signing wait
   (secrets CLOUDFLARE_API_TOKEN, FLY_API_TOKEN). Python pins live in requirements.txt (image) and
   requirements-dev.txt (CI), with hashes.
 
-## Current state (v0.8 server, CADOS for SOLIDWORKS 0.12.2)
+## Current state (v0.8 server, CADOS for SOLIDWORKS 0.12.3)
 
 - KEVOS registered computers (`devicebridge.py`, router included in `server.py`): pairing (`/v2/devices/pair/*`, the
   signed-in page `/devices/pair`), device proofs (`Authorization: KEVOS-Device <JWS>`, ES256 by the computer's
@@ -194,7 +194,7 @@ notes). The MSI builds unsigned on Windows in CI (`installer` job); signing wait
   failed with the reason; the first thing to run on a new PC. Tests run it against SimSW, a stand-in add-in built
   on the kernel and mate solver.
 - Add-in (`solidworks/`, .NET Framework 4.8 x64, SOLIDWORKS 2022 interop embedded; version in
-  `Directory.Build.props`, 0.12.2): Core (Json, Geom, SketchPlan, BridgeClient; Bridge2: Crypto (ES256 JWS, JWK),
+  `Directory.Build.props`, 0.12.3): Core (Json, Geom, SketchPlan, BridgeClient; Bridge2: Crypto (ES256 JWS, JWK),
   Wire (ids, times, 4-byte-length frames), ReplayGuard, PipeLink (the add-in's pipe client: reader thread for pings and
   cancels, one worker for commands, outbox across reconnects, at-most-once by command id), CloudLink and
   CompanionEngine (the Companion's core: signed long poll, verification, routing to a SOLIDWORKS session, spool,
@@ -225,18 +225,23 @@ notes). The MSI builds unsigned on Windows in CI (`installer` job); signing wait
 - Code: https://github.com/jogkev-creator/CADOS (moved from jogkev-creator/opensketchyz in Nov 2026; release
   downloads, the MSI's links and `swbridge.ADDIN_DOWNLOAD` point there). The Fly app below was linked to the old
   repository: relink it in Fly (or deploy by hand) after the move.
-- Public address https://cados.kevos.com today; CAD Automation's own address is to be https://cad.bizomat.ai
-  (bizomat.ai itself is the BIZOMAT website, never a CAD address). fly.toml [env] (and deploy.yml for manual
-  deploys) set OPENSKETCH_PUBLIC_URL, OPENSKETCH_REDIRECT_HOSTS=cados.fly.dev,cados.kevos.com and
-  OPENSKETCH_ALIAS_HOSTS=cad.bizomat.ai. `canonical.py` (outermost middleware, Host header only) ignores the canonical
-  host in both lists; it answers 301 on an old host for GET/HEAD, keeping path and query, never for /healthz, /mcp*,
-  /solidworks/mcp*, OAuth register/token/revoke, /.well-known/, /v2/, /api/; alias hosts are served as they are. On
-  an old or alias host those program paths keep that host as their own address (`canonical.machine_base`: OAuth
-  metadata, the 401 pointer, upload and download links), and the consent page accepts a resource on any of the
-  server's addresses and answers with that address as `iss`, so connectors, add-ins and computers keep working on
-  the address they were set up with. Moving to cad.bizomat.ai, once its DNS record (DNS only, CNAME to
-  cados.fly.dev) and Fly certificate exist, is OPENSKETCH_PUBLIC_URL='https://cad.bizomat.ai' alone
-  (`tests/test_canonical.py`, phases A and B).
+- Public address https://bizomat.ai/cad: CAD Automation lives under the BIZOMAT website's own address (the owner's
+  decision: everything under bizomat.ai, /cad, /tasks, ...). `canonical.py` (outermost middleware, Host header only):
+  a request under the prefix of OPENSKETCH_PUBLIC_URL is served with the prefix taken off the path and put in
+  root_path, so routes, the sign-in gate and the computers' signed paths (relative to the gateway address, see
+  docs/BRIDGE-PROTOCOL.md) are unchanged; root paths the app writes get the prefix back (HTML href/src/action/url(),
+  Location, cookie Path; static/ui/app.js takes it from its own address); pages under the prefix are not gzipped
+  by the app (they are rewritten as text). The OAuth metadata of the prefixed resource is served at the root of the
+  host (RFC 9728 /.well-known/oauth-protected-resource/cad/mcp, RFC 8414 /.well-known/oauth-authorization-server/cad,
+  also /.well-known/openid-configuration/cad); the 401 pointer names the RFC 9728 address and the issuer is
+  https://bizomat.ai/cad. On bizomat.ai /CAD 301s to /cad and other pages 302 into /cad (until the website's Worker
+  serves the root and passes /cad/* and those three well-known paths on). OPENSKETCH_REDIRECT_HOSTS
+  (cados.fly.dev, cados.kevos.com, cad.bizomat.ai) are old hosts: pages 301 to https://bizomat.ai/cad, programs
+  (/healthz, /mcp*, /solidworks/mcp*, OAuth register/token/revoke, /.well-known/, /v2/, /api/) keep working at their
+  root with that host's own address (`canonical.machine_base`), and the consent page accepts a resource on any of
+  the server's addresses and answers with that address as `iss`. Behind Cloudflare the visitor's address is
+  CF-Connecting-IP, believed only from Cloudflare's edge ranges (`auth.CLOUDFLARE_NETS`). Tests:
+  `tests/test_canonical.py`, the official MCP client and a paired computer under /cad.
   Favicons (`static/favicon.svg|ico`, `ui/icon-32.png`, `ui/icon-180.png`) are the KEVOS K (drawn from the KEVOS logo;
   kevos.com could not be fetched from the build session). Origin https://cados.fly.dev (Fly
   app `cados`, Sydney, first made with Fly Launch from GitHub on 4 Nov 2026); the deploy health checks use it.

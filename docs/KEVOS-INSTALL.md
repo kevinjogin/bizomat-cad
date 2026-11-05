@@ -7,13 +7,13 @@ Windows, open SOLIDWORKS, and ask your AI app. No command prompt, no macro, no a
 
 - Windows 10 (version 1903 or later) or Windows 11, 64-bit, with .NET Framework 4.8 (built in).
 - SOLIDWORKS 2022 or newer, 64-bit (see [KEVOS-VERSIONS.md](KEVOS-VERSIONS.md)).
-- A CADOS account on your CADOS server (`https://cados.kevos.com`, or your own). Your CADOS administrator adds you
+- A CADOS account on your CADOS server (`https://bizomat.ai/cad`, or your own). Your CADOS administrator adds you
   on the Admin page with a password, or sends you an invite link. You also need administrator rights on the
   computer once, for the installation.
 
 ## 1. Install
 
-1. Download `CADOS-for-SOLIDWORKS-x64.msi` from https://cados.kevos.com ("Download CADOS for SOLIDWORKS") or the release
+1. Download `CADOS-for-SOLIDWORKS-x64.msi` from https://bizomat.ai/cad ("Download CADOS for SOLIDWORKS") or the release
    page. Check its SHA-256 against the `.sha256` file next to it if you like.
 2. Save your work and close SOLIDWORKS.
 3. Double-click the MSI and follow it. Windows asks for administrator approval once.
@@ -26,7 +26,7 @@ CAD files.
 IT departments can install silently and set the server address for everyone:
 
 ```bash
-msiexec /i CADOS-for-SOLIDWORKS-x64.msi /qn GATEWAY_URL=https://cados.kevos.com
+msiexec /i CADOS-for-SOLIDWORKS-x64.msi /qn GATEWAY_URL=https://bizomat.ai/cad
 ```
 
 ## 2. Register (pair) the computer

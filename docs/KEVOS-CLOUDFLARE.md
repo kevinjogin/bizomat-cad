@@ -20,11 +20,13 @@ Use one of these.
 
 ### A. Gateway hosted on Fly (or any host) with a domain on Cloudflare (recommended)
 
-CAD Automation answers on `cados.kevos.com` today and moves to its own address `cad.bizomat.ai` (bizomat.ai is the
-BIZOMAT website). For the new address, in the bizomat.ai zone: a DNS-only (grey cloud) CNAME `cad` to `cados.fly.dev`,
-then `fly certs add cad.bizomat.ai -a cados` and the check record Fly asks for. When
-`https://cad.bizomat.ai/healthz` answers, set `OPENSKETCH_PUBLIC_URL = 'https://cad.bizomat.ai'` in fly.toml:
-cados.kevos.com then redirects pages and keeps serving programs (opensketch/canonical.py). Keep its record.
+CAD Automation lives under the BIZOMAT website's address, at `https://bizomat.ai/cad` (fly.toml
+`OPENSKETCH_PUBLIC_URL`; `opensketch/canonical.py` serves the prefix). bizomat.ai is in the owner's Cloudflare account.
+Until the website's Worker serves the root of bizomat.ai, its records point (DNS only) at this Fly app, which sends
+`bizomat.ai/<page>` into `/cad`. Afterwards the record is proxied and the Worker passes `/cad/*` and the root OAuth
+metadata of `/cad` (`/.well-known/oauth-protected-resource/cad/...`, `/.well-known/oauth-authorization-server/cad`,
+`/.well-known/openid-configuration/cad`) on to this app. `cados.kevos.com`, `cados.fly.dev` and `cad.bizomat.ai` are old
+hosts: pages 301 to `bizomat.ai/cad`, programs keep working there. Keep their records.
 
 `cados.kevos.com` itself is a CNAME to `cados.fly.dev`. Run the Domain workflow with that host name
 (its default) once `kevos.com` is in the Cloudflare account; `deploy.yml` sets `OPENSKETCH_PUBLIC_URL` to it unless the
