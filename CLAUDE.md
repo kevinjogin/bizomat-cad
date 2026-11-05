@@ -241,7 +241,10 @@ notes). The MSI builds unsigned on Windows in CI (`installer` job); signing wait
   (cados.fly.dev, cados.kevos.com, cad.bizomat.ai) are old hosts: pages 301 to https://bizomat.ai/cad, programs
   (/healthz, /mcp*, /solidworks/mcp*, OAuth register/token/revoke, /.well-known/, /v2/, /api/) keep working at their
   root with that host's own address (`canonical.machine_base`), and the consent page accepts a resource on any of
-  the server's addresses and answers with that address as `iss`. Google sign-in comes back under the prefix
+  the server's addresses and answers with that address as `iss`. Every HTML answer carries `server.PAGE_CSP` (`PagePolicy`): scripts only from this server and the two inline
+  scripts by hash (`brand.MENU_SCRIPT`, `auth.SHOW_SCRIPT`; a new inline script needs its hash there, and
+  `tests/test_canonical.py` crawls every page to check), because the website and Project Management share the
+  bizomat.ai origin. Google sign-in comes back under the prefix
   (`auth._request_base` adds root_path): the Google client lists https://bizomat.ai/cad/auth/google/callback. Behind Cloudflare the visitor's address is
   CF-Connecting-IP, believed only from Cloudflare's edge ranges (`auth.CLOUDFLARE_NETS`). Tests:
   `tests/test_canonical.py`, the official MCP client and a paired computer under /cad.
