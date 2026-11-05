@@ -13,7 +13,7 @@ ARG BASE=python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df2
 
 # The SOLIDWORKS add-in (solidworks/): built here so the home page can offer it for download. Best effort:
 # if the .NET build fails, the image still builds and the page says the download is not on this server.
-FROM mcr.microsoft.com/dotnet/sdk:8.0@sha256:f7e28a0a3f6f9235929ec19274fd0ddf8534e9159f99fac602ac73304f1ce99f AS swaddin
+FROM mcr.microsoft.com/dotnet/sdk:10.0@sha256:de4fe90a98845d75910b9769662465c84de1a934665c431279d1382b2bddc02b AS swaddin
 WORKDIR /src
 COPY solidworks ./solidworks
 RUN mkdir -p /out && (bash solidworks/build.sh && cp -r solidworks/dist/OpenSketch-SOLIDWORKS /out/) \
