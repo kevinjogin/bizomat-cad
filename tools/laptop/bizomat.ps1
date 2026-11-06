@@ -7,7 +7,7 @@
 
     .\bizomat.ps1 setup            clone CADOS, gocore-website and PMO next to this file, or bring them up to date
     .\bizomat.ps1 status           each folder's state, GitHub's checks and what is live
-    .\bizomat.ps1 deploy website   the BIZOMAT website: Cloudflare Worker throbbing-block-6c61 (kevos.com, bizomat.ai)
+    .\bizomat.ps1 deploy website   the BIZOMAT website: moving to Fly.io (app bizomat); deploys nothing until then
     .\bizomat.ps1 deploy cad       CAD Automation: Fly app cados (bizomat.ai/cad)
     .\bizomat.ps1 deploy tasks     Project Management: Cloudflare Worker workos-platform-preview (work.kevos.com)
 
@@ -118,6 +118,13 @@ function Get-Body([string] $Url) {
     $b = Get-Output $Curl @('-s', '-m', '30', '-A', 'bizomat-local', $Url)
     if ($b) { return $b }
     return ''
+}
+
+function Get-Title([string] $Url) {
+    # The page's <title> after redirects, or what answered instead.
+    $b = Get-Output $Curl @('-s', '-L', '-m', '30', '-A', 'bizomat-local', $Url)
+    if ($b -and ($b -match '<title>([^<]*)</title>')) { return $Matches[1].Trim() }
+    return 'no page'
 }
 
 function Get-Json([string] $Url) {
@@ -266,8 +273,8 @@ function Show-Status {
     $cadVersion = if ($cad) { $cad.version } else { 'no answer' }
     $tasks = Get-Json 'https://work.kevos.com/api/health'
     $tasksState = if ($tasks) { "$($tasks.status), database $($tasks.db)" } else { 'no answer' }
-    $site = if ((Get-Body 'https://kevos.com/') -match '<title>BIZOMAT') { 'BIZOMAT website' } else { 'not the BIZOMAT website' }
-    $biz = if ((Get-Body 'https://bizomat.ai/') -match '<title>BIZOMAT') { 'BIZOMAT website' } else { 'not yet the website (its DNS records are not proxied)' }
+    $site = Get-Title 'https://kevos.com/'
+    $biz = Get-Title 'https://bizomat.ai/'
     Write-Host "  kevos.com          $site"
     Write-Host "  bizomat.ai         $biz"
     Write-Host "  CAD Automation     version $cadVersion (cados.fly.dev/healthz)"
@@ -277,29 +284,11 @@ function Show-Status {
 # ----------------------------------------------------------------------------- deploys
 
 function Deploy-Website {
-    Write-Title 'BIZOMAT website: Cloudflare Worker throbbing-block-6c61 (kevos.com, bizomat.ai)'
-    Assert-Node
-    $c = Get-DeployCommit 'gocore-website'
-    Show-Commit $c
-    if (-not $SkipChecks) {
-        Invoke-Step 'npm' @('ci', '--no-audit', '--no-fund') $c.Dir
-        Invoke-Step 'npm' @('run', 'verify') $c.Dir   # type check, the test suite, the build and its page checks
-    }
-    if (-not (Confirm-Deploy 'the BIZOMAT website (kevos.com, bizomat.ai)')) { return }
-    Invoke-Step 'npx' @('wrangler', 'deploy', '--message', "$($c.Short) from $env:COMPUTERNAME") $c.Dir
-    Write-Title 'Live checks'
-    [void](Wait-Until { (Get-Code 'https://kevos.com/insights') -eq 301 } 120)
-    $ok = Invoke-Checks @(
-        @{ What = 'kevos.com shows the BIZOMAT website'; Test = { (Get-Body 'https://kevos.com/') -match '<title>BIZOMAT' } },
-        @{ What = 'paths that are not files reach the Worker (/insights redirects)'; Test = { (Get-Code 'https://kevos.com/insights') -eq 301 } },
-        @{ What = 'the assistant answers (/api/chat, no AI call made)'; Test = { (Get-Code 'https://kevos.com/api/chat' 'POST' '{}') -eq 422 } },
-        @{ What = 'the old CAD page /cad/ redirects to /cad-automation/'; Test = { (Get-Code 'https://kevos.com/cad/') -eq 301 } },
-        @{ What = 'bizomat.ai shows the website'; Info = $true; Test = { (Get-Body 'https://bizomat.ai/') -match '<title>BIZOMAT' } }
-    )
-    $result = if ($ok) { 'ok' } else { 'deployed; live checks failed' }
-    Write-DeployLog 'website' $c $result
-    if (-not $ok) { Stop-Here 'The deploy finished but a live check failed. Look at the site; to go back, Cloudflare > Workers & Pages > throbbing-block-6c61 > Deployments > roll back.' }
-    Write-Host 'Done.' -ForegroundColor Green
+    Write-Title 'BIZOMAT website'
+    # The BIZOMAT website moves to Fly.io (app bizomat: the website and the router for /cad and /tasks). Until that
+    # app is ready this deploys nothing. The Cloudflare Worker throbbing-block-6c61 serves only kevos.com's old KEVOS
+    # site now, and deploying the BIZOMAT site there would replace it (as on 6 Nov 2026).
+    Stop-Here 'The website is moving to Fly.io. This command will deploy it there once the bizomat app is ready; until then it deploys nothing, so kevos.com keeps the KEVOS site.'
 }
 
 function Deploy-Cad {
