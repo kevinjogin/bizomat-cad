@@ -227,6 +227,8 @@ notes). The MSI builds unsigned on Windows in CI (`installer` job); signing wait
 - Code: https://github.com/jogkev-creator/CADOS (moved from jogkev-creator/opensketchyz in Nov 2026; release
   downloads, the MSI's links and `swbridge.ADDIN_DOWNLOAD` point there). The Fly app below was linked to the old
   repository: relink it in Fly (or deploy by hand) after the move.
+- Listens on `::` (`--host ::`, `__main__.listen_sockets`: one dual-stack socket, IPv4 alone where there is no IPv6), so
+  the BIZOMAT router (Fly app `bizomat`) reaches it over Fly's private network at cados.internal:8080.
 - Public address https://bizomat.ai/cad: CAD Automation lives under the BIZOMAT website's own address (the owner's
   decision: everything under bizomat.ai, /cad, /tasks, ...). `canonical.py` (outermost middleware, Host header only):
   a request under the prefix of OPENSKETCH_PUBLIC_URL is served with the prefix taken off the path and put in
