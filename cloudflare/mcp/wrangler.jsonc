@@ -8,8 +8,8 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-10-01",
   "compatibility_flags": ["nodejs_compat"],
-  // https://bizomat-mcp.<account subdomain>.workers.dev answers too, for checks before mcp.bizomat.ai is attached
-  "workers_dev": true,
+  // no workers.dev address: only mcp.bizomat.ai (created by the first deploy) and the website Worker reach the server
+  "workers_dev": false,
   "routes": [{ "pattern": "mcp.bizomat.ai", "custom_domain": true }],
   "observability": { "enabled": true },
   "containers": [

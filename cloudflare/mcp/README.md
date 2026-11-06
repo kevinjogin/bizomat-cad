@@ -20,6 +20,7 @@ Computers      https://bizomat.ai/cad/v2/ ─┘     (website Worker bizomat han
 - Computers (Companion 0.13 and later): `https://bizomat.ai/cad/v2/...`. The old hosts in `OPENSKETCH_REDIRECT_HOSTS`
   keep working for programs while their DNS points here.
 - `/__worker/health`: the Worker alone, without starting the container.
+- No workers.dev address: the first deploy creates the mcp.bizomat.ai record and its certificate.
 
 The Worker sets `X-Forwarded-Proto` and `X-Forwarded-Host` from the address the visitor used (`src/settings.ts`
 `forServer`), replacing anything a client sent. The server builds its OAuth addresses, cookie flags and same-site
