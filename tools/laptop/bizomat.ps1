@@ -14,6 +14,8 @@
                                    the Cloudflare account ID and token, checks them, saves them on Fly
     .\bizomat.ps1 move tasks       Project Management's data from Cloudflare to the Fly app bizomat (bizomat.ai/tasks):
                                    exports and checks it (Cloudflare only read), then asks before it changes Fly
+    .\bizomat.ps1 restore kevos    kevos.com back to the KEVOS site (Cloudflare), as it was before BIZOMAT went live
+                                   there, and its routes back to kevos.com alone; asks before it changes anything
 
   secrets never shows the token or keeps it: it is typed at a hidden prompt, checked with Cloudflare and passed
   straight to Fly, so it is not on screen, in PowerShell's history or in a file.
@@ -34,8 +36,8 @@
 #>
 [CmdletBinding()]
 param(
-    [Parameter(Position = 0)] [ValidateSet('setup', 'status', 'deploy', 'secrets', 'move', 'help')] [string] $Command = 'help',
-    [Parameter(Position = 1)] [ValidateSet('website', 'cad', 'tasks')] [string] $App = '',
+    [Parameter(Position = 0)] [ValidateSet('setup', 'status', 'deploy', 'secrets', 'move', 'restore', 'help')] [string] $Command = 'help',
+    [Parameter(Position = 1)] [ValidateSet('website', 'cad', 'tasks', 'kevos')] [string] $App = '',
     [switch] $DryRun,
     [switch] $SkipChecks,
     [switch] $ApplyMigrations
@@ -507,6 +509,114 @@ function Move-Tasks {
     Write-Host '3. Then the switch: bizomat.ai/tasks serves Project Management from Fly.'
 }
 
+# ----------------------------------------------------------------------------- kevos.com
+
+function Get-Prop($Obj, [string] $Name) {
+    # A property of an object read from JSON, or $null when it has none (strict mode refuses a missing one).
+    if ($null -eq $Obj) { return $null }
+    $p = $Obj.PSObject.Properties[$Name]
+    if ($p) { return $p.Value }
+    return $null
+}
+
+function ConvertTo-Utc($Value) {
+    # A JSON time: PowerShell 7 reads it as a DateTime already, Windows PowerShell 5.1 leaves the text.
+    if ($Value -is [datetime]) {
+        if ($Value.Kind -eq [DateTimeKind]::Unspecified) { return [datetime]::SpecifyKind($Value, [DateTimeKind]::Utc) }
+        return $Value.ToUniversalTime()
+    }
+    return [datetimeoffset]::Parse("$Value", [Globalization.CultureInfo]::InvariantCulture).UtcDateTime
+}
+
+function Restore-Kevos {
+    # Stage 0 (owner's decision, 6 Nov 2026): kevos.com shows the KEVOS site again. The Cloudflare Worker behind it,
+    # throbbing-block-6c61, goes back to the deployment that was live before the BIZOMAT website was published there
+    # (gocore-website 33a77cb, 6 Nov 2026 01:03 UTC): the KEVOS site built from c79e297 (5 Nov). Then its routes become
+    # kevos.com/* alone: bizomat.ai/* and www.bizomat.ai/* belong to the Fly app bizomat now. With this computer's
+    # wrangler sign-in; nothing changes before you type yes, and the way back is shown first.
+    Write-Title 'kevos.com: back to the KEVOS site (Cloudflare Worker throbbing-block-6c61)'
+    Assert-Node
+    $worker = 'throbbing-block-6c61'
+    $published = [datetime]::SpecifyKind([datetime]'2026-11-06T01:03:28', [DateTimeKind]::Utc)
+    $site = Join-Path $Root 'gocore-website'
+    $wrangler = Join-Path (Join-Path (Join-Path (Join-Path $site 'node_modules') 'wrangler') 'bin') 'wrangler.js'
+    if (-not (Test-Path -LiteralPath $wrangler)) { Stop-Here 'wrangler is not in the gocore-website folder: run .\bizomat.ps1 setup first.' }
+
+    # wrangler runs in a folder of its own, with the Worker's name and route only: no other setting is read or sent
+    $work = Join-Path ([IO.Path]::GetTempPath()) ('bizomat-kevos-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+    [void](New-Item -ItemType Directory -Path $work)
+    $config = Join-Path $work 'wrangler.toml'
+    $lines = @(
+        '# kevos.com alone (bizomat.ps1 restore kevos)',
+        "name = `"$worker`"",
+        'compatibility_date = "2025-09-01"',
+        'workers_dev = false',
+        'routes = [ { pattern = "kevos.com/*", zone_name = "kevos.com" } ]'
+    )
+    [IO.File]::WriteAllText($config, (($lines -join "`n") + "`n"))
+    try {
+        Write-Host 'Reading the Worker''s last 10 deployments (wrangler deployments list)...'
+        $raw = Get-Output 'node' @($wrangler, 'deployments', 'list', '--name', $worker, '--json', '--config', $config) $work
+        $deployments = $null
+        if ($raw) {
+            $from = $raw.IndexOf('['); $to = $raw.LastIndexOf(']')
+            if ($from -ge 0 -and $to -gt $from) { try { $deployments = @($raw.Substring($from, $to - $from + 1) | ConvertFrom-Json) } catch { $deployments = $null } }
+        }
+        if ($null -eq $deployments) {
+            Stop-Here "wrangler could not list the Worker's deployments: not signed in (cd `"$site`"; npx wrangler login), or more than one Cloudflare account (`$env:CLOUDFLARE_ACCOUNT_ID = '<the account ID>', then run this again)."
+        }
+        $sorted = @($deployments | Sort-Object { ConvertTo-Utc (Get-Prop $_ 'created_on') })
+        if ($sorted.Count -eq 0) { Stop-Here 'The Worker has no deployments. Nothing was changed.' }
+        $live = $sorted[-1]
+        $before = @($sorted | Where-Object { (ConvertTo-Utc (Get-Prop $_ 'created_on')) -lt $published })
+        if ($before.Count -eq 0) {
+            Stop-Here "The deployment from before 6 Nov 2026 01:03 UTC is not among the last 10. Nothing was changed. In the Cloudflare dashboard: Workers & Pages > $worker > Deployments: deploy the version of 5 Nov 2026 (the KEVOS site, c79e297)."
+        }
+        $target = $before[-1]
+        $targetVersions = @(Get-Prop $target 'versions')
+        $liveVersions = @(Get-Prop $live 'versions')
+        if ($targetVersions.Count -ne 1) { Stop-Here "That deployment splits traffic between versions: deploy it from the dashboard (Workers & Pages > $worker > Deployments). Nothing was changed." }
+        $want = "$(Get-Prop $targetVersions[0] 'version_id')"
+        $now = ''
+        if ($liveVersions.Count -eq 1) { $now = "$(Get-Prop $liveVersions[0] 'version_id')" }
+        if ($want -notmatch '^[0-9a-f-]{36}$') { Stop-Here 'wrangler did not give a version ID for that deployment. Nothing was changed.' }
+        Write-Host ''
+        Write-Host ("  live now          deployment of {0:yyyy-MM-dd HH:mm} UTC, version {1}" -f (ConvertTo-Utc (Get-Prop $live 'created_on')), $(if ($now) { $now } else { '(several)' }))
+        Write-Host ("  the KEVOS site    deployment of {0:yyyy-MM-dd HH:mm} UTC, version {1}" -f (ConvertTo-Utc (Get-Prop $target 'created_on')), $want)
+        Write-Host "  kevos.com shows   $(Get-Title 'https://kevos.com/')"
+
+        if ($now -eq $want) {
+            Write-Host 'kevos.com already runs the KEVOS version; only its routes are set.' -ForegroundColor Green
+            if ($DryRun) { Write-Host 'Dry run: stopping before the routes.' -ForegroundColor Yellow; return }
+        } else {
+            if ($DryRun) { Write-Host 'Dry run: every check is done; stopping before the change.' -ForegroundColor Yellow; return }
+            if ($now) { Write-Host "The way back, if ever needed: node `"$wrangler`" rollback $now --name $worker" -ForegroundColor DarkGray }
+            Write-Host ''
+            $typed = Read-Host 'Put the KEVOS site back on kevos.com now? Type yes to continue (anything else stops)'
+            if ("$typed".Trim() -ne 'yes') { Write-Host 'Stopped. Nothing was changed.'; return }
+            Invoke-Step 'node' @($wrangler, 'rollback', $want, '--name', $worker, '--config', $config, '--yes', '--message', 'Stage 0: the KEVOS site again (built from c79e297); BIZOMAT is on Fly') $work
+        }
+
+        # The routes: kevos.com/* alone. wrangler replaces the Worker's whole list with this one.
+        Invoke-Step 'node' @($wrangler, 'triggers', 'deploy', '--name', $worker, '--config', $config) $work
+
+        Write-Title 'Live checks'
+        $ok = Invoke-Checks @(
+            @{ What = 'kevos.com shows the KEVOS site'; Test = { Wait-Until { $t = Get-Title 'https://kevos.com/'; ($t -match 'KEVOS') -and ($t -notmatch 'BIZOMAT') } 120 } },
+            @{ What = 'bizomat.ai shows the BIZOMAT website (Fly)'; Test = { (Get-Title 'https://bizomat.ai/') -match 'BIZOMAT' } }
+        )
+        $result = if ($ok) { 'ok' } else { 'restored; live checks failed' }
+        Write-DeployLog 'kevos' @{ Repo = 'gocore-website'; Short = 'c79e297'; Subject = "kevos.com: the KEVOS site again (version $want)" } $result
+        if (-not $ok) { Stop-Here "A live check failed. kevos.com shows: $(Get-Title 'https://kevos.com/'). Look at Workers & Pages > $worker > Deployments in the Cloudflare dashboard." }
+        Write-Host 'Done: kevos.com is the KEVOS site again.' -ForegroundColor Green
+        Write-Title 'One click left, in the Cloudflare dashboard'
+        Write-Host "  Workers & Pages > $worker > Settings > Build > Disconnect."
+        Write-Host '  Then nothing on GitHub can publish to kevos.com again. Until then, gocore-website stops such a build before it deploys.'
+    } finally {
+        Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
 # ----------------------------------------------------------------------------- main
 
 switch ($Command) {
@@ -525,6 +635,9 @@ switch ($Command) {
     }
     'move' {
         if ($App -eq 'tasks') { Move-Tasks } else { Stop-Here 'Say which: .\bizomat.ps1 move tasks' }
+    }
+    'restore' {
+        if ($App -eq 'kevos') { Restore-Kevos } else { Stop-Here 'Say which: .\bizomat.ps1 restore kevos' }
     }
     default { Get-Help -Detailed $PSCommandPath }
 }

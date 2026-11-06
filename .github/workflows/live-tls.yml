@@ -43,9 +43,9 @@ jobs:
               echo "$out" | awk '/BEGIN CERTIFICATE/{n++; f="/tmp/c" n ".pem"} f{print > f} /END CERTIFICATE/{f=""}'
               if [ ! -f /tmp/c1.pem ]; then echo "   (no $alg certificate offered)"; continue; fi
               for c in /tmp/c*.pem; do
-                openssl x509 -in "$c" -noout -subject -issuer -enddate -ext authorityInfoAccess 2>/dev/null | grep -v -E '^X509v3|^ *OCSP' | sed 's/^/   /'
+                openssl x509 -in "$c" -noout -subject -issuer -enddate -ext authorityInfoAccess 2>/dev/null | grep -v -E '^X509v3|^ *OCSP' | sed 's/^/   /' || true
               done
-              echo "$out" | grep -E '^Verify return code' | head -1 | sed 's/^/   this runner: /'
+              echo "$out" | grep -E '^Verify return code' | head -1 | sed 's/^/   this runner: /' || true
               cat /tmp/c[2-9].pem > /tmp/chain.pem 2>/dev/null || : > /tmp/chain.pem
               if openssl verify -CAfile /tmp/old-roots.pem -untrusted /tmp/chain.pem /tmp/c1.pem >/tmp/v.txt 2>&1; then
                 echo "   with the older roots only (X1, X2): OK"
