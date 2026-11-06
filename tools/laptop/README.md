@@ -63,7 +63,7 @@ What the script does, in order:
    - website: type check, the test suite, the full build and its page checks (a few minutes);
    - tasks: lint, type check, tests, build;
    - cad: requires GitHub's checks on that commit to have passed, since its tests need the CAD libraries.
-3. **Shows** the commit that will go live and asks you to type `WEBSITE`, `CAD` or `TASKS`.
+3. **Shows** the commit that will go live and asks you to type `yes`.
 4. **Deploys**, then checks the live addresses. For example, the website's check confirms the assistant and the
    other APIs still reach the Worker.
 5. **Records** the deploy in `deploy-log.csv` in the folder: when, what, which commit and who.

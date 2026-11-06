@@ -13,7 +13,7 @@
 
   A deploy sends exactly what GitHub holds on the repository's main branch, never local edits. The folder must be
   on that branch, have no local changes and match GitHub; an old checkout once replaced the website (8 Oct 2026).
-  The script runs the repository's own checks, shows what will go live, asks you to type the app's name, deploys,
+  The script runs the repository's own checks, shows what will go live, asks you to type yes, deploys,
   checks the live addresses and adds a line to deploy-log.csv. Add -DryRun to do everything but the deploy.
 
 .PARAMETER DryRun
@@ -179,10 +179,11 @@ function Show-Commit($C) {
     Write-Host "Will deploy $($C.Repo) $($C.Branch) at $($C.Short) ($($C.When)): $($C.Subject)" -ForegroundColor White
 }
 
-function Confirm-Deploy([string] $Word) {
+function Confirm-Deploy([string] $What) {
     if ($DryRun) { Write-Host 'Dry run: every check is done; stopping before the deploy.' -ForegroundColor Yellow; return $false }
-    $typed = Read-Host "Type $Word to deploy it (anything else stops)"
-    if ($typed -ne $Word) { Write-Host 'Stopped. Nothing was deployed.'; exit 0 }
+    Write-Host ''
+    $typed = Read-Host "Deploy $What now? Type yes to deploy (anything else stops)"
+    if ("$typed".Trim() -ne 'yes') { Write-Host 'Stopped. Nothing was deployed.'; exit 0 }
     return $true
 }
 
@@ -284,7 +285,7 @@ function Deploy-Website {
         Invoke-Step 'npm' @('ci', '--no-audit', '--no-fund') $c.Dir
         Invoke-Step 'npm' @('run', 'verify') $c.Dir   # type check, the test suite, the build and its page checks
     }
-    if (-not (Confirm-Deploy 'WEBSITE')) { return }
+    if (-not (Confirm-Deploy 'the BIZOMAT website (kevos.com, bizomat.ai)')) { return }
     Invoke-Step 'npx' @('wrangler', 'deploy', '--message', "$($c.Short) from $env:COMPUTERNAME") $c.Dir
     Write-Title 'Live checks'
     [void](Wait-Until { (Get-Code 'https://kevos.com/insights') -eq 301 } 120)
@@ -311,7 +312,7 @@ function Deploy-Cad {
     if ($checks -ne 'passed' -and -not $SkipChecks) {
         Stop-Here "CAD Automation's tests run on GitHub (they need the CAD libraries and SOLIDWORKS stand-ins). Deploy once they pass."
     }
-    if (-not (Confirm-Deploy 'CAD')) { return }
+    if (-not (Confirm-Deploy 'CAD Automation (bizomat.ai/cad)')) { return }
     # The same command GitHub's deploy workflow uses: built on Fly's machines, one Machine, the commit as its version.
     Invoke-Step 'fly' @('deploy', '--app', 'cados', '--remote-only', '--ha=false', '--build-arg', "OPENSKETCH_VERSION=$($c.Short)", '--env', 'OPENSKETCH_PUBLIC_URL=https://bizomat.ai/cad') $c.Dir
     Write-Title 'Live checks'
@@ -347,7 +348,7 @@ function Deploy-Tasks {
         Write-Host $pending
         if (-not $ApplyMigrations) { Stop-Here 'The live database has migrations waiting. Read them; to apply them, run again with -ApplyMigrations.' }
     }
-    if (-not (Confirm-Deploy 'TASKS')) { return }
+    if (-not (Confirm-Deploy 'Project Management (work.kevos.com)')) { return }
     if ($waiting) {
         Write-Host 'Restore point of the live database before the migrations (keep the bookmark):'
         Invoke-Step 'npx' @('wrangler', 'd1', 'time-travel', 'info', 'workos-platform-preview-db', '--env', 'preview') $c.Dir
