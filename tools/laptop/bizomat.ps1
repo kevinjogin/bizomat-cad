@@ -322,23 +322,35 @@ function Deploy-Website {
         Invoke-Step 'fly' @('ips', 'allocate-v6', '--app', 'bizomat') $c.Dir
         Invoke-Step 'fly' @('ips', 'allocate-v4', '--shared', '--app', 'bizomat') $c.Dir
     }
-    # Built on Fly's machines; one Machine for the router and one for the website; the commit as its version.
+    # Project Management's volume: fly deploy does not create one for a group added to an existing app.
+    $toml = Join-Path $c.Dir 'fly.website.toml'
+    if (Select-String -LiteralPath $toml -Pattern 'source\s*=\s*"work_data"' -Quiet) {
+        $vols = Get-Output 'fly' @('volumes', 'list', '--app', 'bizomat', '--json') $c.Dir
+        if (-not ("$vols" -match '"work_data"')) {
+            Write-Host 'Creating the volume for Project Management''s data (3 GB in Sydney). If Fly asks whether to continue with one volume, answer y.' -ForegroundColor Yellow
+            Invoke-Step 'fly' @('volumes', 'create', 'work_data', '--region', 'syd', '--size', '3', '--app', 'bizomat') $c.Dir
+        }
+    }
+    # Built on Fly's machines; one Machine per group (router, website, Project Management); the commit as its version.
     Invoke-Step 'fly' @('deploy', '--config', 'fly.website.toml', '--app', 'bizomat', '--remote-only', '--ha=false', '--build-arg', "BIZOMAT_VERSION=$($c.Short)") $c.Dir
-    Write-Title 'Live checks (bizomat.fly.dev until bizomat.ai points here)'
+    # bizomat.ai points at this app; bizomat.fly.dev answers its own health endpoints and sends everything else to
+    # bizomat.ai. A backend can need a moment after the router restarts, so those checks wait up to 90 s.
+    Write-Title 'Live checks (bizomat.ai)'
     $want = $c.Short
     [void](Wait-Until { (Get-Json 'https://bizomat.fly.dev/__proxy/health').version -eq $want } 180)
     $checks = @(
         @{ What = "the router runs $want (bizomat.fly.dev/__proxy/health)"; Test = { (Get-Json 'https://bizomat.fly.dev/__proxy/health').version -eq $want } },
-        @{ What = 'the website answers (bizomat.fly.dev)'; Test = { (Get-Title 'https://bizomat.fly.dev/') -match 'BIZOMAT' } },
-        @{ What = 'its APIs answer (/api/chat, no AI call made)'; Test = { (Get-Code 'https://bizomat.fly.dev/api/chat' 'POST' '{}') -eq 422 } },
-        @{ What = 'CAD Automation is reached over the private network (/cad/)'; Test = { (Get-Code 'https://bizomat.fly.dev/cad/') -eq 200 } },
-        @{ What = '/tasks/ answers (302 to work.kevos.com until the switch, then Project Management)'; Test = { $t = Get-Code 'https://bizomat.fly.dev/tasks/'; ($t -eq 302) -or ($t -eq 200) } }
+        @{ What = 'the website answers (bizomat.ai)'; Test = { Wait-Until { (Get-Title 'https://bizomat.ai/') -match 'BIZOMAT' } 90 } },
+        @{ What = 'its APIs answer (/api/chat, no AI call made)'; Test = { Wait-Until { (Get-Code 'https://bizomat.ai/api/chat' 'POST' '{}') -eq 422 } 90 } },
+        @{ What = 'CAD Automation is reached over the private network (/cad/)'; Test = { Wait-Until { (Get-Code 'https://bizomat.ai/cad/') -eq 200 } 90 } },
+        @{ What = '/tasks/ answers (Project Management, or 302 to work.kevos.com before its switch)'; Test = { Wait-Until { $t = Get-Code 'https://bizomat.ai/tasks/'; ($t -eq 200) -or ($t -eq 302) } 90 } }
     )
     # Project Management on Fly, once fly.website.toml runs it (the work group)
     if (Select-String -LiteralPath (Join-Path $c.Dir 'fly.website.toml') -Pattern '^\s*work\s*=' -Quiet) {
-        $checks += @{ What = 'Project Management runs on Fly (the router reports work healthy)'; Test = { Test-WorkReady } }
+        $checks += @{ What = 'Project Management runs on Fly (the router reports work healthy)'; Test = { Wait-Until { Test-WorkReady } 90 } }
     }
-    $checks += @{ What = 'bizomat.ai shows this website'; Info = $true; Test = { (Get-Title 'https://bizomat.ai/') -match 'BIZOMAT' } }
+    $checks += @{ What = 'bizomat.ai/login goes to the sign-in page'; Info = $true; Test = { (Get-Code 'https://bizomat.ai/login') -eq 301 } }
+    $checks += @{ What = 'bizomat.fly.dev sends people to bizomat.ai'; Info = $true; Test = { (Get-Code 'https://bizomat.fly.dev/') -eq 301 } }
     $ok = Invoke-Checks $checks
     $result = if ($ok) { 'ok' } else { 'deployed; live checks failed' }
     Write-DeployLog 'website' $c $result
