@@ -7,9 +7,19 @@
 
     .\bizomat.ps1 setup            clone CADOS, gocore-website and PMO next to this file, or bring them up to date
     .\bizomat.ps1 status           each folder's state, GitHub's checks and what is live
-    .\bizomat.ps1 deploy website   the BIZOMAT website: Fly app bizomat (the website and the router behind bizomat.ai)
-    .\bizomat.ps1 deploy cad       CAD Automation: Fly app cados (bizomat.ai/cad)
+    .\bizomat.ps1 deploy website   the Fly app bizomat: the website, the router behind bizomat.ai, Project Management and
+                                   CAD Automation's group (restarted only when its code or scripts changed)
+    .\bizomat.ps1 deploy cad       CAD Automation (bizomat.ai/cad): after move cad, the cad group of the Fly app bizomat
+                                   with apps/cad = CADOS main; before it, the Fly app cados
     .\bizomat.ps1 deploy tasks     Project Management: Cloudflare Worker workos-platform-preview (work.kevos.com)
+    .\bizomat.ps1 sync cad         apps/cad in gocore-website becomes CADOS main, byte for byte: a branch on GitHub to
+                                   merge (the cad group is built from apps/cad)
+    .\bizomat.ps1 move cad         CAD Automation's data from the Fly app cados (Amsterdam) to the cad group of the Fly
+                                   app bizomat (Sydney), and bizomat.ai/cad with it: checks everything and copies the
+                                   data while cados runs, then asks before the move (a few minutes off line)
+    .\bizomat.ps1 back cad         the way back after move cad: bizomat.ai/cad served by cados again
+    .\bizomat.ps1 retire cados     once CAD Automation works from the cad group: release cados's public addresses
+    .\bizomat.ps1 delete cados     later, at the end of the rollback window: delete the Fly app cados and its volume
     .\bizomat.ps1 secrets website  the website's Workers AI access on Fly (the assistant and AI search): asks for
                                    the Cloudflare account ID and token, checks them, saves them on Fly
     .\bizomat.ps1 move tasks       Project Management's data from Cloudflare to the Fly app bizomat (bizomat.ai/tasks):
@@ -19,6 +29,10 @@
 
   secrets never shows the token or keeps it: it is typed at a hidden prompt, checked with Cloudflare and passed
   straight to Fly, so it is not on screen, in PowerShell's history or in a file.
+
+  move cad, back cad, retire cados and delete cados run gocore-website's infrastructure/migrate/cad/to-fly.mjs, which
+  prints names, counts and checksums only, never a setting's value. Each shows what it will do first; move and back
+  ask you to type yes, retire and delete to type "release cados" and "delete cados" (they cannot be undone).
 
   A deploy sends exactly what GitHub holds on the repository's main branch, never local edits. The folder must be
   on that branch, have no local changes and match GitHub; an old checkout once replaced the website (8 Oct 2026).
@@ -33,14 +47,19 @@
 
 .PARAMETER ApplyMigrations
   tasks only: apply waiting database migrations to the live database. Normally there are none.
+
+.PARAMETER Force
+  move cad only: the cad group's volume already holds CAD data (an earlier attempt); replace it (it is kept in
+  /data/backups on that volume).
 #>
 [CmdletBinding()]
 param(
-    [Parameter(Position = 0)] [ValidateSet('setup', 'status', 'deploy', 'secrets', 'move', 'restore', 'help')] [string] $Command = 'help',
-    [Parameter(Position = 1)] [ValidateSet('website', 'cad', 'tasks', 'kevos')] [string] $App = '',
+    [Parameter(Position = 0)] [ValidateSet('setup', 'status', 'deploy', 'secrets', 'sync', 'move', 'back', 'retire', 'delete', 'restore', 'help')] [string] $Command = 'help',
+    [Parameter(Position = 1)] [ValidateSet('website', 'cad', 'tasks', 'kevos', 'cados')] [string] $App = '',
     [switch] $DryRun,
     [switch] $SkipChecks,
-    [switch] $ApplyMigrations
+    [switch] $ApplyMigrations,
+    [switch] $Force
 )
 
 Set-StrictMode -Version 2.0
@@ -235,6 +254,102 @@ function Write-DeployLog([string] $App, $C, [string] $Result) {
     } | Export-Csv -LiteralPath (Join-Path $Root 'deploy-log.csv') -Append -NoTypeInformation -Encoding UTF8
 }
 
+# ----------------------------------------------------------------------------- CAD Automation in the Fly app bizomat
+
+function Get-Prop($Obj, [string] $Name) {
+    # A property of an object read from JSON, or $null when it has none (strict mode refuses a missing one).
+    if ($null -eq $Obj) { return $null }
+    $p = $Obj.PSObject.Properties[$Name]
+    if ($p) { return $p.Value }
+    return $null
+}
+
+function Get-TomlValue([string] $File, [string] $Name) {
+    # A quoted value of fly.website.toml ('' when the line is not there).
+    $m = Select-String -LiteralPath $File -Pattern ('^\s*' + [regex]::Escape($Name) + '\s*=\s*"([^"]*)"') | Select-Object -First 1
+    if ($m) { return $m.Matches[0].Groups[1].Value }
+    return ''
+}
+
+function Get-CadTool([string] $SiteDir) {
+    $tool = Join-Path $SiteDir 'infrastructure\migrate\cad\to-fly.mjs'
+    if (-not (Test-Path -LiteralPath $tool)) { Stop-Here 'gocore-website has no CAD move tool yet (infrastructure/migrate/cad/to-fly.mjs): it comes with the cad group change, once that is on GitHub.' }
+    return $tool
+}
+
+function Get-CadState([string] $SiteDir) {
+    # Where the router sends bizomat.ai/cad and how both sides are, from the CAD move tool (read only); $null when it
+    # cannot tell (no tool yet, not signed in to Fly).
+    $tool = Join-Path $SiteDir 'infrastructure\migrate\cad\to-fly.mjs'
+    if (-not (Test-Path -LiteralPath $tool)) { return $null }
+    $raw = Get-Output 'node' @($tool, 'status', '--json') $SiteDir
+    if (-not $raw) { return $null }
+    $line = @($raw -split "`r?`n" | Where-Object { $_ -match '^\{' } | Select-Object -Last 1)
+    if ($line.Count -eq 0) { return $null }
+    try { return ($line[0] | ConvertFrom-Json) } catch { return $null }
+}
+
+function Get-CadPin([string] $SiteDir) {
+    # The CADOS commit apps/cad is a copy of (apps/cad-source.json), or $null.
+    $file = Join-Path $SiteDir 'apps\cad-source.json'
+    if (-not (Test-Path -LiteralPath $file)) { return $null }
+    try { return (Get-Content -Raw -LiteralPath $file | ConvertFrom-Json) } catch { return $null }
+}
+
+function Assert-CadRoute([string] $SiteDir) {
+    # bizomat.ai/cad goes where the running router sends it (move cad and back cad change that); fly.website.toml must
+    # say the same, or a deploy would move CAD Automation away from its data.
+    $toml = Join-Path $SiteDir 'fly.website.toml'
+    $want = Get-TomlValue $toml 'UPSTREAM_CAD'
+    if (-not $want) { return }
+    $state = Get-CadState $SiteDir
+    if ($null -eq $state) {
+        Write-Host '  note  could not ask Fly where the router sends bizomat.ai/cad; fly.website.toml decides' -ForegroundColor Yellow
+        return
+    }
+    $route = "$(Get-Prop $state 'route')"
+    if ($route -eq 'none') { return }   # no router yet: the first deploy
+    $live = (@(Get-Prop $state 'upstream') | ForEach-Object { "$_" }) -join ' | '
+    $old = "$(Get-Prop $state 'old_url')"
+    $new = "$(Get-Prop $state 'new_url')"
+    if ($live -eq $want) { Write-Host "  ok    bizomat.ai/cad stays where it is ($want)" -ForegroundColor Green; return }
+    if ($live -eq $new -and $want -eq $old) {
+        Stop-Here "CAD Automation runs in the cad group (since move cad), but fly.website.toml still sends bizomat.ai/cad to cados: this deploy would send it back to the old copy of its data. Merge the gocore-website change that sets UPSTREAM_CAD = `"$new`" first. (To go back to cados on purpose: .\bizomat.ps1 back cad.)"
+    }
+    if ($live -eq $old -and $want -eq $new) {
+        Stop-Here "fly.website.toml sends bizomat.ai/cad to the cad group, but CAD Automation's data is still on cados (or was taken back): this deploy would show its holding page to everyone. Run .\bizomat.ps1 move cad first (it switches the router itself), or set UPSTREAM_CAD back to `"$old`"."
+    }
+    Stop-Here "The router sends bizomat.ai/cad to $live and fly.website.toml says $want. Put them in step before deploying."
+}
+
+function Get-CadGroups([string] $SiteDir, $State) {
+    # Which process groups a deploy of the Fly app bizomat updates. The cad group restarts (about a minute without CAD
+    # Automation) only when it is new or its code or scripts changed since the commit it runs (its image is tagged
+    # bizomat-<commit> by these deploys).
+    $toml = Join-Path $SiteDir 'fly.website.toml'
+    if (-not (Select-String -LiteralPath $toml -Pattern '^\s*cad\s*=' -Quiet)) { return 'proxy,web,work' }
+    $cad = Get-Prop $State 'cad'
+    if ($null -eq $cad) { Write-Host 'CAD Automation: its group is new, so this deploy makes it (it waits for its data until move cad).'; return 'proxy,web,work,cad' }
+    $tag = "$(Get-Prop $cad 'image')"
+    if ($tag -notmatch '^bizomat-([0-9a-f]{7,40})$') { Write-Host 'CAD Automation restarts with this deploy (about a minute): its image does not say which commit it runs.'; return 'proxy,web,work,cad' }
+    $ran = $Matches[1]
+    if (-not (Test-Exit 'git' @('cat-file', '-e', "$ran^{commit}") $SiteDir)) { Write-Host "CAD Automation restarts with this deploy (about a minute): its commit $ran is not in this folder."; return 'proxy,web,work,cad' }
+    $changed = Get-Output 'git' @('diff', '--name-only', $ran, 'HEAD', '--', 'apps/cad', 'apps/cad-source.json', 'infrastructure/fly', 'infrastructure/migrate') $SiteDir
+    if (-not $changed) { Write-Host "CAD Automation is not restarted: its code and scripts are as in $ran, which the cad group runs."; return 'proxy,web,work' }
+    $n = @($changed -split "`r?`n").Count
+    Write-Host "CAD Automation restarts with this deploy (about a minute): $n of its files changed since $ran."
+    return 'proxy,web,work,cad'
+}
+
+function Get-LatestMove {
+    # The newest moves\cad-* folder holding a finished move (move.json), or ''.
+    $base = Join-Path $Root 'moves'
+    if (-not (Test-Path -LiteralPath $base)) { return '' }
+    $found = @(Get-ChildItem -LiteralPath $base -Directory -Filter 'cad-*' | Sort-Object Name -Descending | Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName 'move.json') })
+    if ($found.Count -eq 0) { return '' }
+    return $found[0].FullName
+}
+
 # ----------------------------------------------------------------------------- setup and status
 
 function Invoke-Setup {
@@ -278,8 +393,16 @@ function Show-Status {
         Write-Host ("  {0,-15} on {1} at {2}; {3} ahead, {4} behind GitHub's {5}{6}; GitHub's checks there: {7}" -f $r, $here, $short, $counts[0], $counts[1], $branch, $dirty, $checks)
     }
     Write-Title 'Live'
-    $cad = Get-Json 'https://cados.fly.dev/healthz'
-    $cadVersion = if ($cad) { $cad.version } else { 'no answer' }
+    $cad = Get-Json 'https://bizomat.ai/cad/healthz'
+    $cadVersion = 'no answer'
+    if ($cad -and (Get-Prop $cad 'ok')) { $cadVersion = "version $(Get-Prop $cad 'version')" }
+    elseif ($cad) { $cadVersion = "not serving ($(Get-Prop $cad 'status'))" }
+    $cadWhere = 'ask Fly for where it runs: fly auth login'
+    $cadState = Get-CadState (Join-Path $Root 'gocore-website')
+    if ($cadState) {
+        $route = "$(Get-Prop $cadState 'route')"
+        $cadWhere = 'served by ' + $(if ($route -eq 'new') { 'the cad group of the Fly app bizomat' } elseif ($route -eq 'old') { 'the Fly app cados' } else { "nothing clear ($route)" })
+    }
     $tasks = Get-Json 'https://work.kevos.com/api/health'
     $tasksState = if ($tasks) { "$($tasks.status), database $($tasks.db)" } else { 'no answer' }
     $site = Get-Title 'https://kevos.com/'
@@ -289,7 +412,16 @@ function Show-Status {
     $router = Get-Json 'https://bizomat.fly.dev/__proxy/health'
     $routerState = if ($router) { "version $($router.version)" } else { 'not deployed yet' }
     Write-Host "  bizomat (Fly)      $routerState (bizomat.fly.dev/__proxy/health)"
-    Write-Host "  CAD Automation     version $cadVersion (cados.fly.dev/healthz)"
+    Write-Host "  CAD Automation     $cadVersion (bizomat.ai/cad/healthz), $cadWhere"
+    if ($cadState) {
+        $old = Get-Prop $cadState 'old'
+        $grp = Get-Prop $cadState 'cad'
+        if ($grp) { Write-Host "  cad group (Fly)    Machine $(Get-Prop $grp 'machine'), $(Get-Prop $grp 'state'), $(Get-Prop $grp 'region')" }
+        if ($old) {
+            $auto = if (Get-Prop $old 'autostart') { '' } else { ', does not start by itself' }
+            Write-Host "  cados (Fly)        Machine $(Get-Prop $old 'machine'), $(Get-Prop $old 'state'), $(Get-Prop $old 'region')$auto"
+        } else { Write-Host '  cados (Fly)        no app' }
+    }
     Write-Host "  Project Management $tasksState (work.kevos.com/api/health)"
 }
 
@@ -301,40 +433,59 @@ function Test-WorkReady {
     try { return [bool](($b | ConvertFrom-Json).upstreams.work.ok) } catch { return $false }
 }
 
+function New-PlatformVolumes([string] $Dir) {
+    # fly deploy does not create the volume of a group added to an existing app: work_data and cad_data, 3 GB in
+    # Sydney, a snapshot every day kept 30 days.
+    $toml = Join-Path $Dir 'fly.website.toml'
+    $vols = Get-Output 'fly' @('volumes', 'list', '--app', 'bizomat', '--json') $Dir
+    foreach ($v in @(@{ Name = 'work_data'; What = 'Project Management''s data' }, @{ Name = 'cad_data'; What = 'CAD Automation''s data' })) {
+        if (-not (Select-String -LiteralPath $toml -Pattern ('source\s*=\s*"' + $v.Name + '"') -Quiet)) { continue }
+        if ("$vols" -match ('"' + $v.Name + '"')) { continue }
+        Write-Host "Creating the volume for $($v.What) ($($v.Name): 3 GB in Sydney, a snapshot every day kept 30 days)." -ForegroundColor Yellow
+        Invoke-Step 'fly' @('volumes', 'create', $v.Name, '--region', 'syd', '--size', '3', '--snapshot-retention', '30', '--app', 'bizomat', '--yes') $Dir
+    }
+}
+
 function Deploy-Website {
-    Write-Title 'BIZOMAT website: Fly app bizomat (the website and the router behind bizomat.ai)'
+    Write-Title 'The Fly app bizomat: the website, the router behind bizomat.ai, Project Management, CAD Automation''s group'
     Assert-Tool 'fly' 'Install flyctl: iwr https://fly.io/install.ps1 -useb | iex  then: fly auth login'
     Assert-Node
     $c = Get-DeployCommit 'gocore-website'
     Show-Commit $c
-    if (-not (Test-Path -LiteralPath (Join-Path $c.Dir 'fly.website.toml'))) { Stop-Here 'gocore-website has no fly.website.toml yet: the website moves to Fly once that change is on GitHub.' }
+    $toml = Join-Path $c.Dir 'fly.website.toml'
+    if (-not (Test-Path -LiteralPath $toml)) { Stop-Here 'gocore-website has no fly.website.toml yet: the website moves to Fly once that change is on GitHub.' }
+    $hasCad = Select-String -LiteralPath $toml -Pattern '^\s*cad\s*=' -Quiet
     if (-not $SkipChecks) {
         Invoke-Step 'npm' @('ci', '--no-audit', '--no-fund') $c.Dir
         Invoke-Step 'npm' @('run', 'verify') $c.Dir                                       # the site: types, tests, build, page checks
         Invoke-Step 'node' @('--test', 'infrastructure/proxy/test/*.test.mjs') $c.Dir     # the router
     }
+    if ($hasCad) {
+        # the cad group is built from apps/cad: it must be exactly the CADOS commit it names (CADOS is what runs)
+        Invoke-Step 'node' @('scripts/sync-cad.mjs', 'check', '--cados', (Join-Path $Root 'CADOS')) $c.Dir
+    }
     $exists = Test-Exit 'fly' @('status', '--app', 'bizomat') $c.Dir
+    $groups = 'proxy,web,work'
+    if ($hasCad) { $groups = 'proxy,web,work,cad' }
     if (-not $exists) {
         Write-Host ''
         Write-Host 'The Fly app bizomat does not exist yet. Creating it costs nothing until it runs.' -ForegroundColor Yellow
+    } elseif ($hasCad) {
+        Assert-CadRoute $c.Dir
+        $state = Get-CadState $c.Dir
+        if ($state) { $groups = Get-CadGroups $c.Dir $state }
+        else { Write-Host 'CAD Automation restarts with this deploy (about a minute): could not ask Fly which commit its group runs.' }
     }
-    if (-not (Confirm-Deploy 'the BIZOMAT website to the Fly app bizomat')) { return }
+    if (-not (Confirm-Deploy 'the Fly app bizomat (the website and the router; Project Management and CAD Automation as above)')) { return }
     if (-not $exists) {
         Invoke-Step 'fly' @('apps', 'create', 'bizomat') $c.Dir
         Invoke-Step 'fly' @('ips', 'allocate-v6', '--app', 'bizomat') $c.Dir
         Invoke-Step 'fly' @('ips', 'allocate-v4', '--shared', '--app', 'bizomat') $c.Dir
     }
-    # Project Management's volume: fly deploy does not create one for a group added to an existing app.
-    $toml = Join-Path $c.Dir 'fly.website.toml'
-    if (Select-String -LiteralPath $toml -Pattern 'source\s*=\s*"work_data"' -Quiet) {
-        $vols = Get-Output 'fly' @('volumes', 'list', '--app', 'bizomat', '--json') $c.Dir
-        if (-not ("$vols" -match '"work_data"')) {
-            Write-Host 'Creating the volume for Project Management''s data (3 GB in Sydney). If Fly asks whether to continue with one volume, answer y.' -ForegroundColor Yellow
-            Invoke-Step 'fly' @('volumes', 'create', 'work_data', '--region', 'syd', '--size', '3', '--app', 'bizomat') $c.Dir
-        }
-    }
-    # Built on Fly's machines; one Machine per group (router, website, Project Management); the commit as its version.
-    Invoke-Step 'fly' @('deploy', '--config', 'fly.website.toml', '--app', 'bizomat', '--remote-only', '--ha=false', '--build-arg', "BIZOMAT_VERSION=$($c.Short)") $c.Dir
+    New-PlatformVolumes $c.Dir
+    # Built on Fly's machines; one Machine per group; the commit as its version and as the image's tag (so the next
+    # deploy can tell what the cad group runs).
+    Invoke-Step 'fly' @('deploy', '--config', 'fly.website.toml', '--app', 'bizomat', '--remote-only', '--ha=false', '--process-groups', $groups, '--image-label', "bizomat-$($c.Short)", '--build-arg', "BIZOMAT_VERSION=$($c.Short)") $c.Dir
     # bizomat.ai points at this app; bizomat.fly.dev answers its own health endpoints and sends everything else to
     # bizomat.ai. A backend can need a moment after the router restarts, so those checks wait up to 90 s.
     Write-Title 'Live checks (bizomat.ai)'
@@ -344,31 +495,96 @@ function Deploy-Website {
         @{ What = "the router runs $want (bizomat.fly.dev/__proxy/health)"; Test = { (Get-Json 'https://bizomat.fly.dev/__proxy/health').version -eq $want } },
         @{ What = 'the website answers (bizomat.ai)'; Test = { Wait-Until { (Get-Title 'https://bizomat.ai/') -match 'BIZOMAT' } 90 } },
         @{ What = 'its APIs answer (/api/chat, no AI call made)'; Test = { Wait-Until { (Get-Code 'https://bizomat.ai/api/chat' 'POST' '{}') -eq 422 } 90 } },
-        @{ What = 'CAD Automation is reached over the private network (/cad/)'; Test = { Wait-Until { (Get-Code 'https://bizomat.ai/cad/') -eq 200 } 90 } },
+        @{ What = 'CAD Automation answers (bizomat.ai/cad/)'; Test = { Wait-Until { (Get-Code 'https://bizomat.ai/cad/') -eq 200 } 90 } },
         @{ What = '/tasks/ answers (Project Management, or 302 to work.kevos.com before its switch)'; Test = { Wait-Until { $t = Get-Code 'https://bizomat.ai/tasks/'; ($t -eq 200) -or ($t -eq 302) } 90 } }
     )
     # Project Management on Fly, once fly.website.toml runs it (the work group)
-    if (Select-String -LiteralPath (Join-Path $c.Dir 'fly.website.toml') -Pattern '^\s*work\s*=' -Quiet) {
+    if (Select-String -LiteralPath $toml -Pattern '^\s*work\s*=' -Quiet) {
         $checks += @{ What = 'Project Management runs on Fly (the router reports work healthy)'; Test = { Wait-Until { Test-WorkReady } 90 } }
+    }
+    if ($hasCad) {
+        $siteDir = $c.Dir
+        $checks += @{ What = 'the cad group runs (its holding page until move cad, then the CAD server)'; Test = { Wait-Until { $s = Get-CadState $siteDir; $g = Get-Prop $s 'cad'; ($null -ne $g) -and ("$(Get-Prop $g 'state')" -eq 'started') } 120 } }
     }
     $checks += @{ What = 'bizomat.ai/login goes to the sign-in page'; Info = $true; Test = { (Get-Code 'https://bizomat.ai/login') -eq 301 } }
     $checks += @{ What = 'bizomat.fly.dev sends people to bizomat.ai'; Info = $true; Test = { (Get-Code 'https://bizomat.fly.dev/') -eq 301 } }
     $ok = Invoke-Checks $checks
     $result = if ($ok) { 'ok' } else { 'deployed; live checks failed' }
     Write-DeployLog 'website' $c $result
-    if (-not $ok) { Stop-Here 'A live check failed. Logs: fly logs -a bizomat. To go back: fly releases -a bizomat --image, then fly deploy --config fly.website.toml -a bizomat --image <the previous image>.' }
+    if (-not $ok) { Stop-Here 'A live check failed. Logs: fly logs -a bizomat. To go back: fly releases -a bizomat --image, then fly deploy --config fly.website.toml -a bizomat --image <the previous image> --ha=false.' }
     Write-Host 'Done.' -ForegroundColor Green
 }
 
 function Deploy-Cad {
-    Write-Title 'CAD Automation: Fly app cados (bizomat.ai/cad)'
+    # After move cad, CAD Automation is the cad group of the Fly app bizomat; before it, the Fly app cados.
     Assert-Tool 'fly' 'Install flyctl: iwr https://fly.io/install.ps1 -useb | iex  then: fly auth login'
+    $site = Get-DeployCommit 'gocore-website'
+    $state = Get-CadState $site.Dir
+    if ($state -and ("$(Get-Prop $state 'route')" -eq 'new')) { Deploy-CadGroup $site; return }
+    if ($state -and ("$(Get-Prop $state 'route')" -ne 'old') -and ("$(Get-Prop $state 'route')" -ne 'none')) {
+        Stop-Here "The router sends bizomat.ai/cad to neither cados nor the cad group ($(Get-Prop $state 'route')): look at .\bizomat.ps1 status first."
+    }
+    Deploy-Cados
+}
+
+function Deploy-CadGroup($Site) {
+    Write-Title 'CAD Automation: the cad group of the Fly app bizomat (bizomat.ai/cad)'
+    Assert-Node
+    $cados = Get-DeployCommit 'CADOS'
+    Show-Commit $cados
+    $checks = Get-Checks 'CADOS' $cados.Commit
+    Write-Host "GitHub's checks on CADOS $($cados.Short): $checks"
+    if ($checks -ne 'passed' -and -not $SkipChecks) {
+        Stop-Here "CAD Automation's tests run on GitHub (they need the CAD libraries and SOLIDWORKS stand-ins). Deploy once they pass."
+    }
+    $pin = Get-CadPin $Site.Dir
+    $pinned = "$(Get-Prop $pin 'commit')"
+    if ($pinned -ne $cados.Commit) {
+        $p = if ($pinned.Length -ge 7) { $pinned.Substring(0, 7) } else { 'nothing' }
+        Stop-Here "The cad group is built from gocore-website's apps/cad, which is CADOS $p; CADOS main is $($cados.Short). Bring it across first: .\bizomat.ps1 sync cad (a branch to merge on GitHub), then run this again."
+    }
+    Invoke-Step 'node' @('scripts/sync-cad.mjs', 'check', '--cados', $cados.Dir) $Site.Dir
+    Assert-CadRoute $Site.Dir
+    $keys = Get-Json 'https://bizomat.ai/cad/v2/keys'
+    $kid = "$(Get-Prop (@(Get-Prop $keys 'keys') | Select-Object -First 1) 'kid')"
+    Show-Commit $Site
+    if (-not (Confirm-Deploy "CAD Automation, CADOS $($cados.Short), to the cad group (about a minute off line)")) { return }
+    Invoke-Step 'fly' @('deploy', '--config', 'fly.website.toml', '--app', 'bizomat', '--remote-only', '--ha=false', '--process-groups', 'cad', '--image-label', "bizomat-$($Site.Short)", '--build-arg', "BIZOMAT_VERSION=$($Site.Short)") $Site.Dir
+    Write-Title 'Live checks (bizomat.ai/cad)'
+    $want = $cados.Short
+    [void](Wait-Until { "$(Get-Prop (Get-Json 'https://bizomat.ai/cad/healthz') 'version')" -eq $want } 240)
+    $ok = Invoke-Checks @(
+        @{ What = "bizomat.ai/cad runs CADOS $want"; Test = { $h = Get-Json 'https://bizomat.ai/cad/healthz'; [bool](Get-Prop $h 'ok') -and ("$(Get-Prop $h 'version')" -eq $want) } },
+        @{ What = 'the same signing key (paired computers keep trusting it: /cad/v2/keys)'; Test = { $k = Get-Json 'https://bizomat.ai/cad/v2/keys'; $kid -and ("$(Get-Prop (@(Get-Prop $k 'keys') | Select-Object -First 1) 'kid')" -eq $kid) } },
+        @{ What = 'accounts are there: setup is closed (/cad/setup goes to sign-in)'; Test = { (Get-Code 'https://bizomat.ai/cad/setup') -eq 303 } },
+        @{ What = 'AI apps: /cad/mcp asks for sign-in (401)'; Test = { (Get-Code 'https://bizomat.ai/cad/mcp' 'POST' '{}') -eq 401 } }
+    )
+    $result = if ($ok) { 'ok' } else { 'deployed; live checks failed' }
+    Write-DeployLog 'cad' $cados $result
+    if (-not $ok) { Stop-Here 'A live check failed. Logs: fly logs -a bizomat. To go back: fly releases -a bizomat --image, then in gocore-website: fly deploy --config fly.website.toml -a bizomat --image <the previous image> --process-groups cad --ha=false.' }
+    Write-Host 'Done.' -ForegroundColor Green
+}
+
+function Deploy-Cados {
+    Write-Title 'CAD Automation: Fly app cados (bizomat.ai/cad, until move cad)'
     $c = Get-DeployCommit 'CADOS'
     Show-Commit $c
     $checks = Get-Checks 'CADOS' $c.Commit
     Write-Host "GitHub's checks on $($c.Short): $checks"
     if ($checks -ne 'passed' -and -not $SkipChecks) {
         Stop-Here "CAD Automation's tests run on GitHub (they need the CAD libraries and SOLIDWORKS stand-ins). Deploy once they pass."
+    }
+    # move cad stops cados and turns its autostart off: a deploy would start the old copy of the data again
+    $machines = Get-Output 'fly' @('machines', 'list', '--app', 'cados', '--json') $c.Dir
+    if ($machines) {
+        $list = @()
+        try { $list = @($machines | ConvertFrom-Json) } catch { $list = @() }
+        foreach ($m in $list) {
+            $svc = @(Get-Prop (Get-Prop $m 'config') 'services')
+            if (@($svc | Where-Object { $null -ne $_ -and (Get-Prop $_ 'autostart') -eq $false }).Count -gt 0) {
+                Stop-Here 'cados was stopped by move cad (it does not start by itself): CAD Automation runs in the cad group of the Fly app bizomat. Bring gocore-website up to date and run .\bizomat.ps1 deploy cad again; to use cados again on purpose: .\bizomat.ps1 back cad.'
+            }
+        }
     }
     if (-not (Confirm-Deploy 'CAD Automation (bizomat.ai/cad)')) { return }
     # The same command GitHub's deploy workflow uses: built on Fly's machines, one Machine, the commit as its version.
@@ -509,15 +725,177 @@ function Move-Tasks {
     Write-Host '3. Then the switch: bizomat.ai/tasks serves Project Management from Fly.'
 }
 
-# ----------------------------------------------------------------------------- kevos.com
+# ----------------------------------------------------------------------------- CAD Automation: sync, move, back, retire
 
-function Get-Prop($Obj, [string] $Name) {
-    # A property of an object read from JSON, or $null when it has none (strict mode refuses a missing one).
-    if ($null -eq $Obj) { return $null }
-    $p = $Obj.PSObject.Properties[$Name]
-    if ($p) { return $p.Value }
-    return $null
+function Sync-Cad {
+    # apps/cad in gocore-website is CAD Automation exactly as CADOS holds it at one commit (apps/cad-source.json): the
+    # cad group is built from it. This brings CADOS main across on a branch of its own, pushed to GitHub to merge there.
+    Write-Title 'apps/cad in gocore-website: CADOS main, byte for byte (a branch to merge on GitHub)'
+    Assert-Node
+    $cados = Get-DeployCommit 'CADOS'
+    $checks = Get-Checks 'CADOS' $cados.Commit
+    Write-Host "CADOS main is $($cados.Short) ($($cados.When)): $($cados.Subject); GitHub's checks there: $checks"
+    if ($checks -ne 'passed' -and -not $SkipChecks) { Stop-Here 'Its checks have not passed on GitHub: bring it across once they have.' }
+    $site = Get-DeployCommit 'gocore-website'
+    $from = "$(Get-Prop (Get-CadPin $site.Dir) 'commit')"
+    if ($from -eq $cados.Commit) { Write-Host "apps/cad is CADOS $($cados.Short) already: nothing to bring across." -ForegroundColor Green; return }
+    if ($from.Length -eq 40) {
+        Write-Host ''
+        Write-Host "CADOS commits since apps/cad's $($from.Substring(0, 7)):"
+        $log = Get-Output 'git' @('log', '--oneline', "$from..$($cados.Commit)") $cados.Dir
+        if ($log) { Write-Host $log } else { Write-Host '  (not an earlier commit of CADOS main: apps/cad is replaced as a whole)' }
+    }
+    $branch = 'cad-sync-' + $cados.Short
+    if ($DryRun) { Write-Host "Dry run: would make the branch $branch with apps/cad = CADOS $($cados.Short) and push it." -ForegroundColor Yellow; return }
+    Write-Host ''
+    $typed = Read-Host "Make the branch $branch in gocore-website and push it to GitHub? Type yes (anything else stops)"
+    if ("$typed".Trim() -ne 'yes') { Write-Host 'Stopped. Nothing was changed.'; return }
+    Invoke-Step 'git' @('switch', '-c', $branch) $site.Dir
+    try {
+        Invoke-Step 'node' @('scripts/sync-cad.mjs', 'to', $cados.Commit, '--cados', $cados.Dir) $site.Dir
+        Invoke-Step 'git' @('commit', '-q', '-m', ('apps/cad: CADOS ' + $cados.Short + ', byte for byte'), '-m', ('CADOS main at ' + $cados.Short + ': ' + $cados.Subject)) $site.Dir
+        Invoke-Step 'git' @('push', '-u', 'origin', $branch) $site.Dir
+    } finally {
+        [void](Test-Exit 'git' @('switch', $site.Branch) $site.Dir)
+    }
+    $title = [uri]::EscapeDataString('apps/cad: CADOS ' + $cados.Short + ' [skip ci]')
+    Write-Host ''
+    Write-Host 'Pushed. Open the pull request; its title ends with [skip ci], so merging it deploys nothing:' -ForegroundColor Green
+    Write-Host ('  https://github.com/' + $Owner + '/gocore-website/compare/' + $site.Branch + '...' + $branch + '?expand=1&title=' + $title)
+    Write-Host 'Merge it once its checks pass, then: .\bizomat.ps1 deploy cad'
 }
+
+function Move-Cad {
+    # CAD Automation from the Fly app cados to the cad group of the Fly app bizomat, with its data; bizomat.ai/cad with it.
+    # gocore-website's infrastructure/migrate/cad/to-fly.mjs does the work: check only reads (and copies the data while
+    # cados runs, to prove the way); apply, after you type yes, moves it, and takes the way back by itself on a failure.
+    Write-Title 'CAD Automation to the cad group of the Fly app bizomat (Sydney), with its data'
+    Assert-Tool 'fly' 'Install flyctl: iwr https://fly.io/install.ps1 -useb | iex  then: fly auth login'
+    Assert-Node
+    $c = Get-DeployCommit 'gocore-website'
+    Show-Commit $c
+    $tool = Get-CadTool $c.Dir
+    $dir = Join-Path $Root ('moves\cad-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+    Write-Host ''
+    Write-Host "Working folder: $dir"
+    Write-Host 'It holds a copy of CAD Automation''s data with every key in it: keep it on this computer, delete it when the rollback window ends.' -ForegroundColor Yellow
+    Write-Title 'Checks (nothing changes; cados keeps running)'
+    Invoke-Step 'node' @($tool, 'check', $dir) $c.Dir
+    if ($DryRun) { Write-Host 'Dry run: everything is checked and a copy of the data was verified here; nothing on Fly changed.' -ForegroundColor Yellow; return }
+    Write-Title 'The move'
+    Write-Host 'CAD Automation is off line for a few minutes: bizomat.ai/cad says it is being moved, the add-ins and the'
+    Write-Host 'Companion retry by themselves, AI apps get an error until it is back. If a step fails, the move takes the way'
+    Write-Host 'back by itself (cados again). Afterwards the way back is: .\bizomat.ps1 back cad'
+    Write-Host 'Old addresses: cados.kevos.com and cados.fly.dev reach cados directly, so they stop answering when it stops.'
+    Write-Host 'Computers with the 0.13 Companion use bizomat.ai/cad by themselves; the check above counts AI app connections'
+    Write-Host 'by the address they were made with.'
+    Write-Host ''
+    $typed = Read-Host 'Move CAD Automation now? Type yes to continue (anything else stops)'
+    if ("$typed".Trim() -ne 'yes') { Write-Host 'Stopped. Nothing on Fly changed.'; return }
+    $moveArgs = @($tool, 'apply', $dir)
+    if ($Force) { $moveArgs += '--force' }
+    Write-Host "> node $($moveArgs -join ' ')" -ForegroundColor DarkGray
+    Push-Location -LiteralPath $c.Dir
+    try { & node @moveArgs; $code = $LASTEXITCODE } finally { Pop-Location }
+    if ($code -ne 0) {
+        Write-DeployLog 'cad-move' $c 'stopped (way back taken)'
+        $h = Get-Json 'https://bizomat.ai/cad/healthz'
+        $now = if ($h -and (Get-Prop $h 'ok')) { "answers (version $(Get-Prop $h 'version'))" } else { 'does not answer' }
+        Stop-Here "The move stopped (the reason is above) and took the way back. bizomat.ai/cad $now. If CAD Automation stays off line: .\bizomat.ps1 back cad"
+    }
+    Write-DeployLog 'cad-move' $c 'moved to the cad group'
+    Write-Title 'Live checks (from here, independent of the move tool)'
+    $pin = "$(Get-Prop (Get-CadPin $c.Dir) 'commit')"
+    $want = if ($pin.Length -ge 7) { $pin.Substring(0, 7) } else { '' }
+    [void](Invoke-Checks @(
+            @{ What = "bizomat.ai/cad answers from the cad group (CADOS $want)"; Test = { $h = Get-Json 'https://bizomat.ai/cad/healthz'; [bool](Get-Prop $h 'ok') -and ((-not $want) -or ("$(Get-Prop $h 'version')" -eq $want)) } },
+            @{ What = 'accounts are there: setup is closed (/cad/setup goes to sign-in)'; Test = { (Get-Code 'https://bizomat.ai/cad/setup') -eq 303 } },
+            @{ What = 'cados.fly.dev no longer answers (cados is stopped)'; Info = $true; Test = { (Get-Code 'https://cados.fly.dev/healthz') -ne 200 } }
+        ))
+    Write-Title 'Next'
+    Write-Host '1. Check it yourself: sign in at https://bizomat.ai/cad/login. Admin lists the same people, Settings shows the same'
+    Write-Host '   private connector address, SOLIDWORKS lists the same computers; ask your AI app to run sw_status.'
+    Write-Host '2. Make the route permanent on GitHub: gocore-website''s fly.website.toml sets'
+    Write-Host '   UPSTREAM_CAD = "http://cad.process.bizomat.internal:8001" (a pull request). Until it is merged, deploy website'
+    Write-Host '   refuses, so nothing sends bizomat.ai/cad back to the old copy.'
+    Write-Host '3. Old addresses: to keep cados.kevos.com working, move it to the Fly app bizomat (certificate, then its DNS record;'
+    Write-Host '   gocore-website infrastructure/migrate/cad/README.md, "Old addresses"). cados.fly.dev cannot move.'
+    Write-Host '4. Once you are sure it works: .\bizomat.ps1 retire cados (releases cados''s public addresses), and at the end of'
+    Write-Host '   the rollback window .\bizomat.ps1 delete cados. Both ask you first; neither can be undone.'
+    Write-Host "5. The copy in $dir holds every key of CAD Automation: delete that folder when the rollback window ends."
+}
+
+function Back-Cad {
+    # The way back after move cad: cados started again with its data as it was at the move, bizomat.ai/cad to cados,
+    # the cad group into maintenance (it keeps its data).
+    Write-Title 'The way back: bizomat.ai/cad served by the Fly app cados again'
+    Assert-Tool 'fly' 'Install flyctl: iwr https://fly.io/install.ps1 -useb | iex  then: fly auth login'
+    Assert-Node
+    $c = Get-DeployCommit 'gocore-website'
+    $tool = Get-CadTool $c.Dir
+    Invoke-Step 'node' @($tool, 'status') $c.Dir
+    Write-Host ''
+    Write-Host 'cados starts again with its data as it was at the move. What changed in the cad group since then stays there and'
+    Write-Host 'is not carried back: sign-ins, AI apps whose sign-in was renewed there (connect them again), computers paired since.'
+    if ($DryRun) { Write-Host 'Dry run: nothing changed.' -ForegroundColor Yellow; return }
+    Write-Host ''
+    $typed = Read-Host 'Take CAD Automation back to cados now? Type yes to continue (anything else stops)'
+    if ("$typed".Trim() -ne 'yes') { Write-Host 'Stopped. Nothing changed.'; return }
+    $dir = Get-LatestMove
+    if (-not $dir) { $dir = Join-Path $Root ('moves\cad-back-' + (Get-Date -Format 'yyyyMMdd-HHmmss')) }
+    Invoke-Step 'node' @($tool, 'back', $dir) $c.Dir
+    Write-DeployLog 'cad-back' $c 'back on cados'
+    Write-Host ''
+    Write-Host 'Done. fly.website.toml must send bizomat.ai/cad to cados (UPSTREAM_CAD = "http://cados.internal:8080"): if the' -ForegroundColor Green
+    Write-Host 'switch was merged on GitHub, revert it before the next deploy website (deploy website checks this).'
+}
+
+function Retire-Cados {
+    # Step 1 of 2, once CAD Automation works from the cad group: cados's public addresses released. Irreversible.
+    Write-Title 'Retire the Fly app cados, step 1 of 2: release its public addresses'
+    Assert-Tool 'fly' 'Install flyctl: iwr https://fly.io/install.ps1 -useb | iex  then: fly auth login'
+    Assert-Node
+    $c = Get-DeployCommit 'gocore-website'
+    $tool = Get-CadTool $c.Dir
+    # a preview: it refuses unless CAD Automation runs in the cad group and fly.website.toml agrees
+    Invoke-Step 'node' @($tool, 'retire-ips') $c.Dir
+    if ($DryRun) { Write-Host 'Dry run: nothing was released.' -ForegroundColor Yellow; return }
+    Write-Host ''
+    Write-Host 'This cannot be undone: the addresses go back to Fly, and every name above that points at them stops answering.' -ForegroundColor Yellow
+    $typed = Read-Host 'Type release cados to release them (anything else stops)'
+    if ("$typed".Trim() -ne 'release cados') { Write-Host 'Stopped. Nothing was released.'; return }
+    Invoke-Step 'node' @($tool, 'retire-ips', '--confirm', 'cados') $c.Dir
+    Write-DeployLog 'cados-ips' @{ Repo = 'gocore-website'; Short = $c.Short; Subject = 'cados: public addresses released' } 'released'
+    Write-Host 'Later, at the end of the rollback window: .\bizomat.ps1 delete cados' -ForegroundColor Green
+}
+
+function Delete-Cados {
+    # Step 2 of 2, at the end of the rollback window: the Fly app cados deleted, with its Machine and its volume.
+    Write-Title 'Retire the Fly app cados, step 2 of 2: delete it, with its Machine and its volume'
+    Assert-Tool 'fly' 'Install flyctl: iwr https://fly.io/install.ps1 -useb | iex  then: fly auth login'
+    Assert-Node
+    $c = Get-DeployCommit 'gocore-website'
+    $tool = Get-CadTool $c.Dir
+    $last = Get-LatestMove
+    if ($last) {
+        try {
+            $moved = Get-Prop (Get-Content -Raw -LiteralPath (Join-Path $last 'move.json') | ConvertFrom-Json) 'moved'
+            $days = [int]((Get-Date).ToUniversalTime() - (ConvertTo-Utc $moved)).TotalDays
+            Write-Host "CAD Automation moved $days day(s) ago ($last)."
+        } catch { Write-Host "The move's record is in $last." }
+    }
+    Invoke-Step 'node' @($tool, 'delete-app') $c.Dir   # a preview: what goes with it
+    if ($DryRun) { Write-Host 'Dry run: nothing was deleted.' -ForegroundColor Yellow; return }
+    Write-Host ''
+    Write-Host 'This cannot be undone: the old copy of the data goes with the app. The cad volume gets a snapshot first.' -ForegroundColor Yellow
+    $typed = Read-Host 'Type delete cados to delete it (anything else stops)'
+    if ("$typed".Trim() -ne 'delete cados') { Write-Host 'Stopped. Nothing was deleted.'; return }
+    Invoke-Step 'node' @($tool, 'delete-app', '--confirm', 'cados') $c.Dir
+    Write-DeployLog 'cados-delete' @{ Repo = 'gocore-website'; Short = $c.Short; Subject = 'cados: app deleted' } 'deleted'
+    Write-Host 'Done. Delete the move folders too (moves\cad-*): they hold copies of the data with every key.' -ForegroundColor Green
+}
+
+# ----------------------------------------------------------------------------- kevos.com
 
 function ConvertTo-Utc($Value) {
     # A JSON time in UTC, or $null when it is not one. PowerShell 7 reads it as a DateTime already; Windows PowerShell
@@ -650,8 +1028,24 @@ switch ($Command) {
     'secrets' {
         if ($App -eq 'website') { Set-WebsiteSecrets } else { Stop-Here 'Say which: .\bizomat.ps1 secrets website' }
     }
+    'sync' {
+        if ($App -eq 'cad') { Sync-Cad } else { Stop-Here 'Say which: .\bizomat.ps1 sync cad' }
+    }
     'move' {
-        if ($App -eq 'tasks') { Move-Tasks } else { Stop-Here 'Say which: .\bizomat.ps1 move tasks' }
+        switch ($App) {
+            'tasks' { Move-Tasks }
+            'cad' { Move-Cad }
+            default { Stop-Here 'Say which: .\bizomat.ps1 move tasks | cad' }
+        }
+    }
+    'back' {
+        if ($App -eq 'cad') { Back-Cad } else { Stop-Here 'Say which: .\bizomat.ps1 back cad' }
+    }
+    'retire' {
+        if ($App -eq 'cados') { Retire-Cados } else { Stop-Here 'Say which: .\bizomat.ps1 retire cados' }
+    }
+    'delete' {
+        if ($App -eq 'cados') { Delete-Cados } else { Stop-Here 'Say which: .\bizomat.ps1 delete cados' }
     }
     'restore' {
         if ($App -eq 'kevos') { Restore-Kevos } else { Stop-Here 'Say which: .\bizomat.ps1 restore kevos' }

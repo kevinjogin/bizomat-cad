@@ -75,3 +75,20 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+
+  # The laptop's deploy tool (tools/laptop/bizomat.ps1): its CAD Automation commands with fly, node and git replaced
+  # by test functions, in Windows PowerShell 5.1 (what the owner's laptop runs) and in PowerShell 7.
+  laptop:
+    name: laptop tool (Windows PowerShell 5.1 and 7)
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: bizomat.ps1 tests, Windows PowerShell 5.1
+        shell: cmd
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File tools\laptop\test\bizomat.tests.ps1
+      - name: bizomat.ps1 tests, PowerShell 7
+        shell: pwsh
+        run: pwsh -NoProfile -File tools/laptop/test/bizomat.tests.ps1
