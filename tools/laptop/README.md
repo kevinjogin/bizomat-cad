@@ -5,12 +5,14 @@ of the code (history, backup, pull requests); deploys come from your laptop, not
 
 | App | Repository | Where it runs | Deploy command |
 | --- | --- | --- | --- |
-| BIZOMAT website (kevos.com, bizomat.ai) | `gocore-website` | Cloudflare Worker `throbbing-block-6c61` | `.\bizomat.ps1 deploy website` |
+| BIZOMAT website (bizomat.ai) | `gocore-website` | Fly.io app `bizomat`: the website and the router in front of it (`bizomat.ai/cad` goes to `cados`, `bizomat.ai/tasks` to work.kevos.com) | `.\bizomat.ps1 deploy website` |
 | CAD Automation (bizomat.ai/cad) | `CADOS` | Fly.io app `cados` | `.\bizomat.ps1 deploy cad` |
 | Project Management (work.kevos.com, bizomat.ai/tasks) | `PMO` | Cloudflare Worker `workos-platform-preview` | `.\bizomat.ps1 deploy tasks` |
 
-Only CAD Automation runs on Fly.io. The website and Project Management run on Cloudflare: they deploy from the laptop
-the same way, with Cloudflare's `wrangler` instead of `fly`.
+The website and CAD Automation run on Fly.io. Project Management stays on Cloudflare until it moves to Fly with its
+data; it deploys from the laptop the same way, with Cloudflare's `wrangler` instead of `fly`. The website answers on
+bizomat.fly.dev until bizomat.ai's DNS points at the `bizomat` app. kevos.com goes back to the old KEVOS site on
+Cloudflare (Worker `throbbing-block-6c61`), which nothing here deploys.
 
 ## Once
 
@@ -36,7 +38,7 @@ the same way, with Cloudflare's `wrangler` instead of `fly`.
 4. Sign in to the two hosts (each opens a browser once):
    ```powershell
    fly auth login
-   cd C:\BIZOMAT\gocore-website; npx wrangler login; cd C:\BIZOMAT
+   cd C:\BIZOMAT\PMO; npx wrangler login; cd C:\BIZOMAT
    ```
 5. Check: `powershell -ExecutionPolicy Bypass -File .\bizomat.ps1 status`
 
@@ -60,12 +62,14 @@ What the script does, in order:
    not have. If the folder is only behind, it brings it up to date first. An old checkout replaced the website once
    (8 Oct 2026); this rule is what prevents it.
 2. **Checks** the code:
-   - website: type check, the test suite, the full build and its page checks (a few minutes);
+   - website: type check, the test suite, the full build and its page checks, and the router's tests (a few
+     minutes);
    - tasks: lint, type check, tests, build;
    - cad: requires GitHub's checks on that commit to have passed, since its tests need the CAD libraries.
 3. **Shows** the commit that will go live and asks you to type `yes`.
-4. **Deploys**, then checks the live addresses. For example, the website's check confirms the assistant and the
-   other APIs still reach the Worker.
+4. **Deploys**, then checks the live addresses. For example, the website's check confirms that its APIs answer and
+   that `/cad` reaches CAD Automation over Fly's private network. The first website deploy creates the Fly app
+   `bizomat` (after asking).
 5. **Records** the deploy in `deploy-log.csv` in the folder: when, what, which commit and who.
 
 Useful switches:
@@ -73,25 +77,36 @@ Useful switches:
 - `-ApplyMigrations`: tasks only. Applies database migrations waiting on the live database, after printing a restore
   point. Normally there are none, and without this switch the script stops if there are.
 
+## The website's AI (once)
+
+The website's assistant and AI search use Cloudflare Workers AI. After the first website deploy:
+```powershell
+.\bizomat.ps1 secrets website
+```
+It asks for your Cloudflare account ID and a token made with Cloudflare's **Workers AI** template (My Profile > API
+Tokens > Create Token), checks them with Cloudflare and saves them on Fly. What you type for the token stays hidden:
+it is not shown, not kept in PowerShell's history and not written to a file. Run it again to replace the token.
+
 ## Going back
 
 | App | How |
 | --- | --- |
-| website | Cloudflare dashboard > Workers & Pages > `throbbing-block-6c61` > Deployments > roll back, or `npx wrangler rollback` in `gocore-website` |
+| website | `fly releases -a bizomat --image`, then in `gocore-website`: `fly deploy --config fly.website.toml -a bizomat --image <the previous image>` |
 | cad | `fly releases -a cados --image`, then `fly deploy -a cados --image <the previous image>` |
 | tasks | `npx wrangler rollback --env preview` in `PMO` |
 
 ## So that only the laptop deploys
 
-- **Website:** Cloudflare still builds and deploys every push to `main` of gocore-website on its own. That's harmless,
-  because both deploy the same commit, but it's a second way in, and it is the one that stalled on 6 Nov. To leave
-  only the laptop: Cloudflare dashboard > Workers & Pages > `throbbing-block-6c61` > Settings > Builds > Disconnect.
+- **Website:** Cloudflare's Git connection on the old Worker (`throbbing-block-6c61`) must be off: while it is on,
+  every push to `main` of gocore-website is published on kevos.com. Cloudflare dashboard > Workers & Pages >
+  `throbbing-block-6c61` > Settings > Builds > Disconnect.
 - **CAD and Project Management:** GitHub already deploys neither. CADOS has no Fly token on GitHub, and PMO's deploy
   workflows are switched off by its `CLOUDFLARE_DEPLOY_ENABLED` setting.
 
 ## Keep in mind
 
-- **The laptop now holds the keys to production.** Fly's and Cloudflare's sign-ins live in your user profile. Keep
+- **The laptop now holds the keys to production.** Fly's and Cloudflare's sign-ins live in your user profile; the
+  website's Workers AI token lives only on Fly. Keep
   the laptop encrypted (BitLocker) and locked when you step away. To sign out on a lost laptop: `fly auth logout`,
   `npx wrangler logout`, and remove the sessions in the Fly and Cloudflare dashboards.
 - **Never keep code only on the laptop.** Everything goes through GitHub first; the folder is a working copy.
