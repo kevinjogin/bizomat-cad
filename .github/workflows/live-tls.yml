@@ -1,0 +1,53 @@
+# The public addresses' certificates, seen from outside (a GitHub runner, IPv4): is the chain trusted, does the name
+# match, how long until it expires, and does the page load anything over plain http (which also makes a browser say
+# "Not secure"). Read only: it changes nothing. Runs every day, by hand (Actions > Live TLS > Run workflow) and on a
+# pull request that changes it. Fails when a certificate is not trusted or expires within 14 days.
+name: Live TLS
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "41 20 * * *"   # 07:41 in Sydney
+  pull_request:
+    paths:
+      - .github/workflows/live-tls.yml
+
+permissions:
+  contents: read
+
+jobs:
+  tls:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Certificates and pages
+        shell: bash
+        run: |
+          set -u
+          fail=0
+          for host in bizomat.ai bizomat.fly.dev cados.fly.dev cados.kevos.com kevos.com; do
+            echo "::group::$host"
+            for alg in ECDSA RSA; do
+              out=$(timeout 25 openssl s_client -connect "$host:443" -servername "$host" -showcerts \
+                    -sigalgs "${alg}+SHA256:${alg}+SHA384" </dev/null 2>&1)
+              echo "-- $alg certificate"
+              echo "$out" | sed -n '/^Certificate chain/,/^---/p' | grep -E '^ *[0-9]+ s:| i:|v:NotBefore' || echo "   (none offered)"
+              echo "$out" | grep -E '^Verify return code|^Verification' | head -2
+              leaf=$(echo "$out" | awk '/BEGIN CERTIFICATE/{f=1} f{print} /END CERTIFICATE/{exit}')
+              [ -n "$leaf" ] && echo "$leaf" | openssl x509 -noout -enddate -ext subjectAltName 2>/dev/null | tr '\n' ' ' && echo
+            done
+            # curl verifies the chain and the name with the runner's trust store (Mozilla's)
+            r=$(curl -sS -o /tmp/page.html -D /tmp/headers.txt -m 30 -w '%{http_code} %{ssl_verify_result} %{remote_ip}' "https://$host/" 2>&1) || true
+            echo "-- curl https://$host/ : status, verify result (0 = trusted), address: $r"
+            grep -i -E '^(strict-transport-security|location):' /tmp/headers.txt || true
+            # anything the page loads or posts over plain http
+            grep -o -i -E '(src|href|action)="http://[^"]+"' /tmp/page.html | grep -v -E 'xmlns|www\.w3\.org' | head -5 || true
+            end=$(echo | timeout 25 openssl s_client -connect "$host:443" -servername "$host" 2>/dev/null | openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2)
+            if [ -z "$end" ] || [ "$(echo "$r" | cut -d' ' -f2)" != "0" ]; then
+              echo "::error::$host: the certificate is not trusted from outside"; fail=1
+            elif [ $(( ($(date -d "$end" +%s) - $(date +%s)) / 86400 )) -lt 14 ]; then
+              echo "::error::$host: the certificate expires on $end"; fail=1
+            fi
+            echo "::endgroup::"
+          done
+          exit $fail
