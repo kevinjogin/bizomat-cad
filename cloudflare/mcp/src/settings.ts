@@ -44,6 +44,15 @@ export function forServer(request: Request): Request {
   return new Request(request, { headers });
 }
 
+/**
+ * CAD_PAUSED=1 (a Worker secret: `wrangler secret put CAD_PAUSED`, removed with `wrangler secret delete CAD_PAUSED`):
+ * every path but the Worker's health answers 503 and a running server is stopped (SIGTERM, so it copies its last
+ * changes to R2 first). Nothing writes to R2 while a new copy of the data is put there (tools/laptop/cloudflare.ps1
+ * move cad -Replace).
+ */
+export const isPaused = (env: { CAD_PAUSED?: unknown }): boolean => typeof env.CAD_PAUSED === 'string' && env.CAD_PAUSED.trim() === '1';
+export const PAUSED_DETAIL = 'paused for maintenance';
+
 /** The Worker's own health answer, without starting the container (monitoring and the laptop's checks). */
 export const WORKER_HEALTH = '/__worker/health';
 

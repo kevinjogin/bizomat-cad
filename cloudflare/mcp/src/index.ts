@@ -11,7 +11,7 @@
 
 import { Container, ContainerProxy, getContainer } from '@cloudflare/containers';
 import { handlePersist, PERSIST_HOST } from './persist';
-import { forServer, serverEnv, unavailable, WORKER_HEALTH } from './settings';
+import { forServer, isPaused, PAUSED_DETAIL, serverEnv, unavailable, WORKER_HEALTH } from './settings';
 
 export { ContainerProxy }; // outbound interception (the data store) needs it exported
 
@@ -25,6 +25,8 @@ export interface Env {
   OPENSKETCH_ACCESS_CODE?: string;
   OPENSKETCH_INSTALLER_URL?: string;
   OPENSKETCH_VERSION?: string;
+  /** "1": paused for maintenance (settings.ts isPaused). A secret, so it changes without a new image. */
+  CAD_PAUSED?: string;
 }
 
 const PORT = 8080;
@@ -55,6 +57,13 @@ export class CadServer extends Container<Env> {
     return this.containerFetch(request, PORT);
   }
 
+  /** Stops a running server (SIGTERM: it copies its last changes to R2 first) and starts nothing. */
+  async pause(): Promise<boolean> {
+    if (!this.ctx.container?.running) return false;
+    await this.stop();
+    return true;
+  }
+
   override onStop({ exitCode, reason }: { exitCode: number; reason: string }) {
     // exit code 2: the supervisor refused to start without its data in R2 (opensketch/persist.py)
     console.log('CAD Automation stopped', { exitCode, reason });
@@ -69,8 +78,16 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === WORKER_HEALTH) {
-      return Response.json({ ok: true, worker: 'bizomat-mcp', version: env.OPENSKETCH_VERSION ?? 'dev' },
+      return Response.json({ ok: true, worker: 'bizomat-mcp', version: env.OPENSKETCH_VERSION ?? 'dev', paused: isPaused(env) },
         { headers: { 'cache-control': 'no-store' } });
+    }
+    if (isPaused(env)) {
+      try {
+        if (await getContainer(env.CAD, 'main').pause()) console.log('CAD Automation paused: the server was stopped');
+      } catch (e) {
+        console.error('bizomat-mcp could not stop the container', e);
+      }
+      return unavailable(PAUSED_DETAIL);
     }
     try {
       return await getContainer(env.CAD, 'main').fetch(forServer(request));
