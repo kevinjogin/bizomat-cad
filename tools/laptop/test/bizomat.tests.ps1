@@ -44,7 +44,8 @@ $NewUrl = 'http://cad.process.bizomat.internal:8001'
 function Set-Toml([string] $Upstream, [bool] $Cad = $true) {
     $lines = @('[processes]', '  proxy = "x"', '  web = "x"', '  work = "x"')
     if ($Cad) { $lines += '  cad = "/usr/local/bin/bizomat-entrypoint cad"' }
-    $lines += @('[env]', "  UPSTREAM_CAD = `"$Upstream`"")
+    $lines += @('[env]', "  UPSTREAM_CAD = `"$Upstream`"", '[[mounts]]', '  source = "work_data"')
+    if ($Cad) { $lines += @('[[mounts]]', '  source = "cad_data"') }
     Set-Content -LiteralPath "$site\fly.website.toml" -Value $lines
 }
 
@@ -130,6 +131,38 @@ try {
     Check 'groups: cad changed since the commit it runs restarts' { (Get-CadGroups $site (State 'old')) -eq 'proxy,web,work,cad' }
     Check 'groups: an image without a commit tag restarts cad' { (Get-CadGroups $site (State 'old' @{ machine = 'm1'; state = 'started'; region = 'syd'; image = 'deployment-01ABC' })) -eq 'proxy,web,work,cad' }
     Check 'groups: a commit this folder does not have restarts cad' { (Get-CadGroups $site (State 'old' @{ machine = 'm1'; state = 'started'; region = 'syd'; image = 'bizomat-fff0000' })) -eq 'proxy,web,work,cad' }
+
+    # --------------------------------------------------------------------- deploy website: what it runs
+    Set-Toml $OldUrl
+    $script:status = State 'old' $null
+    $DryRun = $false; $SkipChecks = $true; $script:answer = 'yes'
+    function Read-Host { param([string] $Prompt, [switch] $AsSecureString) return 'yes' }
+    function Wait-Until([scriptblock] $Test, [int] $Seconds) { return $true }
+    $script:calls.Clear()
+    try { Deploy-Website *> $null } catch { }   # its live checks then fail against the stand-ins: expected here
+    Check 'deploy website: a first deploy with the cad group deploys every group (no --process-groups)' {
+        $d = @($script:calls) -match '^fly deploy'
+        $d.Count -eq 1 -and ($d[0] -notmatch '--process-groups') -and ($d[0] -match '--image-label bizomat-abc1234')
+    }
+    Check 'deploy website: the cad volume is made first' { (@($script:calls) -match '^fly volumes create cad_data --region syd').Count -eq 1 }
+    $script:gitDiff = ''
+    $script:status = State 'old'
+    $script:calls.Clear()
+    try { Deploy-Website *> $null } catch { }
+    Check 'deploy website: cad unchanged since the commit it runs is left running (--process-groups proxy,web,work)' {
+        (@($script:calls) -match '^fly deploy .*--process-groups proxy,web,work( |$)').Count -eq 1
+    }
+    $SkipChecks = $false
+    Remove-Item function:Wait-Until
+    . (Join-Path (Split-Path -Parent $here) 'bizomat.ps1') 'help' *> $null   # the real ones again
+    function Stop-Here([string] $Text) { throw "STOP: $Text" }
+    function Read-Host { param([string] $Prompt, [switch] $AsSecureString) return $script:answer }
+    function Get-DeployCommit([string] $Repo) { $dir = if ($Repo -eq 'CADOS') { $cadosDir } else { $site }; return @{ Repo = $Repo; Dir = $dir; Branch = 'main'; Commit = $pinCommit; Short = 'abc1234'; Subject = 'a commit'; When = '2026-11-07 10:00' } }
+    function Get-Checks { return 'passed' }
+    function Get-Json([string] $Url) { return $null }
+    function Get-Code { return 0 }
+    Set-StrictMode -Version 2.0
+    $Root = $tmp
 
     # --------------------------------------------------------------------- deploy cad: where it goes
     $script:routeTo = ''

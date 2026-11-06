@@ -485,7 +485,11 @@ function Deploy-Website {
     New-PlatformVolumes $c.Dir
     # Built on Fly's machines; one Machine per group; the commit as its version and as the image's tag (so the next
     # deploy can tell what the cad group runs).
-    Invoke-Step 'fly' @('deploy', '--config', 'fly.website.toml', '--app', 'bizomat', '--remote-only', '--ha=false', '--process-groups', $groups, '--image-label', "bizomat-$($c.Short)", '--build-arg', "BIZOMAT_VERSION=$($c.Short)") $c.Dir
+    $deployArgs = @('deploy', '--config', 'fly.website.toml', '--app', 'bizomat', '--remote-only', '--ha=false', '--image-label', "bizomat-$($c.Short)", '--build-arg', "BIZOMAT_VERSION=$($c.Short)")
+    # every group: flyctl's default (it also makes a group's first Machine); a subset only to leave cad running
+    $allGroups = if ($hasCad) { 'proxy,web,work,cad' } else { 'proxy,web,work' }
+    if ($groups -ne $allGroups) { $deployArgs += @('--process-groups', $groups) }
+    Invoke-Step 'fly' $deployArgs $c.Dir
     # bizomat.ai points at this app; bizomat.fly.dev answers its own health endpoints and sends everything else to
     # bizomat.ai. A backend can need a moment after the router restarts, so those checks wait up to 90 s.
     Write-Title 'Live checks (bizomat.ai)'
