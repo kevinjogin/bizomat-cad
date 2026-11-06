@@ -24,7 +24,8 @@ notes). The MSI builds unsigned on Windows in CI (`installer` job); signing wait
 
 - After completing any phase or significant change, update this file to reflect the current state before committing.
 - Test before committing: `pytest -q` (needs node for the sketch solver; the slow KEVOS end-to-end test needs the .NET
-  8 SDK) and `npm test` (the solver alone); the add-in and Companion with `bash solidworks/build.sh test` (.NET 8 SDK). For page changes, check the page in Chromium with
+  8 SDK) and `npm test` (the solver alone); the add-in and Companion with `bash solidworks/build.sh test` (.NET 8 SDK);
+  the Cloudflare Worker with `cd cloudflare/mcp && npm ci && npm run check` (Node 22, python3). For page changes, check the page in Chromium with
   Playwright at desktop and phone width.
 - No emojis anywhere. Plain language, short sentences, little text on pages.
 - Brand: CADOS by KEVOS. Never "OpenSketch" in anything people read (pages, MCP server name, messages); real file
@@ -47,7 +48,8 @@ notes). The MSI builds unsigned on Windows in CI (`installer` job); signing wait
 - Heavy work never runs on the web server's event loop: OpenCascade goes through the person's "agent" CAD worker
   (`cadworker.lane_for(person, "agent")`), node and big file writes through threads.
 - No personal, client or confidential details in code, comments, tests or docs: the repository is public.
-- CI: `.github/workflows/tests.yml` (pytest in two jobs: main and `-m slow`; npm test) on pull requests and
+- CI: `.github/workflows/tests.yml` (pytest in two jobs: main and `-m slow`; npm test; the Cloudflare Worker's
+  `npm run check` in `cloudflare/mcp` on Node 22) on pull requests and
   non-main pushes; `deploy.yml` deploys main to Fly after the same tests, skipping pushes that only touch notes,
   docs or tests, and fails if the live /healthz does not show the new version within 3 minutes; `solidworks.yml`
   builds and tests the add-in and keeps the zip as an artifact. `domain.yml` (run by hand, `.github/scripts/kevos-domain.sh`) gives the Fly app
@@ -263,7 +265,28 @@ notes). The MSI builds unsigned on Windows in CI (`installer` job); signing wait
 - fly.toml: app `cados`, performance-1x (one dedicated core, 2 GB), `auto_stop_machines = "suspend"`, kill_timeout 15, volume
   `opensketch_data` at /data. The add-in's long poll keeps the machine awake while SOLIDWORKS is linked.
 - `supervisor.py` (`python -m opensketch --supervise`, the image's CMD): asks /healthz every 5 s, restarts the server
-  after 120 s without an answer (stacks to the log first), tells a suspended machine from a hang.
+  after 120 s without an answer (stacks to the log first), tells a suspended machine from a hang. With
+  OPENSKETCH_PERSIST_URL it first restores the data folder from an object store and copies changes back
+  (`persist.py`, below).
+- Cloudflare (migration from Fly, Nov 2026; plan in gocore-website `docs/BIZOMAT-CLOUDFLARE-MIGRATION.md`):
+  `cloudflare/mcp` is the Worker `bizomat-mcp` (custom domain mcp.bizomat.ai; the website Worker hands bizomat.ai/cad
+  here by service binding) in front of one Cloudflare Container built from this Dockerfile (`CadServer`, standard-2,
+  `max_instances` 1, instance "main", sleeps after 30 min). The Worker sets X-Forwarded-Proto and X-Forwarded-Host
+  from the visitor's own address (`settings.ts` `forServer`) and gives the container OPENSKETCH_DATA=/data,
+  OPENSKETCH_PERSIST_URL=http://persist.bizomat.internal and OPENSKETCH_CLIENT_IP_HEADER=cf-connecting-ip
+  (`auth._client` then believes only CF-Connecting-IP). Container disks do not last, so `persist.py` (run by the
+  supervisor) restores the top-level state files from R2 (`bizomat-mcp-data`, keys `data/<name>`, names
+  `persist.NAME`) through the Worker's outbound handler (`src/persist.ts`: GET /list, GET/PUT/DELETE /o/<key>,
+  streamed, R2 checks each PUT's SHA-256; no R2 keys in the container), refuses to start the server when R2 holds no
+  `accounts.enabled` (exit 2; visitors get 503, never /setup; OPENSKETCH_PERSIST_EMPTY_OK=1 for a deliberate empty
+  start), copies changed files every 2 s (SQLite through the online backup; a refused file never holds back the
+  others) and once more on SIGTERM. OPENSKETCH_MCP_URL (`server._mcp_base`) makes the connector address
+  https://mcp.bizomat.ai/mcp; mcp.bizomat.ai is in OPENSKETCH_REDIRECT_HOSTS, so OAuth there has issuer
+  https://mcp.bizomat.ai. Tests: `tests/test_persist.py`; `cloudflare/mcp/test` (vitest; `contract.test.ts` runs
+  persist.py against the Worker's store). A local run of the whole stack (`wrangler dev` with Docker: Worker,
+  container, local R2) passed: fail-closed 503 on an empty store, cold start about 3 s, sign-in, OAuth discovery,
+  the MCP SDK client (31 tools), a stand-in Companion paired through the page with 25 s long polls and commands,
+  and sessions, computers and command history restored onto a fresh disk. Not yet deployed.
 - `cadworker.py`: CAD in worker processes, one per person and kind, at most OPENSKETCH_CAD_LANES (3) live, one place
   kept for the owner, idle ones stop after 15 min, workers over 800 MB replaced. `OPENSKETCH_CAD_WORKERS=0` runs in
   threads (tests/conftest.py sets it).
@@ -289,6 +312,9 @@ notes). The MSI builds unsigned on Windows in CI (`installer` job); signing wait
 - Large assemblies are slow to read: each read exports a STEP of the bodies that changed.
 - Account admin page (`/admin`) covers people, passwords, invites and open sign-up; early access codes and Google
   sign-in setup are still API only (`/api/account/settings`, `/api/account/google`).
+- On Cloudflare: a state file over 64 MiB is not copied to R2 (logged; `bridge.sqlite` grows with the command
+  history); files in transit (uploads, exports, file chunks) do not survive a container restart; a container killed
+  without SIGTERM loses up to 2 s of changes.
 - KEVOS: not yet run on Windows or in a real SOLIDWORKS; the MSI is built only by CI; no MCP progress notifications
   (JSON responses), progress is in `sw_command_status`; ChatGPT and Grok connectors untested; the gateway is one
   process (SQLite, live sessions in memory).
