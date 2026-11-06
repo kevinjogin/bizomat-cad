@@ -110,6 +110,25 @@ data. In order:
 If wrangler says it sees more than one Cloudflare account, set `$env:CLOUDFLARE_ACCOUNT_ID = '<the account ID>'` in
 that window first.
 
+## kevos.com back to the KEVOS site (once)
+
+kevos.com showed the BIZOMAT website from 6 Nov 2026, when it went live there before moving to Fly. To put the KEVOS
+site back (Stage 0):
+
+```powershell
+.\bizomat.ps1 restore kevos
+```
+
+It uses wrangler's sign-in on this computer (`npx wrangler login` in `gocore-website`, done in setup). It shows the
+deployment that is live now and the one it will put back, the last one before 6 Nov 2026 01:03 UTC (the KEVOS site,
+built from gocore-website `c79e297`), with the command that undoes it. Type `yes` and it puts that version back on the
+Worker `throbbing-block-6c61`, then sets its routes to `kevos.com/*` alone (bizomat.ai is served by Fly). It finishes
+by checking that kevos.com shows KEVOS and bizomat.ai still shows BIZOMAT. Add `-DryRun` to see what it would do. Run
+it again at any time: when kevos.com already runs that version, it only sets the routes.
+
+Then one click in the Cloudflare dashboard, which wrangler cannot do: Workers & Pages > `throbbing-block-6c61` >
+Settings > Build > Disconnect. Until then, gocore-website stops any such build before it deploys.
+
 ## Going back
 
 | App | How |
@@ -117,12 +136,14 @@ that window first.
 | website | `fly releases -a bizomat --image`, then in `gocore-website`: `fly deploy --config fly.website.toml -a bizomat --image <the previous image>` |
 | cad | `fly releases -a cados --image`, then `fly deploy -a cados --image <the previous image>` |
 | tasks | `npx wrangler rollback --env preview` in `PMO` |
+| kevos.com | the command `restore kevos` showed before it started (`node ... rollback <version> --name throbbing-block-6c61`) |
 
 ## So that only the laptop deploys
 
-- **Website:** Cloudflare's Git connection on the old Worker (`throbbing-block-6c61`) must be off: while it is on,
-  every push to `main` of gocore-website is published on kevos.com. Cloudflare dashboard > Workers & Pages >
-  `throbbing-block-6c61` > Settings > Builds > Disconnect.
+- **Website:** Cloudflare's Git connection on the old Worker (`throbbing-block-6c61`, kevos.com) should be off:
+  Cloudflare dashboard > Workers & Pages > `throbbing-block-6c61` > Settings > Build > Disconnect. Until it is,
+  gocore-website refuses to build there (its `wrangler.toml` runs `scripts/kevos-guard.mjs` first), so kevos.com
+  keeps the KEVOS site.
 - **CAD and Project Management:** GitHub already deploys neither. CADOS has no Fly token on GitHub, and PMO's deploy
   workflows are switched off by its `CLOUDFLARE_DEPLOY_ENABLED` setting.
 
