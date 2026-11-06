@@ -226,13 +226,13 @@ def docs(signed_in: bool = False, base: str = "") -> bytes:
            ("troubleshooting", "Troubleshooting"), ("security", "Security"), ("manual", "Install without the installer")]
     toc_html = "".join(f'<li><a href="#{k}">{v}</a></li>' for k, v in toc)
     trouble = [
-        ("No Companion icon in the taskbar after signing in to Windows", "Start the Companion from the Start menu. In its tray menu, tick Start with Windows."),
+        ("No Companion icon in the taskbar after signing in to Windows", "Start BIZOMAT Companion from the Start menu. In its tray menu, tick Start with Windows."),
         ("The Companion says Not registered", "The computer is not paired. Open the tray menu and choose Pair this computer."),
         ("The Companion says the computer was removed", "It was removed from your account. Pair it again; it gets a new key."),
         ("The Companion says Offline, retrying", "It cannot reach the CAD Automation service. Check that the service address opens in a browser. Behind a company proxy, allow that address. The Companion retries by itself."),
         ("A signed request is refused with TOKEN_EXPIRED", "The computer's clock is wrong. Turn on automatic time in Windows Settings."),
         ("Connected, SOLIDWORKS closed", "This is normal. Open SOLIDWORKS."),
-        ("Waiting for the add-in", "In SOLIDWORKS, open Tools > Add-Ins and tick the add-in (CADOS) under Active and Start Up. Do not run SOLIDWORKS as administrator."),
+        ("Waiting for the add-in", "In SOLIDWORKS, open Tools > Add-Ins and tick BIZOMAT CAD Automation (CADOS before version 0.13) under Active and Start Up. Do not run SOLIDWORKS as administrator."),
         ("No add-in tab, menu or task pane in SOLIDWORKS", "As above. If it is still missing, repair the installation: Windows Settings > Apps > BIZOMAT CAD Automation for SOLIDWORKS > Modify > Repair."),
         ("Windows says it protected your PC when you open the installer", "The early access installer is not code-signed yet. Check that you downloaded it from this site, then choose More info > Run anyway, or ask your IT team."),
         ("The assistant says several computers are connected", "Name the computer in your request, or set a default computer on the SOLIDWORKS page."),
@@ -284,7 +284,7 @@ API and is being validated on more installations. Run the self test on each new 
 <div class="actions"><a class="btn btn-primary" href="/download/solidworks">Download for SOLIDWORKS</a>
 <a class="small" href="{brand.RELEASES_URL}" rel="noopener">All releases and checksums</a></div>
 <ol class="steps">
-<li><h4>Download the installer</h4><p>Sign in with your account and download <code>CADOS-for-SOLIDWORKS-x64.msi</code>.
+<li><h4>Download the installer</h4><p>Sign in with your account and download <code>BIZOMAT-CAD-Automation-x64.msi</code>.
 Each release also lists a SHA-256 checksum you can compare.</p></li>
 <li><h4>Close SOLIDWORKS</h4><p>Save your work and close SOLIDWORKS before you install.</p></li>
 <li><h4>Run the installer</h4><p>Open the file and follow the steps. Windows asks for administrator approval once. The
@@ -292,7 +292,7 @@ installer adds the add-in and the Companion, registers the add-in with every SOL
 computer and starts the Companion when you sign in to Windows. There are no files to copy and no registry to edit. It does
 not change your CAD files.</p></li></ol>
 <p>IT teams can install silently and set the service address for everyone:</p>
-<pre class="code">msiexec /i CADOS-for-SOLIDWORKS-x64.msi /qn GATEWAY_URL={svc}</pre></section>
+<pre class="code">msiexec /i BIZOMAT-CAD-Automation-x64.msi /qn GATEWAY_URL={svc}</pre></section>
 
 <section id="pair"><h2>Pair a computer</h2>
 <p>Pairing adds the computer to your account. After an interactive install the Companion opens its pairing window
@@ -312,7 +312,7 @@ activity and links to your dashboard and help;</li>
 <li>a <b>BIZOMAT: confirm</b> window whenever your assistant asks for a destructive change.</li></ul>
 <p>Your AI assistant does the work: CAD Automation runs no AI of its own. Ask in Claude, ChatGPT or another connected assistant,
 and follow the work in SOLIDWORKS and in the task pane.</p>
-<div class="callout"><div>No add-in tab? Open <b>Tools &gt; Add-Ins</b>, tick the add-in (<b>CADOS</b>) under Active and Start Up, and make
+<div class="callout"><div>No BIZOMAT tab? Open <b>Tools &gt; Add-Ins</b>, tick <b>BIZOMAT CAD Automation</b> (CADOS before version 0.13) under Active and Start Up, and make
 sure SOLIDWORKS is not running as administrator.</div></div></section>
 
 <section id="connect"><h2>Connect your AI assistant</h2>
@@ -356,10 +356,10 @@ the new one. Nothing needs to be copied.</p></section>
 you agree. You can also run a newer installer over the old one. Settings and the pairing are kept.</li>
 <li><b>Repair:</b> Windows Settings &gt; Apps &gt; BIZOMAT CAD Automation for SOLIDWORKS &gt; Modify &gt; Repair.</li>
 <li><b>Uninstall:</b> Windows Settings &gt; Apps &gt; BIZOMAT CAD Automation for SOLIDWORKS &gt; Uninstall. To also take the
-computer off your account, first use the Start menu entry Remove this computer from CADOS, or remove it on the
+computer off your account, first use the Start menu entry Remove this computer from CAD Automation, or remove it on the
 SOLIDWORKS page.</li></ul>
-<p>The installer still carries its earlier name, CADOS for SOLIDWORKS (up to 0.11: KEVOS Bridge), and upgrades earlier
-versions in place.</p></section>
+<p>Earlier versions were called CADOS for SOLIDWORKS (0.12) and KEVOS Bridge (up to 0.11). This installer upgrades them
+in place: the computer stays paired.</p></section>
 
 <section id="troubleshooting"><h2>Troubleshooting</h2>
 <p>Start with the tray icon: right-click it, choose Status, then Copy diagnostics. The diagnostics hold no passwords or keys.</p>
@@ -382,7 +382,7 @@ your model. Your model files are saved on your computer. See the <a href="/priva
 <section id="manual"><h2>Install without the installer</h2>
 <p>For development, or a computer where you cannot run the installer: download the add-in package from the SOLIDWORKS page
 (Direct link and manual installation), unzip it, run the setup program in the folder and choose Install for me. It installs the same
-add-in for your Windows user only. Then, in SOLIDWORKS, open CADOS &gt; Status (the add-in's menu) and paste the address and the add-in
+add-in for your Windows user only. Then, in SOLIDWORKS, open BIZOMAT &gt; Status and paste the address and the add-in
 key from Settings. This route links one SOLIDWORKS session directly, without the Companion.</p>
 <p>Where SOLIDWORKS does not list add-ins installed without administrator rights, the package also writes a launcher
 macro in your Documents folder (the setup program shows where). It is not the add-in: it only starts the installed

@@ -215,9 +215,9 @@ notes). The MSI builds unsigned on Windows in CI (`installer` job); signing wait
   LoadAddIn fallback, removal of old per-user OpenSketch registrations, crash restart, logs in
   %LOCALAPPDATA%\KEVOS\Bridge\logs, diagnostics, updater (gateway-signed manifest, hash, Authenticode, same publisher,
   the person asked). `--pair`, `--diagnose`, `--unpair`, `--startup on|off`, `--exit`.
-- Installer (`installer/KEVOS-Bridge.wxs`, `installer/build.ps1`): WiX 5 per-machine x64 MSI "CADOS for SOLIDWORKS"
-  (UpgradeCode unchanged: upgrades KEVOS Bridge), `CADOS-for-SOLIDWORKS-<version>-x64.msi` plus the stable
-  `CADOS-for-SOLIDWORKS-x64.msi`; built and (with secrets) signed by the `installer` job in `solidworks.yml` on Windows;
+- Installer (`installer/KEVOS-Bridge.wxs`, `installer/build.ps1`): WiX 5 per-machine x64 MSI "BIZOMAT CAD Automation for
+  SOLIDWORKS" (UpgradeCode unchanged: upgrades CADOS for SOLIDWORKS and KEVOS Bridge), `BIZOMAT-CAD-Automation-<version>-x64.msi`
+  plus the stable `BIZOMAT-CAD-Automation-x64.msi` (and `CADOS-for-SOLIDWORKS-x64.msi`, the 0.12 stable name, as a copy); built and (with secrets) signed by the `installer` job in `solidworks.yml` on Windows;
   releases `bridge-latest` and `bridge-v<version>`. `/download/solidworks` (public) redirects to
   OPENSKETCH_INSTALLER_URL, else the published `bridge-release.json` msi_url, else the stable bridge-latest asset.
   `tests/test_installer.py` keeps the MSI, the add-in code and the download link in step.

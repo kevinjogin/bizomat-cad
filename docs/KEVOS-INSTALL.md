@@ -13,7 +13,7 @@ Windows, open SOLIDWORKS, and ask your AI app. No command prompt, no macro, no a
 
 ## 1. Install
 
-1. Download `CADOS-for-SOLIDWORKS-x64.msi` from https://bizomat.ai/cad ("Download CADOS for SOLIDWORKS") or the release
+1. Download `BIZOMAT-CAD-Automation-x64.msi` from https://bizomat.ai/cad ("Download for SOLIDWORKS") or the release
    page. Check its SHA-256 against the `.sha256` file next to it if you like.
 2. Save your work and close SOLIDWORKS.
 3. Double-click the MSI and follow it. Windows asks for administrator approval once.
@@ -26,7 +26,7 @@ CAD files.
 IT departments can install silently and set the server address for everyone:
 
 ```bash
-msiexec /i CADOS-for-SOLIDWORKS-x64.msi /qn GATEWAY_URL=https://bizomat.ai/cad
+msiexec /i BIZOMAT-CAD-Automation-x64.msi /qn GATEWAY_URL=https://bizomat.ai/cad
 ```
 
 ## 2. Register (pair) the computer
@@ -87,7 +87,7 @@ Windows** (per user), **Exit**. The add-in's KEVOS window has **Ask me before de
 
 - **Update:** the Companion checks for a newer signed release and asks before installing it (tray > Check for updates).
   Or run the newer MSI. Settings and the registration are kept.
-- **Repair:** Settings > Apps > CADOS for SOLIDWORKS > Modify > Repair, or `msiexec /fa CADOS-for-SOLIDWORKS-<version>-x64.msi`.
+- **Repair:** Settings > Apps > BIZOMAT CAD Automation for SOLIDWORKS > Modify > Repair, or `msiexec /fa BIZOMAT-CAD-Automation-<version>-x64.msi`.
 - **Uninstall:** Settings > Apps > KEVOS Bridge > Uninstall. Your settings, logs and registration stay in your user
   profile, so a reinstall picks up where you were. To also leave the account, run **Remove this computer from KEVOS**
   first.

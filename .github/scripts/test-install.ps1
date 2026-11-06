@@ -1,4 +1,4 @@
-# Installs an MSI of CADOS for SOLIDWORKS silently, checks what it put on the computer, uninstalls it and checks that
+# Installs an MSI of BIZOMAT CAD Automation for SOLIDWORKS silently, checks what it put on the computer, uninstalls it and checks that
 # it is gone. CI runs it on a Windows runner without SOLIDWORKS (.github/workflows/installer-test.yml). On a test PC,
 # from an administrator PowerShell:
 #   powershell -ExecutionPolicy Bypass -File .github\scripts\test-install.ps1 -Msi <path to the .msi>
@@ -19,7 +19,7 @@ function Value([string]$key, [string]$name) {
 
 $addin = '{275256ff-b73a-4e4f-9ea8-842b6626d471}'
 $dir = Join-Path $env:ProgramFiles 'KEVOS\Bridge'
-$files = 'OpenSketch.Sw.dll', 'KEVOS.Companion.exe', 'KEVOS.Companion.exe.config', 'OpenSketchSW.exe',
+$files = 'OpenSketch.Sw.dll', 'BIZOMAT.bmp', 'KEVOS.Companion.exe', 'KEVOS.Companion.exe.config', 'OpenSketchSW.exe',
          'OpenSketchSW.exe.config', 'OpenSketch.swb', 'README.txt', 'LICENSE.txt', 'SOURCE.txt'
 $run = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run'
 
@@ -29,7 +29,9 @@ Check ($code -eq 0 -or $code -eq 3010) "install finished (exit code $code)"
 foreach ($f in $files) { Check (Test-Path (Join-Path $dir $f)) "installed $f" }
 $codebase = Value "HKLM:\SOFTWARE\Classes\CLSID\$addin\InprocServer32" 'CodeBase'
 Check (("$codebase" -replace '\\', '/') -like '*/KEVOS/Bridge/OpenSketch.Sw.dll') "add-in COM class registered ($codebase)"
-Check ((Value "HKLM:\SOFTWARE\SolidWorks\Addins\$addin" 'Title') -eq 'CADOS') 'listed in SOLIDWORKS Add-Ins as CADOS'
+Check ((Value "HKLM:\SOFTWARE\SolidWorks\Addins\$addin" 'Title') -eq 'BIZOMAT CAD Automation') 'listed in SOLIDWORKS Add-Ins as BIZOMAT CAD Automation'
+$icon = Value "HKLM:\SOFTWARE\SolidWorks\Addins\$addin" 'Icon Path'
+Check ($icon -and $icon.EndsWith('BIZOMAT.bmp') -and (Test-Path $icon)) "with the BIZOMAT icon in Tools > Add-Ins ($icon)"
 $version = Value 'HKLM:\SOFTWARE\KEVOS\Bridge' 'Version'
 Check ([bool]$version) "install record (version $version)"
 Check ((Value 'HKLM:\SOFTWARE\KEVOS\Bridge' 'GatewayUrl') -eq $Gateway) "service address $Gateway"

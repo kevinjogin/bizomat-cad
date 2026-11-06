@@ -4,7 +4,10 @@
   <PropertyGroup>
     <TargetFramework>net48</TargetFramework>
     <OutputType>WinExe</OutputType>
+    <!-- the BIZOMAT mark: Start menu, Apps list, taskbar and Explorer -->
+    <ApplicationIcon>../Shared/bizomat.ico</ApplicationIcon>
     <AssemblyName>OpenSketchSW</AssemblyName>
+    <AssemblyTitle>BIZOMAT CAD Automation for SOLIDWORKS, manual installation</AssemblyTitle>
     <RootNamespace>OpenSketch.Sw.App</RootNamespace>
     <PlatformTarget>x64</PlatformTarget>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>

@@ -63,8 +63,8 @@ The feature format is in [docs/DOCUMENT.md](docs/DOCUMENT.md).
 ## Use it
 
 1. **Sign in** at https://bizomat.ai/cad (or your own server, see below) and open the dashboard.
-2. **Install CADOS** on the SOLIDWORKS computer (SOLIDWORKS 2022 or newer, Windows 64-bit): the Windows installer
-   (`CADOS-for-SOLIDWORKS-x64.msi`, "Download CADOS for SOLIDWORKS" on the website) adds the CADOS add-in and the KEVOS Companion; see
+2. **Install BIZOMAT CAD Automation** on the SOLIDWORKS computer (SOLIDWORKS 2022 or newer, Windows 64-bit): the Windows
+   installer (`BIZOMAT-CAD-Automation-x64.msi`, "Download for SOLIDWORKS" on the website) adds the add-in and the BIZOMAT Companion; see
    [docs/KEVOS-INSTALL.md](docs/KEVOS-INSTALL.md). Without the installer: download the add-in package from the
    dashboard, unzip it, run `OpenSketchSW.exe` and click Install for me (per Windows user).
 3. **Pair the computer** when the KEVOS Companion asks, then open SOLIDWORKS: the CADOS tab and task pane show the link. (Direct

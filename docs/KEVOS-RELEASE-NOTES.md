@@ -1,4 +1,21 @@
-# CADOS for SOLIDWORKS release notes (KEVOS Bridge up to 0.11)
+# BIZOMAT CAD Automation for SOLIDWORKS release notes (CADOS for SOLIDWORKS in 0.12, KEVOS Bridge up to 0.11)
+
+## 0.13.0 (BIZOMAT CAD Automation for SOLIDWORKS)
+
+- New names, in BIZOMAT's style: the add-in is **BIZOMAT CAD Automation** (Tools > Add-Ins, the **BIZOMAT** tab, menu
+  and task pane), the tray app is **BIZOMAT Companion**, and Windows lists **BIZOMAT CAD Automation for SOLIDWORKS**
+  by BIZOMAT. The Start menu folder is BIZOMAT: BIZOMAT Companion, Pair this computer with CAD Automation, CAD
+  Automation diagnostics, Remove this computer from CAD Automation.
+- The new BIZOMAT logo everywhere: a B whose lower counter is a teal forward arrow (work that moves on by itself), on
+  a navy tile. It is the Companion's tray icon (with its status dot), the add-in's tab, toolbar and task pane, the
+  programs' icon (Start menu, Apps list, taskbar, Explorer) and, new, the add-in's icon in Tools > Add-Ins. The old
+  KEVOS and CADOS tabs are removed when found.
+- A clear file name: **BIZOMAT-CAD-Automation-x64.msi** (and `BIZOMAT-CAD-Automation-<version>-x64.msi` per release).
+  The 0.12 name, `CADOS-for-SOLIDWORKS-x64.msi`, is still published as a copy so links already given out keep working.
+- A computer paired with an earlier address of CAD Automation (cados.kevos.com, cados.fly.dev, cad.bizomat.ai) moves to
+  https://bizomat.ai/cad when the Companion starts, and stays paired: the same server, the same pairing.
+- Install it over any earlier version: it upgrades CADOS for SOLIDWORKS and KEVOS Bridge in place. Every id stays (the
+  COM classes, files, pipe, keys, registry and data folders), so the computer stays paired and its settings stay.
 
 ## 0.12.3 (CADOS for SOLIDWORKS; test build)
 

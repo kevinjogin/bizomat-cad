@@ -783,7 +783,7 @@ def api_sw_download():
 
 
 # The Windows installer (CADOS for SOLIDWORKS, an MSI built by solidworks.yml on Windows). Public: it holds no data.
-INSTALLER_DEFAULT = "https://github.com/jogkev-creator/CADOS/releases/download/bridge-latest/CADOS-for-SOLIDWORKS-x64.msi"
+INSTALLER_DEFAULT = "https://github.com/jogkev-creator/CADOS/releases/download/bridge-latest/BIZOMAT-CAD-Automation-x64.msi"
 
 
 def installer_url() -> str:
