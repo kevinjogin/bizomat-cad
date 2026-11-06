@@ -254,6 +254,16 @@ def _base(request: Request) -> str:
     return auth.public_url(dict(request.headers))
 
 
+def _mcp_base(request: Request) -> str:
+    """The connector address AI apps are given: OPENSKETCH_MCP_URL when it is an https address ending in /mcp (on
+    Cloudflare, https://mcp.bizomat.ai/mcp: the MCP server's own host), else the public address followed by /mcp.
+    The other addresses keep working for apps connected with them (canonical.py)."""
+    v = os.environ.get("OPENSKETCH_MCP_URL", "").strip().rstrip("/")
+    if v.startswith("https://") and v.endswith(mcp_server.PATHS[0]) and " " not in v:
+        return v
+    return _base(request) + mcp_server.PATHS[0]
+
+
 def _user(request: Request) -> dict | None:
     return getattr(request.state, "user", None)
 
@@ -824,7 +834,7 @@ def api_connect_new_address(request: Request):
     if not u or u.get("legacy"):
         return JSONResponse({"error": "Create an account first."}, status_code=400)
     accounts.new_mcp_address(u["id"])
-    return {"mcp_url": f"{_base(request)}{mcp_server.PATHS[0]}/{auth.mcp_token_for(u)}"}
+    return {"mcp_url": f"{_mcp_base(request)}/{auth.mcp_token_for(u)}"}
 
 
 PAGE_HEADERS = {"Cache-Control": "no-store", "X-Frame-Options": "DENY", "Referrer-Policy": "same-origin"}
@@ -907,9 +917,9 @@ def api_solidworks(request: Request):
     from . import mcpauth, swbridge
     base = _base(request)
     u = _user(request)
-    path = mcp_server.PATHS[0]
+    mcp = _mcp_base(request)
     return {"server": base, "key": swbridge.key_for(u), "status": swbridge.status(u), "download": SW_DOWNLOAD.is_file(),
-            "url": base + path, "private_url": f"{base}{path}/{auth.mcp_token_for(u)}",
+            "url": mcp, "private_url": f"{mcp}/{auth.mcp_token_for(u)}",
             "signin": auth.mode(request.scope) != "open", "apps": mcpauth.grants_for(u["id"] if u else "local"),
             "user": {"name": u.get("name"), "email": u.get("email"), "password_by": u.get("password_by")}
             if u and not u.get("legacy") else None}

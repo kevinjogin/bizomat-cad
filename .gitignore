@@ -10,3 +10,4 @@ solidworks/**/bin/
 solidworks/**/obj/
 solidworks/dist/
 opensketch/static/downloads/
+.wrangler/

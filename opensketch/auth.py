@@ -630,6 +630,12 @@ def _from_cloudflare(ip: str) -> bool:
 
 def _client(scope) -> str:
     h = _headers(scope)
+    if os.environ.get("OPENSKETCH_CLIENT_IP_HEADER", "").strip().lower() == "cf-connecting-ip":
+        # Cloudflare Containers: the server is reachable only through its Worker (bizomat-mcp), and Cloudflare's edge
+        # sets CF-Connecting-IP on every request that reaches the Worker, so the header is the visitor's address.
+        cf = (h.get("cf-connecting-ip") or "").strip()
+        if cf:
+            return _net(cf)
     ip = h.get("fly-client-ip") or (h.get("x-forwarded-for") or "").split(",")[0].strip()
     ip = ip or (scope.get("client") or ("?",))[0]
     cf = (h.get("cf-connecting-ip") or "").strip()
