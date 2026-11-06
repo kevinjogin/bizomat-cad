@@ -134,7 +134,7 @@ def test_csharp_companion_and_addin_link_end_to_end(base, probe_dll, tmp_path): 
 
         # paused by the person at the computer: refused with that reason
         probe.say("pause")
-        assert _until(lambda: _mcp(base, "sw_status", {})[1].get("note", "").startswith("CADOS is paused"))
+        assert _until(lambda: _mcp(base, "sw_status", {})[1].get("note", "").startswith("CAD Automation is paused"))
         res, out = _mcp(base, "sw_get_document", {})
         assert res.get("isError") and out["error_code"] == "PAUSED"
         probe.say("resume")
