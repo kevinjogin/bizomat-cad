@@ -33,4 +33,4 @@ jobs:
         run: powershell -ExecutionPolicy Bypass -File installer\build.ps1
       - name: Install, check and uninstall
         shell: pwsh
-        run: powershell -ExecutionPolicy Bypass -File .github\scripts\test-install.ps1 -Msi installer\out\CADOS-for-SOLIDWORKS-x64.msi
+        run: powershell -ExecutionPolicy Bypass -File .github\scripts\test-install.ps1 -Msi installer\out\BIZOMAT-CAD-Automation-x64.msi

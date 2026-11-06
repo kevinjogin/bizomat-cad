@@ -150,7 +150,7 @@ def test_csharp_companion_and_addin_link_end_to_end(base, probe_dll, tmp_path): 
         # removed from the account: cut off at once, and it says so
         dev = db.devices_for(None)[0]["id"]
         assert httpx.delete(base + f"/api/devices/{dev}").status_code == 200
-        assert _until(lambda: (probe.say("status"), any("Removed from your CADOS account" in line for line in probe.all))[1])
+        assert _until(lambda: (probe.say("status"), any("Removed from your CAD Automation account" in line for line in probe.all))[1])
         res, out = _mcp(base, "sw_get_document", {})
         assert res.get("isError")
         probe.say("quit")

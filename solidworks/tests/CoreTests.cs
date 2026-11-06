@@ -301,4 +301,56 @@ namespace OpenSketch.Sw.Tests
             Assert.Null(fake.Auth);
         }
     }
+
+    /// <summary>The BIZOMAT names and logo the add-in and the Companion show (Core/BrandArt.cs).</summary>
+    public class BrandArtTests
+    {
+        [Fact]
+        public void EarlierAddressesOfCadAutomationMoveToBizomatAiCad()
+        {
+            foreach (var old in new[] { "https://cados.kevos.com", "https://cados.fly.dev/", "HTTPS://CAD.BIZOMAT.AI", " https://cados.kevos.com " })
+                Assert.Equal("https://bizomat.ai/cad", OpenSketch.Sw.Bridge.DeviceConfig.CurrentAddress(old));
+            foreach (var keep in new[] { "https://bizomat.ai/cad", "https://cad.example.com", "http://localhost:8080", "https://cados.kevos.com.example.org", "" })
+                Assert.Equal(keep, OpenSketch.Sw.Bridge.DeviceConfig.CurrentAddress(keep));
+            Assert.Null(OpenSketch.Sw.Bridge.DeviceConfig.CurrentAddress(null));
+        }
+
+        [Fact]
+        public void TheLogoPathsAreClosedPolygonsInsideTheirBoxes()
+        {
+            var word = BrandArt.Polygons(BrandArt.WordmarkPath);
+            var b = BrandArt.Polygons(BrandArt.BPath);
+            var bar = BrandArt.Polygons(BrandArt.BarPath);
+            Assert.Equal(3, b.Count);            // the B, its upper counter and the forward arrow cut out of it
+            Assert.Single(bar);                  // the forward arrow (teal)
+            Assert.True(word.Count > 8);         // B, I, Z, O and its counter, M, A and its bar, T
+            foreach (var poly in word)
+            {
+                Assert.True(poly.Length % 2 == 0 && poly.Length >= 6);
+                for (var i = 0; i < poly.Length; i += 2)
+                {
+                    Assert.InRange(poly[i], 0f, BrandArt.WordmarkWidth);
+                    Assert.InRange(poly[i + 1], 0f, BrandArt.Height);
+                }
+            }
+            Assert.Equal(b[0], word[0]);         // the wordmark starts with the same B
+        }
+
+        [Fact]
+        public void OnlyStraightLinesAreDrawn()
+        {
+            Assert.Throws<FormatException>(() => BrandArt.Polygons("M0 0C1 1 2 2 3 3Z"));
+            Assert.Throws<FormatException>(() => BrandArt.Polygons("M0 0L"));
+        }
+
+        [Fact]
+        public void TheTabIsBizomatAndTheOldTabsGo()
+        {
+            Assert.Equal("BIZOMAT", BrandArt.TabName);
+            Assert.Equal(new[] { "KEVOS", "CADOS", "BIZOMAT" }, BrandArt.TabsToReplace());
+            Assert.Equal("BIZOMAT CAD Automation", BrandArt.Product);
+            Assert.Equal("BIZOMAT Companion", BrandArt.Companion);
+            Assert.DoesNotContain("KEVOS", BrandArt.Package + BrandArt.Product + BrandArt.Companion);
+        }
+    }
 }

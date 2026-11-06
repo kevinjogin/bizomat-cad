@@ -35,7 +35,7 @@ What the request assumed, and what the code shows:
 | Needs a toolbar and command interface | CommandManager tab, toolbar and menu existed (KEVOS). | Name. | CADOS tab, menu and toolbar; a CADOS panel button. |
 | Needs a task pane | None (a separate status window only). | Missing. | `CadosPane`: a SOLIDWORKS task pane tab with the connection state, Connect / Disconnect, prompts to copy into the assistant, the confirmation setting, live activity and links (dashboard, documentation, troubleshooting, Companion, log). |
 | Secure connection to the backend | Signed outbound link through the Companion (pairing, device key, signed commands); the direct link (key) as fallback. | None. | Kept as is. |
-| Professional installer | WiX MSI per machine, upgrade, repair, uninstall, built on Windows in CI; unsigned until a signing service is set up. | Name, file name, a stable download link; code signing. | MSI named **CADOS for SOLIDWORKS**, file `CADOS-for-SOLIDWORKS-<version>-x64.msi`, plus `CADOS-for-SOLIDWORKS-x64.msi` (stable name) on the `bridge-latest` release. Signing: still open (docs/KEVOS-SIGNING.md). |
+| Professional installer | WiX MSI per machine, upgrade, repair, uninstall, built on Windows in CI; unsigned until a signing service is set up. | Name, file name, a stable download link; code signing. | MSI named **CADOS for SOLIDWORKS**, file `BIZOMAT-CAD-Automation-<version>-x64.msi`, plus `BIZOMAT-CAD-Automation-x64.msi` (stable name) on the `bridge-latest` release. Signing: still open (docs/KEVOS-SIGNING.md). |
 | Versions and compatibility | Built against SOLIDWORKS 2022; one registration for every installed version. Not yet run in a real SOLIDWORKS. | Verification on real installations. | Stated as such on the site (Supported SOLIDWORKS versions) and in docs/KEVOS-VERSIONS.md; automated checks below. |
 
 Nothing that worked was removed: the COM ids, the ProgIDs, the per-user installer, the direct link, the launcher macro,
@@ -45,7 +45,7 @@ the MCP tools, the API and the device protocol are unchanged.
 
 - `solidworks.yml` (every push): builds the add-in, Companion and per-user installer against the SOLIDWORKS 2022
   interop on Linux and runs the .NET tests; on Windows, builds again, runs the tests, and builds the MSI with WiX.
-  Artifact `CADOS-for-SOLIDWORKS-MSI` on every run.
+  Artifact `BIZOMAT-CAD-Automation-MSI` on every run.
 - `tests/test_installer.py`: the MSI registers the same CLSID and ProgID as the add-in code, lists it in Tools >
   Add-Ins under the add-in's own title and description, keeps the UpgradeCode, is named CADOS for SOLIDWORKS; the
   version is higher than the last release; the MSI names in `build.ps1` and the server's download link agree.

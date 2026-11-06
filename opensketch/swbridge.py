@@ -375,7 +375,7 @@ def addin_too_old(user: dict | None, needed: str, what: str, device: str | None 
 
 NOT_CONNECTED = ("SOLIDWORKS is not connected. On the computer: check that the Companion is running and that "
                  "SOLIDWORKS is open with the add-in loaded (its tab and task pane). Without the Companion, "
-                 "open the add-in's Status window in SOLIDWORKS (CADOS > Status) and connect. The setup steps are on the CAD Automation dashboard.")
+                 "open BIZOMAT > Status in SOLIDWORKS and connect. The setup steps are on the CAD Automation dashboard.")
 
 
 def target_key(user: dict | None, device: str | None = None) -> str:
