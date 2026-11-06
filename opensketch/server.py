@@ -211,7 +211,7 @@ class PagePolicy:
         return await self.app(scope, receive, with_policy)
 
 
-app = FastAPI(title="CADOS by KEVOS", lifespan=lifespan, docs_url=None, redoc_url=None)  # /docs is the documentation page
+app = FastAPI(title="BIZOMAT CAD Automation", lifespan=lifespan, docs_url=None, redoc_url=None)  # /docs is the documentation page
 app.add_middleware(auth.PasswordGate)
 app.add_middleware(RequestLog)
 app.add_middleware(BodyLimit)  # before the sign-in gate reads anything
@@ -464,7 +464,7 @@ def api_remove_user(user_id: str, request: Request):
     mcpauth.drop_user(user_id)  # their connected AI apps stop working too
     _forget(user_id)
     for d in devicebridge.devices_for({"id": user_id}):  # and their paired computers are cut off at once
-        devicebridge.revoke_device({"id": user_id}, d["id"], "This computer's account was removed from CADOS.")
+        devicebridge.revoke_device({"id": user_id}, d["id"], "This computer's account was removed from CAD Automation.")
     return {"removed": user_id}
 
 
@@ -651,7 +651,7 @@ def _sw_person(request: Request):
     tok = authz[7:].strip() if authz[:7].lower() == "bearer " else ""
     ok, user = swbridge.resolve(tok)
     if not ok:
-        page = f"your CADOS dashboard, {auth.public_url(dict(request.headers))}"
+        page = f"your CAD Automation dashboard, {auth.public_url(dict(request.headers))}"
         if swbridge.retired(tok):
             raise HTTPException(401, f"A new SOLIDWORKS key was made, so this one stopped working. Paste the new key from {page}")
         raise HTTPException(401, f"This SOLIDWORKS key is not valid. Copy the key again from {page}")
@@ -778,7 +778,7 @@ def api_sw_key(request: Request):
 def api_sw_download():
     if not SW_DOWNLOAD.is_file():
         raise HTTPException(404, "The SOLIDWORKS add-in package is not on this server.")
-    return FileResponse(SW_DOWNLOAD, filename="CADOS-SOLIDWORKS-addin.zip", media_type="application/zip",
+    return FileResponse(SW_DOWNLOAD, filename="BIZOMAT-CAD-Automation-SOLIDWORKS-addin.zip", media_type="application/zip",
                         headers={"Cache-Control": "no-cache"})
 
 
@@ -787,7 +787,7 @@ INSTALLER_DEFAULT = "https://github.com/jogkev-creator/CADOS/releases/download/b
 
 
 def installer_url() -> str:
-    """Where "Download CADOS for SOLIDWORKS" goes: OPENSKETCH_INSTALLER_URL, else the release this server publishes to
+    """Where "Download for SOLIDWORKS" goes: OPENSKETCH_INSTALLER_URL, else the release this server publishes to
     its computers (bridge-release.json, the same file the Companion's updates come from), else the newest build."""
     env = os.environ.get("OPENSKETCH_INSTALLER_URL", "").strip()
     if env.startswith("https://"):
@@ -806,8 +806,8 @@ def download_solidworks():
     return RedirectResponse(installer_url(), status_code=302, headers={"Cache-Control": "no-store"})
 
 
-# ----------------------------------------------------------------------------- registered computers (KEVOS)
-# devicebridge.py: pairing, the KEVOS Companion's signed link (/v2/...), the person's computers (/api/devices)
+# ----------------------------------------------------------------------------- registered computers
+# devicebridge.py: pairing, the Companion's signed link (/v2/...), the person's computers (/api/devices)
 
 from . import devicebridge  # noqa: E402
 
@@ -991,7 +991,7 @@ async def oauth_token(request: Request):
     try:
         out = await _oauth_client_call(request, mcpauth.token)
     except mcpauth.OAuthError as e:
-        extra = {"WWW-Authenticate": 'Basic realm="CADOS"'} if e.status == 401 else {}
+        extra = {"WWW-Authenticate": 'Basic realm="BIZOMAT CAD Automation"'} if e.status == 401 else {}
         return JSONResponse(e.body(), status_code=e.status, headers={**OAUTH_CORS, **extra})
     return JSONResponse(out, headers={**OAUTH_CORS, "Pragma": "no-cache"})
 

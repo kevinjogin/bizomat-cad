@@ -149,7 +149,7 @@ def issuer_for(resource: str, headers: dict) -> str:
 
 # The MCP endpoint's addresses (mcp_server.PATHS): /mcp, and /solidworks/mcp, a second address early connectors
 # used. Both are the same server, so a token from either works on both.
-RESOURCES = {"/mcp": "CADOS", "/solidworks/mcp": "CADOS"}
+RESOURCES = {"/mcp": "BIZOMAT CAD Automation", "/solidworks/mcp": "BIZOMAT CAD Automation"}
 
 
 def resource_url(headers: dict, path: str = "/mcp") -> str:
@@ -466,7 +466,7 @@ def check_authorize(params: dict, headers: dict) -> tuple[dict, dict]:
     link on this site bounce a signed-in person to any site (real apps always send a valid request)."""
     rec = client(params.get("client_id", ""), fetch=False)
     if rec is None:
-        raise OAuthError("invalid_client", "CADOS does not know this app, or could not read its details. Remove the connector in your AI app and add it again.")
+        raise OAuthError("invalid_client", "CAD Automation does not know this app, or could not read its details. Remove the connector in your AI app and add it again.")
     redirect = params.get("redirect_uri") or (rec["redirect_uris"][0] if len(rec["redirect_uris"]) == 1 else "")
     if redirect not in rec["redirect_uris"]:
         raise OAuthError("invalid_request", "The app sent a return address it did not register.")
@@ -488,7 +488,7 @@ def check_authorize(params: dict, headers: dict) -> tuple[dict, dict]:
     target = known.get(_canon(res or ""), resource_url(headers))
     scope = params.get("scope") or SCOPE
     if any(s not in (SCOPE, "openid", "profile", "email", "offline_access") for s in scope.split()):
-        raise OAuthError("invalid_scope", f"The app asked for more than CADOS offers (scope {SCOPE}).")
+        raise OAuthError("invalid_scope", f"The app asked for more than CAD Automation offers (scope {SCOPE}).")
     req = {"client_id": params["client_id"], "redirect_uri": redirect, "state": state,
            "code_challenge": params["code_challenge"], "resource": target, "scope": SCOPE}
     return rec, req
@@ -547,7 +547,7 @@ def _new_tokens(d: dict, grant_id: str) -> dict:
 
 
 def _user_exists(user_id: str, scope=None) -> bool:
-    """The grant's person can still use CADOS. Grants made before any account ("local": consent on a server open to
+    """The grant's person can still use CAD Automation. Grants made before any account ("local": consent on a server open to
     its own machine; "server": the old password sign-in) act as the owner once there is one, and with no account
     only "local" ones, and only for a request from that machine itself (open mode)."""
     from . import accounts, auth
@@ -582,9 +582,9 @@ def token(form: dict, basic: str = "", scope=None) -> dict:
                     _canon(c["resource"]), _canon(c["resource"].rsplit("/mcp", 1)[0]), _canon(_origin(c["resource"]))):
                 raise OAuthError("invalid_target", "This server only issues tokens for its own MCP endpoint.")
             if _suspended(c["user"]):
-                raise OAuthError("invalid_grant", "This CADOS account is suspended. Ask your CADOS administrator.")
+                raise OAuthError("invalid_grant", "This CAD Automation account is suspended. Ask your administrator.")
             if not _user_exists(c["user"], scope):
-                raise OAuthError("invalid_grant", "That CADOS account no longer exists.")
+                raise OAuthError("invalid_grant", "That CAD Automation account no longer exists.")
             d = _load()
             gid = "osg_" + secrets.token_urlsafe(12)
             now = int(time.time())
@@ -613,11 +613,11 @@ def token(form: dict, basic: str = "", scope=None) -> dict:
             if g is None or g["client_id"] != cid or g.get("refresh_exp", 0) < now:
                 raise OAuthError("invalid_grant", "This connection was ended or has expired. Connect again.")
             if _suspended(g["user"]):  # refused, but kept: it works again once the owner resumes the account
-                raise OAuthError("invalid_grant", "This CADOS account is suspended. Ask your CADOS administrator.")
+                raise OAuthError("invalid_grant", "This CAD Automation account is suspended. Ask your administrator.")
             if not _user_exists(g["user"], scope):
                 d["grants"].pop(gid, None)
                 _save(d)
-                raise OAuthError("invalid_grant", "That CADOS account no longer exists.")
+                raise OAuthError("invalid_grant", "That CAD Automation account no longer exists.")
             out = _new_tokens(d, gid)
             g["last_used"] = int(now)
             _save(d)

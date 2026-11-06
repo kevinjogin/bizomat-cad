@@ -84,7 +84,7 @@ def test_the_server_is_handed_the_sockets_for_every_address(monkeypatch, capsys)
     monkeypatch.setattr(sys, "argv", ["opensketch", "--host", "::", "--port", "0", "--no-browser"])
     main_mod.main()
     assert got["sockets"] and got["config"].timeout_graceful_shutdown == 3
-    assert "CADOS running at http://127.0.0.1:0/ (every address)" in capsys.readouterr().out
+    assert "CAD Automation running at http://127.0.0.1:0/ (every address)" in capsys.readouterr().out
 
 
 @pytest.mark.slow

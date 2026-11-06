@@ -1,4 +1,4 @@
-"""Run the CADOS server: python -m opensketch [--port 8000] [--no-browser] [--supervise]
+"""Run the CAD Automation server: python -m opensketch [--port 8000] [--no-browser] [--supervise]
 
 Recovery, run on the server itself (on Fly: fly ssh console -a cados -C "python -m opensketch --reset-password EMAIL"):
 --reset-password EMAIL gives that account a new strong password, prints it once and signs the account out everywhere.
@@ -82,7 +82,7 @@ def main():
     sockets = listen_sockets(args.host, args.port)
     if not args.no_browser:
         threading.Timer(1.0, lambda: webbrowser.open(url)).start()
-    print(f"CADOS running at {url}" + (" (every address)" if sockets else ""), flush=True)
+    print(f"CAD Automation running at {url}" + (" (every address)" if sockets else ""), flush=True)
     # on a stop, open connections (the add-in's long polls) get 3 s to finish instead of holding the restart up
     config = uvicorn.Config("opensketch.server:app", host=_bare(args.host) or "127.0.0.1", port=args.port,
                             log_level="warning", timeout_graceful_shutdown=3)
@@ -99,7 +99,7 @@ def reset_password(email: str) -> int:
     from . import accounts, auth
     u = accounts.find_by_email(email)
     if u is None:
-        print(f"No CADOS account has the email {email.strip().lower()}.", file=sys.stderr)
+        print(f"No account has the email {email.strip().lower()}.", file=sys.stderr)
         return 1
     new = auth.suggest_password()
     accounts.set_password(u["id"], new, by="owner")
