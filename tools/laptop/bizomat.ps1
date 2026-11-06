@@ -577,8 +577,9 @@ function Deploy-Cados {
     # move cad stops cados and turns its autostart off: a deploy would start the old copy of the data again
     $machines = Get-Output 'fly' @('machines', 'list', '--app', 'cados', '--json') $c.Dir
     if ($machines) {
-        $list = @()
-        try { $list = @($machines | ConvertFrom-Json) } catch { $list = @() }
+        # ConvertFrom-JsonList: Windows PowerShell 5.1's ConvertFrom-Json would hand the list on as one object
+        $list = ConvertFrom-JsonList $machines
+        if ($null -eq $list) { $list = @() }
         foreach ($m in $list) {
             $svc = @(Get-Prop (Get-Prop $m 'config') 'services')
             if (@($svc | Where-Object { $null -ne $_ -and (Get-Prop $_ 'autostart') -eq $false }).Count -gt 0) {
