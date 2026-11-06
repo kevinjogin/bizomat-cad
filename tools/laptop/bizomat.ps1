@@ -7,7 +7,7 @@
 
     .\bizomat.ps1 setup            clone CADOS, gocore-website and PMO next to this file, or bring them up to date
     .\bizomat.ps1 status           each folder's state, GitHub's checks and what is live
-    .\bizomat.ps1 deploy website   the BIZOMAT website: moving to Fly.io (app bizomat); deploys nothing until then
+    .\bizomat.ps1 deploy website   the BIZOMAT website: Fly app bizomat (the website and the router behind bizomat.ai)
     .\bizomat.ps1 deploy cad       CAD Automation: Fly app cados (bizomat.ai/cad)
     .\bizomat.ps1 deploy tasks     Project Management: Cloudflare Worker workos-platform-preview (work.kevos.com)
 
@@ -277,6 +277,9 @@ function Show-Status {
     $biz = Get-Title 'https://bizomat.ai/'
     Write-Host "  kevos.com          $site"
     Write-Host "  bizomat.ai         $biz"
+    $router = Get-Json 'https://bizomat.fly.dev/__proxy/health'
+    $routerState = if ($router) { "version $($router.version)" } else { 'not deployed yet' }
+    Write-Host "  bizomat (Fly)      $routerState (bizomat.fly.dev/__proxy/health)"
     Write-Host "  CAD Automation     version $cadVersion (cados.fly.dev/healthz)"
     Write-Host "  Project Management $tasksState (work.kevos.com/api/health)"
 }
@@ -284,11 +287,45 @@ function Show-Status {
 # ----------------------------------------------------------------------------- deploys
 
 function Deploy-Website {
-    Write-Title 'BIZOMAT website'
-    # The BIZOMAT website moves to Fly.io (app bizomat: the website and the router for /cad and /tasks). Until that
-    # app is ready this deploys nothing. The Cloudflare Worker throbbing-block-6c61 serves only kevos.com's old KEVOS
-    # site now, and deploying the BIZOMAT site there would replace it (as on 6 Nov 2026).
-    Stop-Here 'The website is moving to Fly.io. This command will deploy it there once the bizomat app is ready; until then it deploys nothing, so kevos.com keeps the KEVOS site.'
+    Write-Title 'BIZOMAT website: Fly app bizomat (the website and the router behind bizomat.ai)'
+    Assert-Tool 'fly' 'Install flyctl: iwr https://fly.io/install.ps1 -useb | iex  then: fly auth login'
+    Assert-Node
+    $c = Get-DeployCommit 'gocore-website'
+    Show-Commit $c
+    if (-not (Test-Path -LiteralPath (Join-Path $c.Dir 'fly.website.toml'))) { Stop-Here 'gocore-website has no fly.website.toml yet: the website moves to Fly once that change is on GitHub.' }
+    if (-not $SkipChecks) {
+        Invoke-Step 'npm' @('ci', '--no-audit', '--no-fund') $c.Dir
+        Invoke-Step 'npm' @('run', 'verify') $c.Dir                                       # the site: types, tests, build, page checks
+        Invoke-Step 'node' @('--test', 'infrastructure/proxy/test/*.test.mjs') $c.Dir     # the router
+    }
+    $exists = Test-Exit 'fly' @('status', '--app', 'bizomat') $c.Dir
+    if (-not $exists) {
+        Write-Host ''
+        Write-Host 'The Fly app bizomat does not exist yet. Creating it costs nothing until it runs.' -ForegroundColor Yellow
+    }
+    if (-not (Confirm-Deploy 'the BIZOMAT website to the Fly app bizomat')) { return }
+    if (-not $exists) {
+        Invoke-Step 'fly' @('apps', 'create', 'bizomat') $c.Dir
+        Invoke-Step 'fly' @('ips', 'allocate-v6', '--app', 'bizomat') $c.Dir
+        Invoke-Step 'fly' @('ips', 'allocate-v4', '--shared', '--app', 'bizomat') $c.Dir
+    }
+    # Built on Fly's machines; one Machine for the router and one for the website; the commit as its version.
+    Invoke-Step 'fly' @('deploy', '--config', 'fly.website.toml', '--app', 'bizomat', '--remote-only', '--ha=false', '--build-arg', "BIZOMAT_VERSION=$($c.Short)") $c.Dir
+    Write-Title 'Live checks (bizomat.fly.dev until bizomat.ai points here)'
+    $want = $c.Short
+    [void](Wait-Until { (Get-Json 'https://bizomat.fly.dev/__proxy/health').version -eq $want } 180)
+    $ok = Invoke-Checks @(
+        @{ What = "the router runs $want (bizomat.fly.dev/__proxy/health)"; Test = { (Get-Json 'https://bizomat.fly.dev/__proxy/health').version -eq $want } },
+        @{ What = 'the website answers (bizomat.fly.dev)'; Test = { (Get-Title 'https://bizomat.fly.dev/') -match 'BIZOMAT' } },
+        @{ What = 'its APIs answer (/api/chat, no AI call made)'; Test = { (Get-Code 'https://bizomat.fly.dev/api/chat' 'POST' '{}') -eq 422 } },
+        @{ What = 'CAD Automation is reached over the private network (/cad/)'; Test = { (Get-Code 'https://bizomat.fly.dev/cad/') -eq 200 } },
+        @{ What = '/tasks/ sends people to Project Management (work.kevos.com)'; Test = { (Get-Code 'https://bizomat.fly.dev/tasks/') -eq 302 } },
+        @{ What = 'bizomat.ai is served by this app'; Info = $true; Test = { (Get-Body 'https://bizomat.ai/__proxy/health') -match '"ok"' } }
+    )
+    $result = if ($ok) { 'ok' } else { 'deployed; live checks failed' }
+    Write-DeployLog 'website' $c $result
+    if (-not $ok) { Stop-Here 'A live check failed. Logs: fly logs -a bizomat. To go back: fly releases -a bizomat --image, then fly deploy --config fly.website.toml -a bizomat --image <the previous image>.' }
+    Write-Host 'Done.' -ForegroundColor Green
 }
 
 function Deploy-Cad {
