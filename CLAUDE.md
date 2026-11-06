@@ -224,6 +224,17 @@ notes). The MSI builds unsigned on Windows in CI (`installer` job); signing wait
 
 ## Hosting
 
+- **Into the BIZOMAT Fly app (owner's decision, 6 Nov 2026: one Fly app for the platform).** gocore-website's
+  `apps/cad` is an exact copy of a CADOS commit (`apps/cad-source.json`, checked by git's tree hash), and the `cad`
+  process group of the Fly app `bizomat` (Sydney, its own volume `cad_data`, performance-1x 2 GB) is built from it.
+  There the entrypoint never starts this server on a volume without CAD data (a holding page instead).
+  `.\bizomat.ps1 move cad` (`tools/laptop`, running gocore-website's `infrastructure/migrate/cad/to-fly.mjs`) moves
+  the data folder byte for byte and cados's CAD settings (as root-only files on the cad volume, never printed),
+  switches the router's `UPSTREAM_CAD`, checks the same signing key and accounts through bizomat.ai/cad, and stops
+  cados with autostart off. After it, `deploy cad` deploys the cad group alone (it needs `apps/cad` = CADOS main:
+  `sync cad` makes the gocore-website branch) and refuses to deploy cados again; `back cad` is the way back;
+  `retire cados` and `delete cados` retire the app, only with the owner's go-ahead (irreversible). Steps:
+  gocore-website `infrastructure/migrate/cad/README.md`. Until the move has run, the lines below describe production.
 - Code: https://github.com/jogkev-creator/CADOS (moved from jogkev-creator/opensketchyz in Nov 2026; release
   downloads, the MSI's links and `swbridge.ADDIN_DOWNLOAD` point there). The Fly app below was linked to the old
   repository: relink it in Fly (or deploy by hand) after the move.
@@ -252,7 +263,8 @@ notes). The MSI builds unsigned on Windows in CI (`installer` job); signing wait
   `tests/test_canonical.py`, the official MCP client and a paired computer under /cad.
   Favicons (`static/favicon.svg|ico`, `ui/icon-32.png`, `ui/icon-180.png`) are the KEVOS K (drawn from the KEVOS logo;
   kevos.com could not be fetched from the build session). Origin https://cados.fly.dev (Fly
-  app `cados`, Sydney, first made with Fly Launch from GitHub on 4 Nov 2026); the deploy health checks use it.
+  app `cados`, first made with Fly Launch from GitHub on 4 Nov 2026; its one Machine and its volume are in Amsterdam,
+  although fly.toml names syd, hence the move above); the deploy health checks use it.
   One deploy source: the app is linked to this repository in Fly (Fly builds and deploys every push to main itself;
   /healthz then reports version "dev", as no commit is passed in). On a push `deploy.yml` only runs the tests (unless
   the repository variable DEPLOY_ON_PUSH is "true"); run by hand it deploys from Actions and makes a missing volume.
@@ -297,6 +309,8 @@ notes). The MSI builds unsigned on Windows in CI (`installer` job); signing wait
 
 ## Next
 
+1. The CAD move (gocore-website `infrastructure/migrate/cad/README.md`): `deploy website`, `move cad -DryRun`,
+   `move cad`, merge the `UPSTREAM_CAD` switch; then, at the owner's go-ahead, `retire cados` and later `delete cados`.
 1. Run the KEVOS checklist (`docs/KEVOS-TEST-REPORT.md` section 4) on Windows with SOLIDWORKS 2022: the MSI, the
    Companion, the add-in's new UI, events, confirmation and modal check have only been compiled, not run.
 1. Run the self test on real SOLIDWORKS installs and fix from the reports.

@@ -7,6 +7,13 @@
 # creates the owner account. GitHub Actions deploys only when run by hand (deploy.yml), and fly-status.yml reads the
 # app's state and logs.
 # Settings: https://fly.io/docs/reference/configuration/
+#
+# Being retired (6 Nov 2026): CAD Automation moves into the cad group of the Fly app bizomat (Sydney) with its data,
+# with the laptop's bizomat.ps1 move cad (gocore-website infrastructure/migrate/cad/README.md). After the move this app
+# is stopped with autostart off and must not be deployed again (bizomat.ps1 deploy cad refuses): a deploy would start
+# the old copy of the data. So Fly's GitHub link for this app must stay off (on 6 Nov 2026 it was not deploying: the
+# live version was the laptop's 685cf0d after four later merges). bizomat.ps1 back cad is the way back; retire cados and
+# delete cados end it, at the owner's go-ahead.
 
 app = 'cados'
 primary_region = 'syd'

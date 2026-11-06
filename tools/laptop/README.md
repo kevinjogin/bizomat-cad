@@ -5,9 +5,9 @@ of the code (history, backup, pull requests); deploys come from your laptop, not
 
 | App | Repository | Where it runs | Deploy command |
 | --- | --- | --- | --- |
-| BIZOMAT website (bizomat.ai) | `gocore-website` | Fly.io app `bizomat`: the website and the router in front of it (`bizomat.ai/cad` goes to `cados`, `bizomat.ai/tasks` to work.kevos.com) | `.\bizomat.ps1 deploy website` |
-| CAD Automation (bizomat.ai/cad) | `CADOS` | Fly.io app `cados` | `.\bizomat.ps1 deploy cad` |
-| Project Management (work.kevos.com, bizomat.ai/tasks) | `PMO` | Cloudflare Worker `workos-platform-preview`, moving into the Fly app `bizomat` (below: Project Management to Fly) | `.\bizomat.ps1 deploy tasks` |
+| BIZOMAT website (bizomat.ai) | `gocore-website` | Fly.io app `bizomat` (Sydney): the website, the router in front of it, Project Management (`bizomat.ai/tasks`) and CAD Automation's group | `.\bizomat.ps1 deploy website` |
+| CAD Automation (bizomat.ai/cad) | `CADOS`, copied into `gocore-website/apps/cad` | Until `move cad`: the Fly.io app `cados` (Amsterdam). After it: the `cad` group of the Fly app `bizomat` (Sydney), with its data (below: CAD Automation into bizomat) | `.\bizomat.ps1 deploy cad` |
+| Project Management (bizomat.ai/tasks) | `PMO`, in `gocore-website/apps/work` | The Fly app `bizomat` (moved from Cloudflare with `move tasks`) | `.\bizomat.ps1 deploy website` |
 
 The website and CAD Automation run on Fly.io. Project Management stays on Cloudflare until it moves to Fly with its
 data; it deploys from the laptop the same way, with Cloudflare's `wrangler` instead of `fly`. The website answers on
@@ -28,8 +28,8 @@ Cloudflare (Worker `throbbing-block-6c61`), which nothing here deploys.
    ```powershell
    mkdir C:\BIZOMAT
    cd C:\BIZOMAT
-   curl.exe -fsSL -o bizomat.ps1 https://raw.githubusercontent.com/jogkev-creator/CADOS/claude/dazzling-mccarthy-31qg86/tools/laptop/bizomat.ps1
-   curl.exe -fsSL -o README.md https://raw.githubusercontent.com/jogkev-creator/CADOS/claude/dazzling-mccarthy-31qg86/tools/laptop/README.md
+   curl.exe -fsSL -o bizomat.ps1 https://raw.githubusercontent.com/jogkev-creator/CADOS/main/tools/laptop/bizomat.ps1
+   curl.exe -fsSL -o README.md https://raw.githubusercontent.com/jogkev-creator/CADOS/main/tools/laptop/README.md
    ```
 3. Clone everything. `gocore-website` is private, so Git opens a browser once for your GitHub sign-in:
    ```powershell
@@ -110,6 +110,45 @@ data. In order:
 If wrangler says it sees more than one Cloudflare account, set `$env:CLOUDFLARE_ACCOUNT_ID = '<the account ID>'` in
 that window first.
 
+## CAD Automation into bizomat (once)
+
+CAD Automation moves from its own Fly app `cados` (one Machine and its volume in Amsterdam) into the `cad` group of the
+Fly app `bizomat` in Sydney, with its data: the same accounts, AI app connections, paired computers and signing keys,
+so connectors (`https://bizomat.ai/cad/mcp`) and paired computers keep working. The whole plan, what moves and why:
+gocore-website `infrastructure/migrate/cad/README.md`. In order:
+
+1. `.\bizomat.ps1 deploy website` (once gocore-website has the cad group): it checks that `apps/cad` is exactly the
+   CADOS commit it names, makes the volume `cad_data` (3 GB in Sydney, a snapshot every day kept 30 days) and deploys.
+   The cad Machine shows a holding page; bizomat.ai/cad is still served by cados.
+2. `.\bizomat.ps1 move cad -DryRun`: every check, and a copy of the data taken while cados keeps running, brought here
+   and checked file by file. Nothing changes. The copy is in `C:\BIZOMAT\moves\cad-<time>\`.
+3. Tell the people who use CAD Automation about a pause of a few minutes, then `.\bizomat.ps1 move cad`: the same checks,
+   type yes, and it moves it: bizomat.ai/cad says "being moved", cados is frozen, the data copied, checked on both
+   sides and imported, the CAD server started with it, live checks (the same signing key, the accounts, OAuth), and
+   cados stopped so it cannot serve the old copy. If a step fails, it goes back to cados by itself. `-Force` replaces
+   data an earlier attempt left on the cad volume (kept in `/data/backups`).
+4. Check it yourself: sign in at https://bizomat.ai/cad/login; Admin lists the same people, Settings shows the same
+   private connector address, SOLIDWORKS lists the same computers; ask your AI app to run `sw_status`.
+5. Make the route permanent: merge the gocore-website change that sets `UPSTREAM_CAD =
+   "http://cad.process.bizomat.internal:8001"` in `fly.website.toml`. Until it is merged, `deploy website` stops, so
+   no deploy can send bizomat.ai/cad back to the old copy.
+6. Only when you are sure, and at your go-ahead: `.\bizomat.ps1 retire cados` (releases cados's public addresses:
+   `cados.fly.dev` and every name pointing at them stop answering; type `release cados`), and at the end of the
+   rollback window `.\bizomat.ps1 delete cados` (the app, its Machine and its volume; type `delete cados`). Neither can
+   be undone. Then delete the `moves\cad-*` folders: they hold copies of the data with every key.
+
+The way back after a move: `.\bizomat.ps1 back cad` (cados again, with its data as at the move; what changed in the cad
+group since then stays there). Old addresses: `cados.kevos.com` and `cados.fly.dev` reach cados directly and stop
+answering when it stops; computers with the 0.13 Companion use bizomat.ai/cad by themselves. To keep
+`cados.kevos.com`, move it to `bizomat` (a certificate, then its DNS record: a production DNS change, so yours to
+approve).
+
+After the move, `.\bizomat.ps1 deploy cad` deploys CADOS main to the cad group alone. It needs `apps/cad` in
+gocore-website to be CADOS main: `.\bizomat.ps1 sync cad` makes the branch that brings it across (it pushes it to
+GitHub and prints the pull request link, title ending in `[skip ci]`); merge it, then deploy. `deploy website` leaves
+CAD Automation running unless its code or the platform scripts changed. `sync cad` makes a commit: Git needs your name
+and email once (`git config --global user.name ...` and `user.email ...`).
+
 ## kevos.com back to the KEVOS site (once)
 
 kevos.com showed the BIZOMAT website from 6 Nov 2026, when it went live there before moving to Fly. To put the KEVOS
@@ -133,8 +172,10 @@ Settings > Build > Disconnect. Until then, gocore-website stops any such build b
 
 | App | How |
 | --- | --- |
-| website | `fly releases -a bizomat --image`, then in `gocore-website`: `fly deploy --config fly.website.toml -a bizomat --image <the previous image>` |
-| cad | `fly releases -a cados --image`, then `fly deploy -a cados --image <the previous image>` |
+| website | `fly releases -a bizomat --image`, then in `gocore-website`: `fly deploy --config fly.website.toml -a bizomat --image <the previous image> --ha=false` |
+| cad (after move cad) | `fly releases -a bizomat --image`, then in `gocore-website`: `fly deploy --config fly.website.toml -a bizomat --image <the previous image> --process-groups cad --ha=false` |
+| cad (before move cad) | `fly releases -a cados --image`, then `fly deploy -a cados --image <the previous image>` |
+| the CAD move | `.\bizomat.ps1 back cad` |
 | tasks | `npx wrangler rollback --env preview` in `PMO` |
 | kevos.com | the command `restore kevos` showed before it started (`node ... rollback <version> --name throbbing-block-6c61`) |
 
