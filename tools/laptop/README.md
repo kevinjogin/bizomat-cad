@@ -7,7 +7,7 @@ of the code (history, backup, pull requests); deploys come from your laptop, not
 | --- | --- | --- | --- |
 | BIZOMAT website (bizomat.ai) | `gocore-website` | Fly.io app `bizomat`: the website and the router in front of it (`bizomat.ai/cad` goes to `cados`, `bizomat.ai/tasks` to work.kevos.com) | `.\bizomat.ps1 deploy website` |
 | CAD Automation (bizomat.ai/cad) | `CADOS` | Fly.io app `cados` | `.\bizomat.ps1 deploy cad` |
-| Project Management (work.kevos.com, bizomat.ai/tasks) | `PMO` | Cloudflare Worker `workos-platform-preview` | `.\bizomat.ps1 deploy tasks` |
+| Project Management (work.kevos.com, bizomat.ai/tasks) | `PMO` | Cloudflare Worker `workos-platform-preview`, moving into the Fly app `bizomat` (below: Project Management to Fly) | `.\bizomat.ps1 deploy tasks` |
 
 The website and CAD Automation run on Fly.io. Project Management stays on Cloudflare until it moves to Fly with its
 data; it deploys from the laptop the same way, with Cloudflare's `wrangler` instead of `fly`. The website answers on
@@ -86,6 +86,29 @@ The website's assistant and AI search use Cloudflare Workers AI. After the first
 It asks for your Cloudflare account ID and a token made with Cloudflare's **Workers AI** template (My Profile > API
 Tokens > Create Token), checks them with Cloudflare and saves them on Fly. What you type for the token stays hidden:
 it is not shown, not kept in PowerShell's history and not written to a file. Run it again to replace the token.
+
+## Project Management to Fly (once)
+
+Project Management moves from Cloudflare (work.kevos.com) into the Fly app `bizomat`, at bizomat.ai/tasks, with its
+data. In order:
+
+1. `.\bizomat.ps1 deploy website`: the first deploy with Project Management creates its Machine and its data volume
+   (3 GB, a snapshot every day). bizomat.ai/tasks still sends people to work.kevos.com.
+2. Tell the people who use work.kevos.com about a short pause, and change nothing there until step 5.
+3. `.\bizomat.ps1 move tasks`: it exports the data from Cloudflare (only reading it), checks every table and file and
+   shows the counts. Type `yes` and it uploads the copy, checks it on Fly and puts it in place (what was there is kept
+   in a backup on the volume). The copy also stays in `C:\BIZOMAT\moves\tasks-<time>\`: it holds real data, so
+   delete it once step 5 is checked. Add `-DryRun` to export and check only.
+4. Check it before anyone else sees it: open https://bizomat.fly.dev/__preview/work, sign in with your own email and
+   password, and compare a board, a document and a file with work.kevos.com. https://bizomat.fly.dev/__preview/clear
+   takes that browser back to the website.
+5. The switch (a change on GitHub, then `.\bizomat.ps1 deploy website`): bizomat.ai/tasks is Project Management on
+   Fly. Everyone signs in there once more.
+6. Then work.kevos.com moves to Fly too, so its old links keep working (gocore-website `docs/BIZOMAT-DEPLOYMENT.md`,
+   section 6c).
+
+If wrangler says it sees more than one Cloudflare account, set `$env:CLOUDFLARE_ACCOUNT_ID = '<the account ID>'` in
+that window first.
 
 ## Going back
 

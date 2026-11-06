@@ -12,6 +12,8 @@
     .\bizomat.ps1 deploy tasks     Project Management: Cloudflare Worker workos-platform-preview (work.kevos.com)
     .\bizomat.ps1 secrets website  the website's Workers AI access on Fly (the assistant and AI search): asks for
                                    the Cloudflare account ID and token, checks them, saves them on Fly
+    .\bizomat.ps1 move tasks       Project Management's data from Cloudflare to the Fly app bizomat (bizomat.ai/tasks):
+                                   exports and checks it (Cloudflare only read), then asks before it changes Fly
 
   secrets never shows the token or keeps it: it is typed at a hidden prompt, checked with Cloudflare and passed
   straight to Fly, so it is not on screen, in PowerShell's history or in a file.
@@ -32,7 +34,7 @@
 #>
 [CmdletBinding()]
 param(
-    [Parameter(Position = 0)] [ValidateSet('setup', 'status', 'deploy', 'secrets', 'help')] [string] $Command = 'help',
+    [Parameter(Position = 0)] [ValidateSet('setup', 'status', 'deploy', 'secrets', 'move', 'help')] [string] $Command = 'help',
     [Parameter(Position = 1)] [ValidateSet('website', 'cad', 'tasks')] [string] $App = '',
     [switch] $DryRun,
     [switch] $SkipChecks,
@@ -291,6 +293,12 @@ function Show-Status {
 
 # ----------------------------------------------------------------------------- deploys
 
+function Test-WorkReady {
+    # The router's view of Project Management: /__proxy/ready lists each backend's health.
+    $b = Get-Body 'https://bizomat.fly.dev/__proxy/ready'
+    try { return [bool](($b | ConvertFrom-Json).upstreams.work.ok) } catch { return $false }
+}
+
 function Deploy-Website {
     Write-Title 'BIZOMAT website: Fly app bizomat (the website and the router behind bizomat.ai)'
     Assert-Tool 'fly' 'Install flyctl: iwr https://fly.io/install.ps1 -useb | iex  then: fly auth login'
@@ -319,14 +327,19 @@ function Deploy-Website {
     Write-Title 'Live checks (bizomat.fly.dev until bizomat.ai points here)'
     $want = $c.Short
     [void](Wait-Until { (Get-Json 'https://bizomat.fly.dev/__proxy/health').version -eq $want } 180)
-    $ok = Invoke-Checks @(
+    $checks = @(
         @{ What = "the router runs $want (bizomat.fly.dev/__proxy/health)"; Test = { (Get-Json 'https://bizomat.fly.dev/__proxy/health').version -eq $want } },
         @{ What = 'the website answers (bizomat.fly.dev)'; Test = { (Get-Title 'https://bizomat.fly.dev/') -match 'BIZOMAT' } },
         @{ What = 'its APIs answer (/api/chat, no AI call made)'; Test = { (Get-Code 'https://bizomat.fly.dev/api/chat' 'POST' '{}') -eq 422 } },
         @{ What = 'CAD Automation is reached over the private network (/cad/)'; Test = { (Get-Code 'https://bizomat.fly.dev/cad/') -eq 200 } },
-        @{ What = '/tasks/ sends people to Project Management (work.kevos.com)'; Test = { (Get-Code 'https://bizomat.fly.dev/tasks/') -eq 302 } },
-        @{ What = 'bizomat.ai is served by this app'; Info = $true; Test = { (Get-Body 'https://bizomat.ai/__proxy/health') -match '"ok"' } }
+        @{ What = '/tasks/ answers (302 to work.kevos.com until the switch, then Project Management)'; Test = { $t = Get-Code 'https://bizomat.fly.dev/tasks/'; ($t -eq 302) -or ($t -eq 200) } }
     )
+    # Project Management on Fly, once fly.website.toml runs it (the work group)
+    if (Select-String -LiteralPath (Join-Path $c.Dir 'fly.website.toml') -Pattern '^\s*work\s*=' -Quiet) {
+        $checks += @{ What = 'Project Management runs on Fly (the router reports work healthy)'; Test = { Test-WorkReady } }
+    }
+    $checks += @{ What = 'bizomat.ai shows this website'; Info = $true; Test = { (Get-Title 'https://bizomat.ai/') -match 'BIZOMAT' } }
+    $ok = Invoke-Checks $checks
     $result = if ($ok) { 'ok' } else { 'deployed; live checks failed' }
     Write-DeployLog 'website' $c $result
     if (-not $ok) { Stop-Here 'A live check failed. Logs: fly logs -a bizomat. To go back: fly releases -a bizomat --image, then fly deploy --config fly.website.toml -a bizomat --image <the previous image>.' }
@@ -448,6 +461,40 @@ function Set-WebsiteSecrets {
     else { Write-Host 'Saved on Fly, but the website does not use AI yet. Look at: fly logs --app bizomat' -ForegroundColor Yellow }
 }
 
+function Move-Tasks {
+    # Project Management's data from Cloudflare (D1 and R2) to the work Machine of the Fly app bizomat, with this
+    # computer's wrangler and fly sign-ins. gocore-website's apps/work/scripts/migrate/to-fly.mjs does the work:
+    # prepare only reads Cloudflare; apply, after you type yes, uploads, checks and puts the data in place on Fly.
+    Write-Title 'Project Management to Fly: its data from Cloudflare to the Fly app bizomat (bizomat.ai/tasks)'
+    Assert-Tool 'fly' 'Install flyctl: iwr https://fly.io/install.ps1 -useb | iex  then: fly auth login'
+    Assert-Node
+    $c = Get-DeployCommit 'gocore-website'
+    Show-Commit $c
+    $work = Join-Path $c.Dir 'apps\work'
+    if (-not (Test-Path -LiteralPath (Join-Path $work 'scripts\migrate\to-fly.mjs'))) { Stop-Here 'gocore-website has no move tool yet (apps/work/scripts/migrate/to-fly.mjs): it comes with the Project Management on Fly change.' }
+    if (-not (Test-Exit 'fly' @('status', '--app', 'bizomat'))) { Stop-Here 'The Fly app bizomat does not exist yet: run .\bizomat.ps1 deploy website first.' }
+    Invoke-Step 'npm' @('ci', '--no-audit', '--no-fund') $work     # wrangler and the move's packages
+    $dir = Join-Path $Root ('moves\tasks-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+    Write-Host ''
+    Write-Host "Working folder: $dir"
+    Write-Host 'It holds a copy of Project Management''s data: keep it on this computer, delete it once bizomat.ai/tasks is checked.' -ForegroundColor Yellow
+    Write-Host 'If wrangler says it sees more than one Cloudflare account: $env:CLOUDFLARE_ACCOUNT_ID = ''<the account ID>'', then run this again.'
+    Invoke-Step 'node' @('scripts/migrate/to-fly.mjs', 'prepare', $dir) $work
+    if ($DryRun) { Write-Host 'Dry run: the copy is prepared and checked; nothing on Fly changed.' -ForegroundColor Yellow; return }
+    Write-Host ''
+    Write-Host 'Next: upload this copy and replace the data of Project Management on Fly with it (what is there now is kept in /data/backups).'
+    Write-Host 'work.kevos.com is not changed, and bizomat.ai/tasks still sends people there until the switch.'
+    $typed = Read-Host 'Put this copy on Fly now? Type yes to continue (anything else stops)'
+    if ("$typed".Trim() -ne 'yes') { Write-Host 'Stopped. Nothing on Fly changed.'; return }
+    Invoke-Step 'node' @('scripts/migrate/to-fly.mjs', 'apply', $dir) $work
+    Write-DeployLog 'tasks-move' $c 'applied'
+    Write-Title 'Next'
+    Write-Host '1. Open https://bizomat.fly.dev/__preview/work, sign in with your own email and password, and compare a board,'
+    Write-Host '   a document and a file with work.kevos.com. Until the switch, leave work.kevos.com unchanged.'
+    Write-Host '2. https://bizomat.fly.dev/__preview/clear takes that browser back to the website.'
+    Write-Host '3. Then the switch: bizomat.ai/tasks serves Project Management from Fly.'
+}
+
 # ----------------------------------------------------------------------------- main
 
 switch ($Command) {
@@ -463,6 +510,9 @@ switch ($Command) {
     }
     'secrets' {
         if ($App -eq 'website') { Set-WebsiteSecrets } else { Stop-Here 'Say which: .\bizomat.ps1 secrets website' }
+    }
+    'move' {
+        if ($App -eq 'tasks') { Move-Tasks } else { Stop-Here 'Say which: .\bizomat.ps1 move tasks' }
     }
     default { Get-Help -Detailed $PSCommandPath }
 }
