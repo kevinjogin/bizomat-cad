@@ -10,6 +10,11 @@
     .\bizomat.ps1 deploy website   the BIZOMAT website: Fly app bizomat (the website and the router behind bizomat.ai)
     .\bizomat.ps1 deploy cad       CAD Automation: Fly app cados (bizomat.ai/cad)
     .\bizomat.ps1 deploy tasks     Project Management: Cloudflare Worker workos-platform-preview (work.kevos.com)
+    .\bizomat.ps1 secrets website  the website's Workers AI access on Fly (the assistant and AI search): asks for
+                                   the Cloudflare account ID and token, checks them, saves them on Fly
+
+  secrets never shows the token or keeps it: it is typed at a hidden prompt, checked with Cloudflare and passed
+  straight to Fly, so it is not on screen, in PowerShell's history or in a file.
 
   A deploy sends exactly what GitHub holds on the repository's main branch, never local edits. The folder must be
   on that branch, have no local changes and match GitHub; an old checkout once replaced the website (8 Oct 2026).
@@ -27,7 +32,7 @@
 #>
 [CmdletBinding()]
 param(
-    [Parameter(Position = 0)] [ValidateSet('setup', 'status', 'deploy', 'help')] [string] $Command = 'help',
+    [Parameter(Position = 0)] [ValidateSet('setup', 'status', 'deploy', 'secrets', 'help')] [string] $Command = 'help',
     [Parameter(Position = 1)] [ValidateSet('website', 'cad', 'tasks')] [string] $App = '',
     [switch] $DryRun,
     [switch] $SkipChecks,
@@ -394,6 +399,55 @@ function Deploy-Tasks {
     Write-Host 'Done.' -ForegroundColor Green
 }
 
+function Set-WebsiteSecrets {
+    # CF_ACCOUNT_ID and CF_AI_TOKEN on the Fly app bizomat: the website's assistant and AI search use Workers AI with
+    # them (without them, search runs on keywords). The token is never printed: not even in the command shown.
+    Write-Title 'Workers AI for the BIZOMAT website (Fly app bizomat)'
+    Assert-Tool 'fly' 'Install flyctl: iwr https://fly.io/install.ps1 -useb | iex  then: fly auth login'
+    if (-not (Test-Exit 'fly' @('status', '--app', 'bizomat'))) { Stop-Here 'The Fly app bizomat does not exist yet: run .\bizomat.ps1 deploy website first.' }
+    Write-Host 'The account ID is on the Cloudflare dashboard (Workers & Pages, right-hand side: Account ID).'
+    $account = "$(Read-Host 'Cloudflare account ID')".Trim().ToLowerInvariant()
+    # The website refuses to start with a malformed ID, so it is checked here, before Fly has it.
+    if ($account -notmatch '^[0-9a-f]{32}$') { Stop-Here 'That is not an account ID (32 characters, 0-9 and a-f). Nothing was changed.' }
+    $secure = Read-Host 'Workers AI token (what you type or paste stays hidden; then press Enter)' -AsSecureString
+    $token = (New-Object System.Net.NetworkCredential('', $secure)).Password.Trim()
+    if ($token -notmatch '^[A-Za-z0-9_.-]{20,}$') { Stop-Here 'That does not look like a Cloudflare API token. Nothing was changed.' }
+
+    Write-Host 'Checking them with Cloudflare (reads the Workers AI model list; costs nothing)...'
+    $status = 0
+    try {
+        $r = Invoke-RestMethod -UseBasicParsing -TimeoutSec 60 -Uri "https://api.cloudflare.com/client/v4/accounts/$account/ai/models/search?per_page=1" `
+            -Headers @{ Authorization = "Bearer $token"; 'User-Agent' = 'bizomat-local' }
+        if ($r.success) { $status = 200 }
+    } catch {
+        $p = $_.Exception.PSObject.Properties['Response']
+        if ($p -and $p.Value) { try { $status = [int]$p.Value.StatusCode } catch { $status = 0 } }
+    }
+    if ($status -ne 200) {
+        if ($status -in @(400, 401, 403, 404)) { Stop-Here "Cloudflare refused them (HTTP $status): check the account ID, and that the token was made with the Workers AI template for this account. Nothing was changed." }
+        Stop-Here 'Could not reach Cloudflare to check the token. Nothing was changed; try again in a minute.'
+    }
+    Write-Host 'Cloudflare accepted them.' -ForegroundColor Green
+
+    Write-Host ''
+    Write-Host '> fly secrets set CF_ACCOUNT_ID=<the account ID> CF_AI_TOKEN=<hidden> --app bizomat' -ForegroundColor DarkGray
+    & fly secrets set "CF_ACCOUNT_ID=$account" "CF_AI_TOKEN=$token" --app bizomat
+    $code = $LASTEXITCODE
+    $token = $null
+    if ($code -ne 0) { Stop-Here "fly secrets set failed (exit code $code)." }
+
+    Write-Title 'Live check (bizomat.fly.dev)'
+    $ai = Wait-Until {
+        try {
+            $d = Invoke-RestMethod -UseBasicParsing -TimeoutSec 30 -Method Post -ContentType 'application/json' `
+                -Uri 'https://bizomat.fly.dev/api/discover' -Headers @{ 'User-Agent' = 'bizomat-local' } -Body '{"question":"weld strength"}'
+            return ($d.ok -and $d.ai)
+        } catch { return $false }
+    } 180
+    if ($ai) { Write-Host 'The website uses Workers AI: its assistant and AI search are on.' -ForegroundColor Green }
+    else { Write-Host 'Saved on Fly, but the website does not use AI yet. Look at: fly logs --app bizomat' -ForegroundColor Yellow }
+}
+
 # ----------------------------------------------------------------------------- main
 
 switch ($Command) {
@@ -406,6 +460,9 @@ switch ($Command) {
             'tasks' { Deploy-Tasks }
             default { Stop-Here 'Say which: .\bizomat.ps1 deploy website | cad | tasks' }
         }
+    }
+    'secrets' {
+        if ($App -eq 'website') { Set-WebsiteSecrets } else { Stop-Here 'Say which: .\bizomat.ps1 secrets website' }
     }
     default { Get-Help -Detailed $PSCommandPath }
 }
