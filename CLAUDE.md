@@ -305,7 +305,8 @@ notes). The MSI builds unsigned on Windows in CI (`installer` job); signing wait
   The data moves from Fly with `cloudflare/mcp/scripts/move-from-fly.mjs` (prepare, then apply) before the DNS switch.
 - `cadworker.py`: CAD in worker processes, one per person and kind, at most OPENSKETCH_CAD_LANES (3) live, one place
   kept for the owner, idle ones stop after 15 min, workers over 800 MB replaced. `OPENSKETCH_CAD_WORKERS=0` runs in
-  threads (tests/conftest.py sets it).
+  threads (tests/conftest.py sets it), so `tests/test_cadworker.py` imports every module first in a fresh process and
+  runs sw_tools' worker functions in a real worker (a worker's first import is the module of the function it runs).
 
 - One Windows PC (`windows/`): `setup.ps1` (Python 3.12 venv, pinned packages, copies the add-in zip from
   Downloads), `start.ps1` (asks for an optional public https address for a tunnel; no server password; runs on port
