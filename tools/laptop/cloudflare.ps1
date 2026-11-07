@@ -626,6 +626,8 @@ function Show-Switch {
     )
     Write-Host ''
     Write-Host 'Also done: move tasks -Final, then move cad, a few minutes before; secrets website.'
+    Write-Host 'Every computer on CAD Automation 0.13 or later (it moves itself from cados.kevos.com, cados.fly.dev and'
+    Write-Host 'cad.bizomat.ai to bizomat.ai/cad). An older Companion keeps talking to Fly and gets no commands after the switch.'
     Write-Host ''
     Write-Host 'The switch itself is yours, in the Cloudflare dashboard (this script never changes DNS):' -ForegroundColor White
     Write-Host '  1. SSL/TLS > Overview for bizomat.ai: Full (strict).'
