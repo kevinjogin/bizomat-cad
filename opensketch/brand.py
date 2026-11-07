@@ -57,7 +57,8 @@ def support_url() -> str:
 
 
 def checksum_url() -> str:
-    """The installer's published SHA-256 (https://bizomat.ai/downloads/cad/BIZOMAT-CAD-Automation-x64.msi.sha256)."""
+    """The installer's published SHA-256 (https://bizomat.ai/downloads/cad/BIZOMAT-CAD-Automation-x64.msi.sha256).
+    Pages link /download/solidworks.sha256, which answers for the installer this server gives and else comes here."""
     return f"{site_url()}/downloads/cad/{INSTALLER_NAME}.sha256"
 
 
@@ -178,7 +179,7 @@ def footer() -> str:
 <div><h4>Product</h4><ul><li><a href="/overview#product">Overview</a></li><li><a href="/overview#how">How it works</a></li>
 <li><a href="/overview#integrations">Integrations</a></li><li><a href="/overview#security">Security</a></li></ul></div>
 <div><h4>Resources</h4><ul><li><a href="/docs">Documentation</a></li><li><a href="/docs#troubleshooting">Troubleshooting</a></li>
-<li><a href="/download/solidworks">Download for SOLIDWORKS</a></li><li><a href="{escape(checksum_url())}" rel="noopener">Installer checksum</a></li><li><a href="{escape(support_url())}" rel="noopener">Support</a></li></ul></div>
+<li><a href="/download/solidworks">Download for SOLIDWORKS</a></li><li><a href="/download/solidworks.sha256">Installer checksum</a></li><li><a href="{escape(support_url())}" rel="noopener">Support</a></li></ul></div>
 <div><h4>{PLATFORM}</h4><ul><li><a href="{site}/" rel="noopener">bizomat.ai</a></li><li><a href="{escape(work_url())}/" rel="noopener">{WORK_NAME}</a></li>
 <li><a href="{escape(site_page("engine-room"))}" rel="noopener">The Engine Room</a></li></ul></div></div>
 <div class="footer-base"><span>{FULL}. Part of the {PLATFORM} platform.</span>
