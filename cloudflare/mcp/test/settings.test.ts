@@ -1,7 +1,7 @@
 // What the Worker hands the container: its environment, and the answer while it cannot start.
 import { describe, expect, it } from 'vitest';
 import { PERSIST_HOST } from '../src/persist';
-import { forServer, isPaused, PASSED, PAUSED_DETAIL, serverEnv, unavailable, WORKER_HEALTH } from '../src/settings';
+import { forServer, FROM_FLY, isPaused, PASSED, PAUSED_DETAIL, serverEnv, unavailable, WORKER_HEALTH } from '../src/settings';
 
 describe('server environment', () => {
   it('always points the server at the data store and the edge address header', () => {
@@ -19,7 +19,7 @@ describe('server environment', () => {
       OPENSKETCH_REDIRECT_HOSTS: 'mcp.bizomat.ai,cados.kevos.com',
       OPENSKETCH_ACCESS_CODE: '   ', // blank: left out, so the server's own setting applies
       OPENSKETCH_VERSION: 'abc1234',
-      OPENSKETCH_PASSWORD: 'never passed', // not in the list
+      OPENSKETCH_DEBUG_ANYTHING: 'never passed', // not in the list
       DATA: { get() {} }, // a binding, not a setting
       CAD: {},
     });
@@ -28,9 +28,18 @@ describe('server environment', () => {
     expect(env.OPENSKETCH_REDIRECT_HOSTS).toBe('mcp.bizomat.ai,cados.kevos.com');
     expect(env.OPENSKETCH_VERSION).toBe('abc1234');
     expect(env).not.toHaveProperty('OPENSKETCH_ACCESS_CODE');
-    expect(env).not.toHaveProperty('OPENSKETCH_PASSWORD');
+    expect(env).not.toHaveProperty('OPENSKETCH_DEBUG_ANYTHING');
+    expect(env).not.toHaveProperty('OPENSKETCH_PASSWORD'); // not set here: a fresh server has none
     expect(env).not.toHaveProperty('DATA');
     expect(Object.keys(env).every((k) => k.startsWith('OPENSKETCH_'))).toBe(true);
+  });
+
+  it('passes the secrets a Fly server may have, when they are set as Worker secrets', () => {
+    const env = serverEnv({ OPENSKETCH_PASSWORD: 'seed', OPENSKETCH_KEY_SECRET: 'k', GOOGLE_CLIENT_ID: 'id',
+      GOOGLE_CLIENT_SECRET: 's', OPENSKETCH_MCP_TOKEN: 't', OPENSKETCH_ADDIN_URL: 'https://bizomat.ai/x' });
+    expect(env).toMatchObject({ OPENSKETCH_PASSWORD: 'seed', OPENSKETCH_KEY_SECRET: 'k', GOOGLE_CLIENT_ID: 'id',
+      GOOGLE_CLIENT_SECRET: 's', OPENSKETCH_MCP_TOKEN: 't', OPENSKETCH_ADDIN_URL: 'https://bizomat.ai/x' });
+    for (const k of FROM_FLY) expect(PASSED).toContain(k);
   });
 
   it('does not let a passed setting replace the data store or the address header', () => {

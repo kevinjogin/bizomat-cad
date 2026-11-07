@@ -17,6 +17,8 @@
     .\cloudflare.ps1 deploy website    the website's Worker bizomat (gocore-website main). bizomat.ai stays on Fly
                                        until the switch
     .\cloudflare.ps1 secrets website   the website's secrets on the Worker bizomat, typed at hidden prompts
+    .\cloudflare.ps1 secrets mcp       the secrets the Fly app cados has that change how CAD Automation works (the
+                                       private address seed, Google sign-in), copied to bizomat-mcp unseen
     .\cloudflare.ps1 move tasks        Project Management's data, from Fly to D1 and R2. -Final for the last copy: it
                                        puts the Fly work Machine in maintenance first
     .\cloudflare.ps1 move cad          CAD Automation's data folder, from Fly to R2. Run it right before the switch.
@@ -435,7 +437,7 @@ function Deploy-Mcp {
     )
     Write-DeployLog 'mcp' $c $(if ($ok) { 'deployed' } else { 'deployed, checks failed' })
     if (-not $ok) { Stop-Here "A live check failed. The Worker's log: cd `"$dir`"; npx wrangler tail. The way back: npx wrangler rollback (there)." }
-    Write-Host 'Next: move cad, right before the switch (until then the server answers 503 here, by design).'
+    Write-Host 'Next: secrets mcp (once), then move cad right before the switch (until then the server answers 503 here, by design).'
 }
 
 function Deploy-Tasks {
@@ -539,6 +541,67 @@ function Set-WebsiteSecrets {
         if ($code -ne 0) { Stop-Here "wrangler secret put $name failed (exit code $code)." }
         Write-Host "  ok    $name saved" -ForegroundColor Green
     }
+}
+
+function Set-McpSecrets {
+    # The secrets a Fly server of CAD Automation may have (fly secrets list), copied to the Worker bizomat-mcp, so the
+    # server on Cloudflare behaves the same with the same data folder (cloudflare/mcp/src/settings.ts FROM_FLY): the
+    # seed of the owner's server-wide private address and of the link signatures, the key of the stored Google secret,
+    # a Google sign-in set on the server. Each value goes from the Fly Machine to wrangler through a pipe: it is never
+    # shown or written to a file.
+    Write-Title "CAD Automation's secrets: from Fly ($CadApp) to the Worker bizomat-mcp"
+    Assert-Tool 'fly' 'Install flyctl: iwr https://fly.io/install.ps1 -useb | iex  then: fly auth login'
+    Assert-Node
+    Assert-SignedIn
+    if (-not (Test-Worker 'bizomat-mcp')) { Stop-Here 'Deploy bizomat-mcp first (deploy mcp).' }
+    $c = Get-DeployCommit 'CADOS'
+    $dir = Join-Path $c.Dir 'cloudflare\mcp'
+    $w = Get-Wrangler $dir
+    $wanted = @('OPENSKETCH_PASSWORD', 'OPENSKETCH_MCP_TOKEN', 'OPENSKETCH_KEY_SECRET', 'GOOGLE_CLIENT_ID',
+        'GOOGLE_CLIENT_SECRET', 'OPENSKETCH_ACCESS_CODE', 'OPENSKETCH_INSTALLER_URL', 'OPENSKETCH_ADDIN_URL')
+    $json = Get-Output 'fly' @('secrets', 'list', '--app', $CadApp, '--json')
+    if (-not $json) { Stop-Here "Could not list the secrets of the Fly app $CadApp (fly auth login)." }
+    $have = @()
+    foreach ($s in @(ConvertFrom-Json -InputObject $json)) {
+        $n = Get-Prop $s 'Name'
+        if (-not $n) { $n = Get-Prop $s 'name' }
+        if ($n) { $have += [string]$n }
+    }
+    $copy = @($wanted | Where-Object { $have -contains $_ })
+    Write-Host "Secrets on $CadApp (names only): $(if ($have) { $have -join ', ' } else { 'none' })"
+    if (-not $copy) {
+        Write-Host 'None of them changes how the server works on Cloudflare: nothing to copy.' -ForegroundColor Green
+        return
+    }
+    $group = $(if ($CadApp -eq 'bizomat') { 'cad' } else { 'app' })
+    $list = Get-Output 'fly' @('machines', 'list', '--app', $CadApp, '--json')
+    $machines = @()
+    if ($list) {
+        foreach ($m in @(ConvertFrom-Json -InputObject $list)) {
+            $g = Get-Prop (Get-Prop (Get-Prop $m 'config') 'metadata') 'fly_process_group'
+            if ((Get-Prop $m 'state') -eq 'started' -and (-not $g -or $g -eq $group)) { $machines += [string](Get-Prop $m 'id') }
+        }
+    }
+    if ($machines.Count -ne 1) { Stop-Here "The Fly app $CadApp needs exactly one started Machine in the group $group (found $($machines.Count)). Start it: fly machine start -a $CadApp" }
+    Write-Host "To copy to bizomat-mcp, read on the Machine $($machines[0]): $($copy -join ', ')"
+    if (-not (Confirm-Step 'Copy them now?')) { return }
+    foreach ($name in $copy) {
+        $saved = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        try {
+            $value = (& fly ssh console --app $CadApp --machine $machines[0] --quiet --command "printenv $name" 2>$null | Out-String).Trim()
+        } finally { $ErrorActionPreference = $saved }
+        if (-not $value) {
+            Stop-Here "$name is a secret of $CadApp but the Machine did not give its value. Set it by hand (hidden prompt): cd `"$dir`"; npx wrangler secret put $name"
+        }
+        Write-Host "> wrangler secret put $name (the value read on the Machine, not shown)" -ForegroundColor DarkGray
+        $ErrorActionPreference = 'Continue'
+        Push-Location -LiteralPath $dir
+        try { $value | & node $w secret put $name 2>&1 | Out-Null; $code = $LASTEXITCODE } finally { Pop-Location; $value = $null; $ErrorActionPreference = $saved }
+        if ($code -ne 0) { Stop-Here "wrangler secret put $name failed (exit code $code)." }
+        Write-Host "  ok    $name copied" -ForegroundColor Green
+    }
+    Write-Host 'The container takes them at its next start: deploy mcp again, or wait until it sleeps (30 minutes idle).'
 }
 
 # ----------------------------------------------------------------------------- data
@@ -666,7 +729,28 @@ function Move-Cad {
     Write-Title "Checks ($McpHost)"
     $ok = Invoke-Checks @(@{ What = "https://$McpHost/healthz: the CAD server starts with the data"; Test = { Wait-Until { (Get-Code "https://$McpHost/healthz") -eq 200 } 300 } })
     if (-not $ok) { Stop-Here "The server did not start with the data. The Worker's log: cd `"$dir`"; npx wrangler tail." }
-    Write-Host "Sign in at https://$McpHost/login (your usual email and password) and look at Admin and SOLIDWORKS before the switch."
+    # Pages on mcp.bizomat.ai go to bizomat.ai/cad, which is Fly until the switch, so a browser cannot see this copy yet;
+    # an AI app can, through the private address (Settings on bizomat.ai/cad), which the copy carries over.
+    Write-Host ''
+    Write-Host "Check the copy as an AI app does, before the switch: paste your private address (bizomat.ai/cad > Settings)."
+    Write-Host 'It stays hidden, is used for this one check and is not kept. Press Enter to skip.'
+    $secure = Read-Host 'Private address' -AsSecureString
+    $addr = (New-Object System.Net.NetworkCredential('', $secure)).Password.Trim()
+    if ($addr) {
+        $path = ([uri]$addr).AbsolutePath -replace '^/cad/', '/'
+        $addr = $null
+        $n = 0
+        try {
+            $r = Invoke-WebRequest -UseBasicParsing -Method Post -Uri "https://$McpHost$path" -TimeoutSec 180 `
+                -Body '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' -ContentType 'application/json' `
+                -Headers @{ Accept = 'application/json, text/event-stream' }
+            $n = ([regex]::Matches([string]$r.Content, '"inputSchema"')).Count
+        } catch { $n = 0 }
+        $path = $null
+        if ($n -eq 31) { Write-Host "  ok    https://$McpHost answers your private address with the 31 tools: the copy has your account and keys" -ForegroundColor Green }
+        else { Stop-Here "https://$McpHost did not answer your private address with the 31 tools ($n). The Worker's log: cd `"$dir`"; npx wrangler tail" }
+    }
+    Write-Host 'After the switch, sign in at https://bizomat.ai/cad and look at Admin, SOLIDWORKS and History.'
 }
 
 # ----------------------------------------------------------------------------- downloads
@@ -767,7 +851,7 @@ function Show-Switch {
         @{ What = 'bizomat.ai is still Fly (not switched yet)'; Info = $true; Test = { (Get-ServedBy 'https://bizomat.ai/') -eq 'Fly' } }
     )
     Write-Host ''
-    Write-Host 'Also done: move tasks -Final, then move cad, a few minutes before; secrets website; publish installer'
+    Write-Host 'Also done: move tasks -Final, then move cad, a few minutes before; secrets website; secrets mcp; publish installer'
     Write-Host '(the Download button sends people to bizomat.ai/downloads/cad/, as the GitHub releases are private).'
     Write-Host 'Every computer on CAD Automation 0.13 or later (it moves itself from cados.kevos.com, cados.fly.dev and'
     Write-Host 'cad.bizomat.ai to bizomat.ai/cad). An older Companion keeps talking to Fly and gets no commands after the switch.'
@@ -806,7 +890,7 @@ switch ($Command) {
             default { Stop-Here 'deploy what? mcp, tasks or website (in that order the first time).' }
         }
     }
-    'secrets' { if ($App -eq 'website') { Set-WebsiteSecrets } else { Stop-Here 'secrets website is the only one.' } }
+    'secrets' { if ($App -eq 'website') { Set-WebsiteSecrets } elseif ($App -eq 'mcp') { Set-McpSecrets } else { Stop-Here 'secrets website or secrets mcp.' } }
     'publish' { if ($App -eq 'installer') { Publish-Installer } else { Stop-Here 'publish installer -File <msi> is the only one.' } }
     'move' {
         switch ($App) {
