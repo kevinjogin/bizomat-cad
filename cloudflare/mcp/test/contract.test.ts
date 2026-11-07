@@ -50,7 +50,9 @@ afterAll(async () => {
   rmSync(work, { recursive: true, force: true });
 });
 
-describe('persist.py against the Worker store', () => {
+// Linux and macOS only: the stand-ins are POSIX (a fly script run with sh, python3, mkfifo, symlinks). They run in CI
+// and on Linux; on the Windows laptop deploy mcp runs the typecheck and the other tests.
+describe.skipIf(process.platform === 'win32')('persist.py against the Worker store', () => {
   it('copies the state files up, then restores them on a fresh disk', async () => {
     const b = bucket(2); // small pages: the client must follow every page of the listing
     active = b;
