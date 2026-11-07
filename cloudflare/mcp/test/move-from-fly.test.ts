@@ -262,7 +262,9 @@ function expectOnlyItsCopy(calls: string[][], data: string) {
   }
 }
 
-describe('move-from-fly.mjs', () => {
+// Linux and macOS only: the stand-ins are POSIX (a fly script run with sh, python3, mkfifo, symlinks). They run in CI
+// and on Linux; on the Windows laptop deploy mcp runs the typecheck and the other tests.
+describe.skipIf(process.platform === 'win32')('move-from-fly.mjs', () => {
   it('keeps the rules of opensketch/persist.py', async () => {
     const t = await toolModule();
     const dir = join(work, 'rules');
