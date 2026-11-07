@@ -234,11 +234,12 @@ notes). The MSI builds unsigned on Windows in CI (`installer` job); signing wait
 
 ## Hosting
 
-- Code: https://github.com/jogkev-creator/CADOS, private (moved from jogkev-creator/opensketchyz in Nov 2026). The
-  laptop works from its own signed-in clones (`bizomat.ps1 setup`, then `git pull`); raw GitHub links do not work for a
-  private repository. GitHub Actions minutes for private repositories are limited: when they run out, every job fails
-  at once with no log (seen 7 Nov 2026), and the repository's own checks run on the laptop before each deploy
-  (`cloudflare.ps1`). The Fly app below was linked to the old repository: relink it in Fly (or deploy by hand).
+- Code: https://github.com/jogkev-creator/CADOS (moved from jogkev-creator/opensketchyz in Nov 2026; release
+  downloads are on bizomat.ai now, as the repository is private since 7 Nov 2026: see the Rules). The laptop works from
+  its own signed-in clones (`bizomat.ps1 setup`, then `git pull`); raw GitHub links do not work for a private
+  repository. GitHub Actions minutes for private repositories are limited: when they run out, every job fails at once
+  with no log (seen 7 Nov 2026), and `cloudflare.ps1` runs the repository's own checks before each deploy. The Fly app
+  below was linked to the old repository: relink it in Fly (or deploy by hand) after the move.
 - Listens on `::` (`--host ::`, `__main__.listen_sockets`: one dual-stack socket, IPv4 alone where there is no IPv6), so
   the BIZOMAT router (Fly app `bizomat`) reaches it over Fly's private network at cados.internal:8080.
 - Public address https://bizomat.ai/cad: CAD Automation lives under the BIZOMAT website's own address (the owner's
