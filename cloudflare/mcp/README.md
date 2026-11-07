@@ -39,6 +39,26 @@ Container disks start empty after every sleep, restart or deploy. The server's s
 The container reaches R2 only through the Worker's outbound handler (`src/persist.ts`): no R2 keys in the container.
 Bodies stream; R2 checks each upload against its SHA-256, so a torn upload never replaces a good copy.
 
+## Moving the data from Fly
+
+`scripts/move-from-fly.mjs` copies the server's data folder from its Fly Machine into the bucket. Run it here, on the
+owner's computer, with flyctl and wrangler signed in (Node 22.19 or later). It prints names, sizes and checksums only.
+
+1. `node scripts/move-from-fly.mjs prepare <new folder>` copies the state files from the Machine of the app `cados`
+   (for the cad group of `bizomat`: `--app bizomat --group cad`, data in `/data/cad`). It only reads Fly; the copy it
+   makes there is removed. The folder holds every key of CAD Automation: keep it on this computer, outside the
+   repository.
+2. `node scripts/move-from-fly.mjs apply <folder>` uploads the files to `bizomat-mcp-data` and reads each one back,
+   `accounts.enabled` last. It refuses a bucket that already holds a store. `--replace` first keeps what the bucket
+   holds in the folder (`replaced-<time>`); pause the Worker before it (Pause, below), so the server cannot write over
+   the new copy.
+
+To rehearse, run `apply <folder> --local .wrangler/state`, then `npx wrangler dev`: the local run has the real accounts.
+
+Run the final copy, both steps, right before the DNS switch: changes made on Fly after the copy stay on Fly. The
+laptop runs it all with `.\cloudflare.ps1 move cad` (`-Local` to rehearse, `-Replace` for a second copy, with the
+pause).
+
 ## Settings
 
 `wrangler.jsonc` `vars` set the addresses. `OPENSKETCH_ACCESS_CODE` and `OPENSKETCH_INSTALLER_URL` are optional
@@ -89,7 +109,8 @@ headers to `http://`. Remove the route to try other hosts, and read addresses in
 ## Tests
 
 `npm run check`: typecheck and vitest. `test/contract.test.ts` runs the server's own client (`opensketch/persist.py`,
-through `python3`) against `src/persist.ts` over HTTP.
+through `python3`) against `src/persist.ts` over HTTP. `test/move-from-fly.test.ts` runs the move against a stand-in
+flyctl (`test/fake-fly.mjs`) and wrangler's local R2, then restores the result with `persist.py`.
 
 ## Limits
 
@@ -97,5 +118,7 @@ through `python3`) against `src/persist.ts` over HTTP.
   (every 25 s) keeps it awake. A cold start restores the data first (about 3 s for a small data folder in a local run).
 - A state file over 64 MiB is not copied (the supervisor logs it). `bridge.sqlite` grows with the command history.
 - A container killed without SIGTERM loses at most the last 2 s of changes.
+- Files put in R2 by the move carry no SHA-256 for the store's listing (wrangler cannot set it), so `persist.py`
+  checks them only after the server has written them again; the move reads each one back instead.
 - Files in transit (uploads, exports for download, computers' file chunks) are not kept across a restart. Export
   links last an hour on a server that stays up.
