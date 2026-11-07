@@ -1,7 +1,7 @@
 // What the Worker hands the container: its environment, and the answer while it cannot start.
 import { describe, expect, it } from 'vitest';
 import { PERSIST_HOST } from '../src/persist';
-import { forServer, PASSED, serverEnv, unavailable, WORKER_HEALTH } from '../src/settings';
+import { forServer, isPaused, PASSED, PAUSED_DETAIL, serverEnv, unavailable, WORKER_HEALTH } from '../src/settings';
 
 describe('server environment', () => {
   it('always points the server at the data store and the edge address header', () => {
@@ -16,7 +16,7 @@ describe('server environment', () => {
     const env = serverEnv({
       OPENSKETCH_PUBLIC_URL: ' https://bizomat.ai/cad ',
       OPENSKETCH_MCP_URL: 'https://mcp.bizomat.ai/mcp',
-      OPENSKETCH_REDIRECT_HOSTS: 'mcp.bizomat.ai,cados.fly.dev',
+      OPENSKETCH_REDIRECT_HOSTS: 'mcp.bizomat.ai,cados.kevos.com',
       OPENSKETCH_ACCESS_CODE: '   ', // blank: left out, so the server's own setting applies
       OPENSKETCH_VERSION: 'abc1234',
       OPENSKETCH_PASSWORD: 'never passed', // not in the list
@@ -25,7 +25,7 @@ describe('server environment', () => {
     });
     expect(env.OPENSKETCH_PUBLIC_URL).toBe('https://bizomat.ai/cad');
     expect(env.OPENSKETCH_MCP_URL).toBe('https://mcp.bizomat.ai/mcp');
-    expect(env.OPENSKETCH_REDIRECT_HOSTS).toBe('mcp.bizomat.ai,cados.fly.dev');
+    expect(env.OPENSKETCH_REDIRECT_HOSTS).toBe('mcp.bizomat.ai,cados.kevos.com');
     expect(env.OPENSKETCH_VERSION).toBe('abc1234');
     expect(env).not.toHaveProperty('OPENSKETCH_ACCESS_CODE');
     expect(env).not.toHaveProperty('OPENSKETCH_PASSWORD');
@@ -69,6 +69,20 @@ describe('what the server is told about the visitor', () => {
 
   it('says http on a local run', () => {
     expect(forServer(new Request('http://127.0.0.1:8787/healthz')).headers.get('x-forwarded-proto')).toBe('http');
+  });
+});
+
+describe('paused for maintenance', () => {
+  it('only CAD_PAUSED=1 pauses', () => {
+    expect(isPaused({ CAD_PAUSED: '1' })).toBe(true);
+    expect(isPaused({ CAD_PAUSED: ' 1\n' })).toBe(true); // a secret typed or piped with a line end
+    for (const v of [undefined, '', '0', 'true', 'yes', 1]) expect(isPaused({ CAD_PAUSED: v }), String(v)).toBe(false);
+  });
+
+  it('is not passed to the server', () => {
+    expect(PASSED).not.toContain('CAD_PAUSED' as never);
+    expect(serverEnv({ CAD_PAUSED: '1' })).not.toHaveProperty('CAD_PAUSED');
+    expect(PAUSED_DETAIL).toMatch(/maintenance/);
   });
 });
 

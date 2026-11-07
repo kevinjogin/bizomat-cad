@@ -17,8 +17,8 @@ Computers      https://bizomat.ai/cad/v2/ ─┘     (website Worker bizomat han
 - MCP: `https://mcp.bizomat.ai/mcp` (OAuth issuer `https://mcp.bizomat.ai`) and `https://bizomat.ai/cad/mcp`
   (issuer `https://bizomat.ai/cad`). A connection made at either keeps working.
 - Pages: `https://bizomat.ai/cad`. A page asked for on mcp.bizomat.ai answers 301 there.
-- Computers (Companion 0.13 and later): `https://bizomat.ai/cad/v2/...`. The old hosts in `OPENSKETCH_REDIRECT_HOSTS`
-  keep working for programs while their DNS points here.
+- Computers (Companion 0.13 and later): `https://bizomat.ai/cad/v2/...`. The earlier hosts in
+  `OPENSKETCH_REDIRECT_HOSTS` (cados.kevos.com, cad.bizomat.ai) keep working for programs if their DNS is pointed here.
 - `/__worker/health`: the Worker alone, without starting the container.
 - No workers.dev address: the first deploy creates the mcp.bizomat.ai record and its certificate.
 
@@ -45,6 +45,16 @@ Bodies stream; R2 checks each upload against its SHA-256, so a torn upload never
 (`wrangler secret put OPENSKETCH_ACCESS_CODE`). `OPENSKETCH_VERSION` is passed at deploy. The server's own settings
 (Google sign-in, invites, open sign-up) are in its data, as before.
 
+## Pause
+
+`CAD_PAUSED=1`, a Worker secret so that it changes without a new image (`wrangler secret put CAD_PAUSED`, removed with
+`wrangler secret delete CAD_PAUSED`):
+- every path but `/__worker/health` answers 503 "paused for maintenance";
+- a running server is stopped with SIGTERM, so it copies its last changes to R2 first;
+- nothing starts it again until the pause is lifted.
+The health answer says `"paused": true`. It is used when a new copy of the data goes over one already in R2
+(`cloudflare.ps1 move cad -Replace`), so the server cannot write over it.
+
 ## Deploy
 
 Needs the Workers Paid plan and Docker on the machine that deploys (wrangler builds the image).
@@ -55,7 +65,14 @@ npm run check
 npx wrangler deploy --var OPENSKETCH_VERSION:$(git rev-parse --short HEAD)
 ```
 
-The owner's laptop does this with `.\bizomat.ps1 cf deploy mcp` (`tools/laptop`).
+The owner's laptop does this with `.\cloudflare.ps1 deploy mcp` (`tools/laptop/cloudflare.ps1`, next to bizomat.ps1).
+That script has the whole move in order:
+1. `check`.
+2. `deploy mcp`, `deploy tasks`, `deploy website`.
+3. `secrets website`.
+4. `move tasks`, then `move cad`.
+5. `switch`: the DNS steps, which stay the owner's.
+6. `status`.
 
 ## Local run
 

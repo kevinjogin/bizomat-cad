@@ -286,7 +286,11 @@ notes). The MSI builds unsigned on Windows in CI (`installer` job); signing wait
   persist.py against the Worker's store). A local run of the whole stack (`wrangler dev` with Docker: Worker,
   container, local R2) passed: fail-closed 503 on an empty store, cold start about 3 s, sign-in, OAuth discovery,
   the MCP SDK client (31 tools), a stand-in Companion paired through the page with 25 s long polls and commands,
-  and sessions, computers and command history restored onto a fresh disk. Not yet deployed.
+  and sessions, computers and command history restored onto a fresh disk. Not yet deployed. `CAD_PAUSED=1` (a Worker
+  secret) answers 503 and stops a running server so a new copy of the data can go into R2. The laptop runs the move
+  with `tools/laptop/cloudflare.ps1`: check, deploy mcp|tasks|website, secrets website, move tasks|cad (-Local,
+  -Replace, -Final), switch (prints the DNS steps; DNS stays the owner's), status. It is ASCII and PS 5.1, apart from
+  bizomat.ps1.
 - `cadworker.py`: CAD in worker processes, one per person and kind, at most OPENSKETCH_CAD_LANES (3) live, one place
   kept for the owner, idle ones stop after 15 min, workers over 800 MB replaced. `OPENSKETCH_CAD_WORKERS=0` runs in
   threads (tests/conftest.py sets it).
