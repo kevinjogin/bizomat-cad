@@ -243,7 +243,7 @@ def docs(signed_in: bool = False, base: str = "") -> bytes:
         ("The assistant cannot sign in", "Remove the connector in your assistant and add it again. If it still fails, use the private address in Settings."),
     ]
     rows = "".join(f"<tr><td>{a}</td><td>{b}</td></tr>" for a, b in trouble)
-    svc = escape(base.rstrip("/")) if base.startswith("https://") else "https://cados.kevos.com"  # this server's own address
+    svc = escape(base.rstrip("/")) if base.startswith("https://") else "https://bizomat.ai/cad"  # this server's own address
     html = f"""{brand.head("Documentation", "Install CAD Automation, connect your AI assistant to SOLIDWORKS, verify the connection and fix common problems.", path="/docs", index=True, base=base)}<body>
 {brand.header("docs", signed_in)}
 <main id="main"><div class="doc-hero"><div class="container"><span class="eyebrow">Documentation</span><h1>Set up CAD Automation</h1>

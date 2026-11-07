@@ -33,6 +33,8 @@
     // bizomat.ai/cad, while MCP, OAuth, /v2/ and /api/ answer with that host's own address (canonical.py).
     "OPENSKETCH_PUBLIC_URL": "https://bizomat.ai/cad",
     "OPENSKETCH_MCP_URL": "https://mcp.bizomat.ai/mcp",
-    "OPENSKETCH_REDIRECT_HOSTS": "mcp.bizomat.ai,cados.fly.dev,cados.kevos.com,cad.bizomat.ai"
+    // cados.kevos.com and cad.bizomat.ai: earlier addresses, for connectors and computers set up with them if their DNS
+    // is ever pointed here (cados.fly.dev is Fly's own name: it can only reach Fly)
+    "OPENSKETCH_REDIRECT_HOSTS": "mcp.bizomat.ai,cados.kevos.com,cad.bizomat.ai"
   }
 }

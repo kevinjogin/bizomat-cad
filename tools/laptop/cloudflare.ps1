@@ -164,6 +164,44 @@ function Get-ServedBy([string] $Url) {
     return 'another server'
 }
 
+function Get-Dns([string] $Name, [string] $Type) {
+    # Public DNS answers (Google's DNS over HTTPS), or @() when there are none.
+    $r = Get-Json "https://dns.google/resolve?name=$Name&type=$Type"
+    if (-not $r) { return @() }
+    $answers = Get-Prop $r 'Answer'
+    if (-not $answers) { return @() }
+    return @(@($answers) | ForEach-Object { "$(Get-Prop $_ 'data')".TrimEnd('.') })
+}
+
+function Show-Domain {
+    # bizomat.ai in Cloudflare: its nameservers and records from public DNS, and the zone in the account when
+    # CLOUDFLARE_API_TOKEN is set (read only; the token is never shown).
+    Write-Title 'bizomat.ai'
+    $ns = Get-Dns 'bizomat.ai' 'NS'
+    if (@($ns | Where-Object { $_ -like '*.ns.cloudflare.com' }).Count -gt 0) { Write-Host "  ok    its nameservers are Cloudflare's ($($ns -join ', '))" -ForegroundColor Green }
+    else { Write-Host "  FAIL  its nameservers are not Cloudflare's ($($ns -join ', ')): the zone must be on Cloudflare" -ForegroundColor Red }
+    foreach ($n in @('bizomat.ai', 'www.bizomat.ai', $McpHost)) {
+        $a = @(Get-Dns $n 'A') + @(Get-Dns $n 'AAAA')
+        $what = if ($a.Count -eq 0) { 'no record yet' } else { $a -join ', ' }
+        Write-Host "  dns   $($n.PadRight(15)) $what"
+    }
+    if ($env:CLOUDFLARE_API_TOKEN) {
+        try {
+            $z = Invoke-RestMethod -UseBasicParsing -TimeoutSec 30 -Uri 'https://api.cloudflare.com/client/v4/zones?name=bizomat.ai' `
+                -Headers @{ Authorization = "Bearer $env:CLOUDFLARE_API_TOKEN"; 'User-Agent' = 'bizomat-local' }
+            $zone = @(Get-Prop $z 'result') | Select-Object -First 1
+            if ($zone) {
+                $plan = Get-Prop (Get-Prop $zone 'plan') 'name'
+                $account = Get-Prop (Get-Prop $zone 'account') 'name'
+                Write-Host "  ok    bizomat.ai is a zone of the account '$account' (status $(Get-Prop $zone 'status'), plan $plan)" -ForegroundColor Green
+            } else { Write-Host '  FAIL  bizomat.ai is not a zone this token can see: add it to the account, or use a token of the right account' -ForegroundColor Red }
+        } catch { Write-Host '  note  the API token did not answer for zones (it needs Zone: Read for bizomat.ai)' -ForegroundColor Yellow }
+    } else {
+        Write-Host '  note  with wrangler login, confirm in the dashboard that Websites lists bizomat.ai as Active in this account.' -ForegroundColor Yellow
+        Write-Host '        deploy mcp checks it too: it stops if bizomat.ai is not a zone of the signed-in account.' -ForegroundColor Yellow
+    }
+}
+
 function Get-DefaultBranch([string] $Dir) {
     if (-not (Test-Exit 'git' @('remote', 'set-head', 'origin', '--auto') $Dir)) { Stop-Here "GitHub did not say which branch is $Dir's default." }
     $ref = Get-Output 'git' @('symbolic-ref', '--quiet', '--short', 'refs/remotes/origin/HEAD') $Dir
@@ -343,6 +381,7 @@ function Invoke-Check {
         if (Test-Bucket $b) { Write-Host "  ok    R2 bucket $b exists" -ForegroundColor Green } else { Write-Host "  note  R2 bucket $b not made yet (the first deploy makes it)" -ForegroundColor Yellow }
     }
     if (Test-Database $TasksDb) { Write-Host "  ok    D1 database $TasksDb exists" -ForegroundColor Green } else { Write-Host "  note  D1 database $TasksDb not made yet (deploy tasks makes it)" -ForegroundColor Yellow }
+    Show-Domain
     Show-Status
 }
 
@@ -628,6 +667,12 @@ function Show-Switch {
     Write-Host 'Also done: move tasks -Final, then move cad, a few minutes before; secrets website.'
     Write-Host 'Every computer on CAD Automation 0.13 or later (it moves itself from cados.kevos.com, cados.fly.dev and'
     Write-Host 'cad.bizomat.ai to bizomat.ai/cad). An older Companion keeps talking to Fly and gets no commands after the switch.'
+    Write-Host 'Outside Cloudflare, each listing these addresses (all on bizomat.ai, as on Fly today):'
+    Write-Host '  Google Cloud, the CAD Automation sign-in client: https://bizomat.ai/cad/auth/google/callback'
+    Write-Host '  Google Cloud, the Project Management sign-in client: https://bizomat.ai/tasks/api/auth/oauth/google/callback'
+    Write-Host '  Stripe webhook (if used): https://bizomat.ai/api/assessment/stripe-webhook'
+    Write-Host '  Turnstile widget hostnames: bizomat.ai and www.bizomat.ai'
+    Write-Host '  AI apps: new connectors at https://mcp.bizomat.ai/mcp; those made at https://bizomat.ai/cad/mcp keep working'
     Write-Host ''
     Write-Host 'The switch itself is yours, in the Cloudflare dashboard (this script never changes DNS):' -ForegroundColor White
     Write-Host '  1. SSL/TLS > Overview for bizomat.ai: Full (strict).'

@@ -17,8 +17,8 @@ Computers      https://bizomat.ai/cad/v2/ ─┘     (website Worker bizomat han
 - MCP: `https://mcp.bizomat.ai/mcp` (OAuth issuer `https://mcp.bizomat.ai`) and `https://bizomat.ai/cad/mcp`
   (issuer `https://bizomat.ai/cad`). A connection made at either keeps working.
 - Pages: `https://bizomat.ai/cad`. A page asked for on mcp.bizomat.ai answers 301 there.
-- Computers (Companion 0.13 and later): `https://bizomat.ai/cad/v2/...`. The old hosts in `OPENSKETCH_REDIRECT_HOSTS`
-  keep working for programs while their DNS points here.
+- Computers (Companion 0.13 and later): `https://bizomat.ai/cad/v2/...`. The earlier hosts in
+  `OPENSKETCH_REDIRECT_HOSTS` (cados.kevos.com, cad.bizomat.ai) keep working for programs if their DNS is pointed here.
 - `/__worker/health`: the Worker alone, without starting the container.
 - No workers.dev address: the first deploy creates the mcp.bizomat.ai record and its certificate.
 
