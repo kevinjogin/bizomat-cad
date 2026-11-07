@@ -3,7 +3,18 @@
 
 import { PERSIST_HOST } from './persist';
 
-/** Worker variables passed to the server as they are (wrangler.jsonc "vars", and --var at deploy). */
+/**
+ * Worker variables and secrets passed to the server as they are (wrangler.jsonc "vars", --var at deploy, and
+ * `wrangler secret put`). The secrets are the ones a Fly server may have been given (fly secrets list -a cados): when
+ * one is set there, the same value must be set here, or the server on Cloudflare behaves differently with the same
+ * data folder:
+ * - OPENSKETCH_PASSWORD (no page asks for it any more) or OPENSKETCH_MCP_TOKEN: the seed of the owner's server-wide
+ *   private address and of the upload and download link signatures (opensketch/auth.py _base_secret, mcp_token);
+ * - OPENSKETCH_KEY_SECRET: the key of the stored Google client secret (opensketch/secretbox.py);
+ * - GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET: Google sign-in set on the server rather than on the Admin page;
+ * - OPENSKETCH_ADDIN_URL: where the add-in update message points.
+ * tools/laptop/cloudflare.ps1 secrets mcp copies them from the Fly Machine without showing them.
+ */
 export const PASSED = [
   'OPENSKETCH_PUBLIC_URL',
   'OPENSKETCH_MCP_URL',
@@ -12,7 +23,17 @@ export const PASSED = [
   'OPENSKETCH_ACCESS_CODE',
   'OPENSKETCH_INSTALLER_URL',
   'OPENSKETCH_VERSION',
+  'OPENSKETCH_ADDIN_URL',
+  'OPENSKETCH_PASSWORD',
+  'OPENSKETCH_MCP_TOKEN',
+  'OPENSKETCH_KEY_SECRET',
+  'GOOGLE_CLIENT_ID',
+  'GOOGLE_CLIENT_SECRET',
 ] as const;
+
+/** The secrets above that a Fly server may have: cloudflare.ps1 secrets mcp copies the ones set there. */
+export const FROM_FLY = ['OPENSKETCH_PASSWORD', 'OPENSKETCH_MCP_TOKEN', 'OPENSKETCH_KEY_SECRET', 'GOOGLE_CLIENT_ID',
+  'GOOGLE_CLIENT_SECRET', 'OPENSKETCH_ACCESS_CODE', 'OPENSKETCH_INSTALLER_URL', 'OPENSKETCH_ADDIN_URL'] as const;
 
 /** The server's environment inside the container. */
 export function serverEnv(env: Record<string, unknown>): Record<string, string> {
