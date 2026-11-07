@@ -1,5 +1,15 @@
 # BIZOMAT CAD Automation for SOLIDWORKS release notes (CADOS for SOLIDWORKS in 0.12, KEVOS Bridge up to 0.11)
 
+## 0.13.1 (BIZOMAT CAD Automation for SOLIDWORKS)
+
+- The add-in connects over HTTPS inside SOLIDWORKS. It runs in SLDWORKS.exe and took that program's .NET settings,
+  which can leave only TLS 1.0 on; the servers need TLS 1.2, so the add-in's direct link failed with "Could not create
+  SSL/TLS secure channel" (found on SOLIDWORKS 2022 SP5), while the Companion connected. The add-in and the Companion
+  now always offer TLS 1.2, and leave Windows' own choice alone where it makes it.
+- Development signing: the add-in, the Companion, the launcher and the MSI can be signed on the development computer
+  (installer/sign-development.ps1). A development-signed MSI is named `-DEV` and is trusted only on computers that
+  trust its certificate.
+
 ## 0.13.0 (BIZOMAT CAD Automation for SOLIDWORKS)
 
 - New names, in BIZOMAT's style: the add-in is **BIZOMAT CAD Automation** (Tools > Add-Ins, the **BIZOMAT** tab, menu

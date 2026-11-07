@@ -205,7 +205,9 @@ released; development-signed), never overwritten.
   failed with the reason; the first thing to run on a new PC. Tests run it against SimSW, a stand-in add-in built
   on the kernel and mate solver.
 - Add-in (`solidworks/`, .NET Framework 4.8 x64, SOLIDWORKS 2022 interop embedded; version in
-  `Directory.Build.props`, 0.12.3): Core (Json, Geom, SketchPlan, BridgeClient; Bridge2: Crypto (ES256 JWS, JWK),
+  `Directory.Build.props`, 0.13.1): Core (Json, Geom, SketchPlan, BridgeClient (`DefaultHandler` adds TLS 1.2 to
+  ServicePointManager unless it is SystemDefault: inside SLDWORKS.exe .NET was left on TLS 1.0, "Could not create SSL/TLS
+  secure channel", found on SOLIDWORKS 2022 SP5 in Nov 2026); Bridge2: Crypto (ES256 JWS, JWK),
   Wire (ids, times, 4-byte-length frames), ReplayGuard, PipeLink (the add-in's pipe client: reader thread for pings and
   cancels, one worker for commands, outbox across reconnects, at-most-once by command id), CloudLink and
   CompanionEngine (the Companion's core: signed long poll, verification, routing to a SOLIDWORKS session, spool,

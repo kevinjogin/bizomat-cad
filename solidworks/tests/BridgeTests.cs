@@ -16,6 +16,25 @@ using Xunit;
 
 namespace OpenSketch.Sw.Tests
 {
+    public class TlsTests
+    {
+        [Fact]
+        public void TheLinkAlwaysOffersTls12()
+        {
+            // inside SLDWORKS.exe .NET can be left on SSL 3 and TLS 1.0 only: TLS 1.2 is added, nothing taken away
+#pragma warning disable CS0618 // Ssl3: obsolete on .NET 8, still the value SOLIDWORKS' .NET Framework can hold
+            var old = SecurityProtocolType.Ssl3 | SecurityProtocolType.Tls;
+            var now = BridgeClient.WithTls12(old);
+            Assert.True(now.HasFlag(SecurityProtocolType.Tls12));
+            Assert.True(now.HasFlag(SecurityProtocolType.Tls) && now.HasFlag(SecurityProtocolType.Ssl3));
+#pragma warning restore CS0618
+            Assert.Equal(SecurityProtocolType.Tls12 | SecurityProtocolType.Tls13,
+                         BridgeClient.WithTls12(SecurityProtocolType.Tls12 | SecurityProtocolType.Tls13));
+            // Windows chooses: left alone
+            Assert.Equal(SecurityProtocolType.SystemDefault, BridgeClient.WithTls12(SecurityProtocolType.SystemDefault));
+        }
+    }
+
     public class WireTests
     {
         [Fact]
