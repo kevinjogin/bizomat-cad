@@ -282,7 +282,7 @@ API and is being validated on more installations. Run the self test on each new 
 
 <section id="install"><h2>Install</h2>
 <div class="actions"><a class="btn btn-primary" href="/download/solidworks">Download for SOLIDWORKS</a>
-<a class="small" href="{escape(brand.checksum_url())}" rel="noopener">SHA-256 checksum</a></div>
+<a class="small" href="/download/solidworks.sha256">SHA-256 checksum</a></div>
 <ol class="steps">
 <li><h4>Download the installer</h4><p>Sign in with your account and download <code>BIZOMAT-CAD-Automation-x64.msi</code>.
 Its SHA-256 checksum is published next to it, for you to compare.</p></li>

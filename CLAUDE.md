@@ -231,9 +231,13 @@ released; development-signed), never overwritten.
   bizomat.ai: `tools/laptop/cloudflare.ps1 publish installer -File <msi>` puts the versioned and stable names and their
   `.sha256` files in the R2 bucket `bizomat-downloads` (the website Worker serves `/downloads/`). It also writes the
   release record as `/downloads/cad/release.json` and as CAD's `bridge-release.json` in R2. `build.ps1`'s `release.json`
-  points there too. `/download/solidworks` (signed in) redirects to OPENSKETCH_INSTALLER_URL, else the published
-  `bridge-release.json` msi_url, else `https://bizomat.ai/downloads/cad/BIZOMAT-CAD-Automation-x64.msi`. Pages link the
-  checksum (`brand.checksum_url()`) and support (`brand.support_url()`: the website's contact page), never GitHub.
+  points there too. `/download/solidworks` (signed in) redirects to OPENSKETCH_INSTALLER_URL, else serves
+  `<data>/downloads/BIZOMAT-CAD-Automation-x64.msi` itself when the operator put one there (`server.local_installer`;
+  on Fly `/data/downloads/`, because bizomat.ai is still the Fly website, which has no /downloads/ route: the fallback
+  below answered 404 on 8 Nov 2026), else redirects to the published `bridge-release.json` msi_url, else
+  `https://bizomat.ai/downloads/cad/BIZOMAT-CAD-Automation-x64.msi`. `/download/solidworks.sha256` (the pages'
+  checksum link) answers for the file on the volume, else redirects to `brand.checksum_url()`. Pages link the
+  checksum (`/download/solidworks.sha256`) and support (`brand.support_url()`: the website's contact page), never GitHub.
   `tests/test_installer.py` keeps the MSI, the add-in code and the download link in step. `build.ps1` signs with a
   store certificate by thumbprint (`-CertThumbprint`/KEVOS_SIGN_THUMBPRINT, never falls back to unsigned when one is
   asked for) or a `.pfx` (CI); `-Timestamp ''` signs without a timestamp, `-NameSuffix` (sign-development passes

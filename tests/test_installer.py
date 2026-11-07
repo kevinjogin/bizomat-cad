@@ -216,3 +216,63 @@ def test_the_original_installer_backup_is_what_was_released():
         assert line == [digest, msi.name]
         assert digest in (msi.parent / "MANIFEST.md").read_text()
     assert "backups/** -text" in (ROOT / ".gitattributes").read_text(), "no line-ending conversion of backups"
+
+
+def test_the_server_serves_an_installer_put_in_its_data_folder(tmp_path, monkeypatch):
+    """While bizomat.ai serves no /downloads/ (the website on Fly has no such route), the operator puts the MSI on the
+    CAD server's volume and the Download button gives it from there, to signed-in people only, with its SHA-256."""
+    data = tmp_path / "data"
+    monkeypatch.setenv("OPENSKETCH_DATA", str(data))
+    for k in ("OPENSKETCH_INSTALLER_URL", "OPENSKETCH_PASSWORD", "OPENSKETCH_PUBLIC_URL", "OPENSKETCH_REDIRECT_HOSTS"):
+        monkeypatch.delenv(k, raising=False)
+    from opensketch import accounts, server
+    accounts.create_owner("owner@example.com", "Owner", "owner-pass-1")
+    accounts.create_member("pat@example.com", "Pat", "given-pass-1")
+    anon = TestClient(server.app)
+    # no file yet: the published addresses
+    assert anon.post("/login", data={"email": "pat@example.com", "password": "given-pass-1", "next": "/"},
+                     follow_redirects=False).status_code == 303
+    r = anon.get("/download/solidworks", follow_redirects=False)
+    assert r.status_code == 302 and r.headers["location"] == "https://bizomat.ai/downloads/cad/BIZOMAT-CAD-Automation-x64.msi"
+    r = anon.get("/download/solidworks.sha256", follow_redirects=False)
+    assert r.status_code == 302 and r.headers["location"] == "https://bizomat.ai/downloads/cad/BIZOMAT-CAD-Automation-x64.msi.sha256"
+    # the file on the volume
+    msi = bytes(range(256)) * 5000  # binary, not text: nothing may rewrite or decode it
+    (data / "downloads").mkdir(parents=True)
+    (data / "downloads" / "BIZOMAT-CAD-Automation-x64.msi").write_bytes(msi)
+    digest = hashlib.sha256(msi).hexdigest()
+    r = anon.get("/download/solidworks", follow_redirects=False)
+    assert r.status_code == 200 and r.content == msi
+    assert r.headers["content-type"] == "application/x-msi" and r.headers["x-content-sha256"] == digest
+    assert 'filename="BIZOMAT-CAD-Automation-x64.msi"' in r.headers["content-disposition"]
+    r = anon.get("/download/solidworks.sha256", follow_redirects=False)
+    assert r.status_code == 200 and r.text == f"{digest}  BIZOMAT-CAD-Automation-x64.msi\n"
+    # still only for people who are signed in
+    for path in ("/download/solidworks", "/download/solidworks.sha256"):
+        r = TestClient(server.app).get(path, follow_redirects=False)
+        assert r.status_code == 303 and r.headers["location"].startswith("/login?next=")
+    # an address the operator set wins over the file
+    monkeypatch.setenv("OPENSKETCH_INSTALLER_URL", "https://example.com/x.msi")
+    assert anon.get("/download/solidworks", follow_redirects=False).headers["location"] == "https://example.com/x.msi"
+
+
+def test_the_installer_on_the_volume_is_served_whole_under_cad(tmp_path, monkeypatch):
+    """At https://bizomat.ai/cad (the prefix is taken off and HTML is rewritten) the MSI comes through byte for byte."""
+    data = tmp_path / "data"
+    monkeypatch.setenv("OPENSKETCH_DATA", str(data))
+    for k in ("OPENSKETCH_INSTALLER_URL", "OPENSKETCH_PASSWORD"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("OPENSKETCH_PUBLIC_URL", "https://bizomat.ai/cad")
+    from opensketch import accounts, server
+    accounts.create_owner("owner@example.com", "Owner", "owner-pass-1")
+    msi = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b'<a href="/x">' + bytes(range(256)) * 100
+    (data / "downloads").mkdir(parents=True)
+    (data / "downloads" / "BIZOMAT-CAD-Automation-x64.msi").write_bytes(msi)
+    c = TestClient(server.app, base_url="https://bizomat.ai")
+    assert c.post("/cad/login", data={"email": "owner@example.com", "password": "owner-pass-1", "next": "/"},
+                  headers={"host": "bizomat.ai"}, follow_redirects=False).status_code == 303
+    r = c.get("/cad/download/solidworks", headers={"host": "bizomat.ai"}, follow_redirects=False)
+    assert r.status_code == 200 and r.content == msi
+    # the pages link the checksum this server answers for, under /cad
+    page = c.get("/cad/docs", headers={"host": "bizomat.ai"}).text
+    assert 'href="/cad/download/solidworks.sha256"' in page and "downloads/cad/BIZOMAT-CAD-Automation-x64.msi.sha256" not in page

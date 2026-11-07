@@ -80,19 +80,34 @@ certificate that exists only on the runner, then installs the signed MSI.
 
 ## Where the installer is served
 
-The Fly app `cados` does not store the installer. `https://cados.fly.dev/download/solidworks` answers 301 to
-`https://bizomat.ai/cad/download/solidworks`, which asks for sign-in, then redirects (302) to the first of:
+The Download button (`/download/solidworks`, sign-in needed) gives the first of:
 
-1. `OPENSKETCH_INSTALLER_URL` (a Fly secret, if set);
-2. `msi_url` in `bridge-release.json` in the server's data folder (`/data` on the Fly volume);
-3. `https://bizomat.ai/downloads/cad/BIZOMAT-CAD-Automation-x64.msi` (R2 bucket `bizomat-downloads`, put there by
-   `tools/laptop/cloudflare.ps1 publish installer -File <msi>`).
+1. `OPENSKETCH_INSTALLER_URL` (a setting on the server), as a redirect;
+2. an installer in the server's own data folder, `<data>/downloads/BIZOMAT-CAD-Automation-x64.msi` (on Fly the
+   volume of the app `cados`: `/data/downloads/`), served by the server itself;
+3. `msi_url` in `bridge-release.json` in the data folder, as a redirect;
+4. `https://bizomat.ai/downloads/cad/BIZOMAT-CAD-Automation-x64.msi`, as a redirect (R2 bucket `bizomat-downloads`,
+   put there by `tools/laptop/cloudflare.ps1 publish installer`).
 
-So "updating the installer on Fly" means putting the signed MSI at an https address and pointing one of those at it.
-The usual way is `cloudflare.ps1 publish installer -File installer\out\BIZOMAT-CAD-Automation-<version>-x64-DEV.msi
--Version <version>`. It publishes under the release names (`BIZOMAT-CAD-Automation-<version>-x64.msi` and the stable
-names), so publish a development-signed MSI there only on purpose. Every person who downloads it gets an installer
-Windows does not trust. Back up what is there first (see `backups/installer/README.md`).
+`/download/solidworks.sha256` (the pages' "Installer checksum" link) answers with the SHA-256 of the file in 2, else
+redirects to the `.sha256` next to 4.
+
+On 8 Nov 2026 none of 1 to 3 was set, and 4 answered 404: bizomat.ai is served by the Fly app `bizomat`, whose website
+has no `/downloads/` route (only the Cloudflare Worker version of the website has). Until bizomat.ai moves to
+Cloudflare, put the installer on the volume (2):
+
+```powershell
+fly ssh console -a cados -C "mkdir -p /data/downloads"
+fly ssh sftp shell -a cados
+```
+
+then, at the sftp prompt, `put <path to the .msi> /data/downloads/BIZOMAT-CAD-Automation-x64.msi`, and check with
+`fly ssh console -a cados -C "sha256sum /data/downloads/BIZOMAT-CAD-Automation-x64.msi"`. Nothing to restart: the next
+download gives the new file. To change it, put another file there (keep the one before as a backup first); to stop
+serving it, remove it. After the move to Cloudflare the data folder holds no `downloads/`, and 4 takes over.
+
+A development-signed installer is trusted only where its certificate is installed; elsewhere Windows shows an unknown
+publisher, as for an unsigned one.
 
 ## Moving to a commercial OV certificate
 
