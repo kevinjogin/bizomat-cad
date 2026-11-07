@@ -89,8 +89,11 @@ The owner's laptop does this with `.\cloudflare.ps1 deploy mcp` (`tools/laptop/c
 That script has the whole move in order:
 1. `check`.
 2. `deploy mcp`, `deploy tasks`, `deploy website`.
-3. `secrets website`.
-4. `move tasks`, then `move cad`.
+3. `secrets website`, and `secrets mcp`: the Fly app's secrets that change how the server works with the same data (the
+   seed of the owner's server-wide private address and of link signatures, the key of the stored Google secret, Google
+   sign-in set on the server), copied from the Fly Machine to bizomat-mcp without being shown.
+4. `move tasks`, then `move cad`. Before the switch a browser cannot see the copy (pages on mcp.bizomat.ai go to
+   bizomat.ai/cad, which is still Fly): `move cad` checks it through the owner's private address instead.
 5. `switch`: the DNS steps, which stay the owner's.
 6. `status`.
 

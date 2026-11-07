@@ -729,7 +729,28 @@ function Move-Cad {
     Write-Title "Checks ($McpHost)"
     $ok = Invoke-Checks @(@{ What = "https://$McpHost/healthz: the CAD server starts with the data"; Test = { Wait-Until { (Get-Code "https://$McpHost/healthz") -eq 200 } 300 } })
     if (-not $ok) { Stop-Here "The server did not start with the data. The Worker's log: cd `"$dir`"; npx wrangler tail." }
-    Write-Host "Sign in at https://$McpHost/login (your usual email and password) and look at Admin and SOLIDWORKS before the switch."
+    # Pages on mcp.bizomat.ai go to bizomat.ai/cad, which is Fly until the switch, so a browser cannot see this copy yet;
+    # an AI app can, through the private address (Settings on bizomat.ai/cad), which the copy carries over.
+    Write-Host ''
+    Write-Host "Check the copy as an AI app does, before the switch: paste your private address (bizomat.ai/cad > Settings)."
+    Write-Host 'It stays hidden, is used for this one check and is not kept. Press Enter to skip.'
+    $secure = Read-Host 'Private address' -AsSecureString
+    $addr = (New-Object System.Net.NetworkCredential('', $secure)).Password.Trim()
+    if ($addr) {
+        $path = ([uri]$addr).AbsolutePath -replace '^/cad/', '/'
+        $addr = $null
+        $n = 0
+        try {
+            $r = Invoke-WebRequest -UseBasicParsing -Method Post -Uri "https://$McpHost$path" -TimeoutSec 180 `
+                -Body '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' -ContentType 'application/json' `
+                -Headers @{ Accept = 'application/json, text/event-stream' }
+            $n = ([regex]::Matches([string]$r.Content, '"inputSchema"')).Count
+        } catch { $n = 0 }
+        $path = $null
+        if ($n -eq 31) { Write-Host "  ok    https://$McpHost answers your private address with the 31 tools: the copy has your account and keys" -ForegroundColor Green }
+        else { Stop-Here "https://$McpHost did not answer your private address with the 31 tools ($n). The Worker's log: cd `"$dir`"; npx wrangler tail" }
+    }
+    Write-Host 'After the switch, sign in at https://bizomat.ai/cad and look at Admin, SOLIDWORKS and History.'
 }
 
 # ----------------------------------------------------------------------------- downloads

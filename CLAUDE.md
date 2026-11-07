@@ -303,6 +303,12 @@ notes). The MSI builds unsigned on Windows in CI (`installer` job); signing wait
   -Replace, -Final), switch (prints the DNS steps; DNS stays the owner's), status. It is ASCII and PS 5.1, apart from
   bizomat.ps1.
   The data moves from Fly with `cloudflare/mcp/scripts/move-from-fly.mjs` (prepare, then apply) before the DNS switch.
+  Secrets a Fly server may have (OPENSKETCH_PASSWORD or OPENSKETCH_MCP_TOKEN: the private address and link signature seed;
+  OPENSKETCH_KEY_SECRET; GOOGLE_CLIENT_ID/SECRET; OPENSKETCH_ADDIN_URL) are passed to the container when set as Worker
+  secrets (`settings.ts` PASSED); `cloudflare.ps1 secrets mcp` copies them from the Fly Machine unseen. Readiness
+  rehearsal (7 Nov 2026): the production image seeded over HTTP, `move cad -Local`, the restored stack behind the website
+  Worker over https: same accounts, settings, OAuth grants, private address, add-in key, paired computer and history as
+  Fly; every tool; a 150 s call with a keep-alive every 15 s (gocore-website docs/BIZOMAT-CLOUDFLARE-MIGRATION.md).
 - `cadworker.py`: CAD in worker processes, one per person and kind, at most OPENSKETCH_CAD_LANES (3) live, one place
   kept for the owner, idle ones stop after 15 min, workers over 800 MB replaced. `OPENSKETCH_CAD_WORKERS=0` runs in
   threads (tests/conftest.py sets it), so `tests/test_cadworker.py` imports every module first in a fresh process and
