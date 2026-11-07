@@ -16,3 +16,4 @@ solidworks/**/obj
 solidworks/dist
 solidworks/tests
 cloudflare
+backups

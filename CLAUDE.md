@@ -18,7 +18,11 @@ gateway and hands commands to the add-in over a local named pipe; one MSI ("CADO
 `docs/CADOS-ADDIN.md` has the architecture, the gap report (there was never a macro product: the add-in was always a
 COM add-in) and the release process. Docs: `docs/BRIDGE-PROTOCOL.md` (the contract),
 `docs/KEVOS-*.md` (install, Cloudflare, security, versions, troubleshooting, build, signing, test report, release
-notes). The MSI builds unsigned on Windows in CI (`installer` job); signing waits for a signing service.
+notes). The MSI builds unsigned on Windows in CI (`installer` job); release signing waits for a signing service.
+Development signing (`installer/sign-development.ps1`, `docs/BIZOMAT-DEV-SIGNING.md`) runs on the Windows development
+computer with a self-signed `CN=BIZOMAT Development` certificate from its certificate store (not trusted elsewhere);
+`installer-test.yml` runs it with a throwaway certificate. Installer backups: `backups/installer/` (original, as
+released; development-signed), never overwritten.
 
 ## Rules
 
@@ -230,7 +234,16 @@ notes). The MSI builds unsigned on Windows in CI (`installer` job); signing wait
   points there too. `/download/solidworks` (signed in) redirects to OPENSKETCH_INSTALLER_URL, else the published
   `bridge-release.json` msi_url, else `https://bizomat.ai/downloads/cad/BIZOMAT-CAD-Automation-x64.msi`. Pages link the
   checksum (`brand.checksum_url()`) and support (`brand.support_url()`: the website's contact page), never GitHub.
-  `tests/test_installer.py` keeps the MSI, the add-in code and the download link in step.
+  `tests/test_installer.py` keeps the MSI, the add-in code and the download link in step. `build.ps1` signs with a
+  store certificate by thumbprint (`-CertThumbprint`/KEVOS_SIGN_THUMBPRINT, never falls back to unsigned when one is
+  asked for) or a `.pfx` (CI); `-Timestamp ''` signs without a timestamp, `-NameSuffix` (sign-development passes
+  `-DEV` for a self-signed certificate). `sign-development.ps1`: finds or makes the certificate (RSA 3072, 2 years,
+  NonExportable), finds SignTool or installs only the SDK Signing Tools (`-SdkSetup`), trusts the public certificate
+  for this user (`-TrustOnThisComputer`), builds (`-Build`), signs the three own binaries and the MSI (SHA-256,
+  RFC 3161), checks each with `signtool verify /pa` and Get-AuthenticodeSignature, unpacks the MSI (`msiexec /a`) to
+  check the files in it, writes `installer/out/signing-report.*` and backs up (`-Backup`). The tests check it never
+  exports a private key and the repository holds none. The original 0.13.0 MSI (unsigned, from `bridge-latest`,
+  which CI remakes on every build) is in `backups/installer/original/2026-11-07`.
 
 ## Hosting
 

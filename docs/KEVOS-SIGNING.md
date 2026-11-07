@@ -24,6 +24,10 @@ Certificate authorities now issue code-signing keys only on a hardware token or 
 (`KEVOS_SIGN_PFX`) for testing; production signing needs the workflow to call the chosen signing service instead.
 That step is added once a service is chosen (below).
 
+Until then, development builds are signed on the Windows development computer with a self-signed certificate
+(`CN=BIZOMAT Development`, private key not exportable, kept in that computer's certificate store) by
+`installer/sign-development.ps1`. Other computers do not trust it. See [BIZOMAT-DEV-SIGNING.md](BIZOMAT-DEV-SIGNING.md).
+
 ## Options
 
 | Option | Cost | Publisher shown in Windows | Fits KEVOS when | Notes |

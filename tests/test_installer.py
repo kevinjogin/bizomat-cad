@@ -7,8 +7,13 @@ and the add-in compiled against the SOLIDWORKS 2022 interop by solidworks.yml on
 - what people read in Windows (the product, its publisher, the Start menu) says BIZOMAT, while every id stays;
 - the MSI's file name, the stable download name and the server's download link agree (they keep the earlier name);
 - the add-in's version can upgrade (higher than the last released 0.12.2);
-- the logo the add-in and the Companion draw is the brand's own (the paths shared/brand/build.mjs generates)."""
+- the logo the add-in and the Companion draw is the brand's own (the paths shared/brand/build.mjs generates);
+- development signing (installer/sign-development.ps1, docs/BIZOMAT-DEV-SIGNING.md) signs every binary of BIZOMAT's own
+  that the MSI holds, then the MSI, with SHA-256, and never exports a private key; the repository holds no private
+  key; the original installer backup is byte for byte what was released."""
+import hashlib
 import re
+import subprocess
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -153,3 +158,61 @@ def test_the_bizomat_icons_ship():
     # the admin and per-user registrations set it too, when the bitmap is next to the add-in
     assert 'k.SetValue("Icon Path", icon)' in (ROOT / "solidworks" / "src" / "Addin" / "Entry.cs").read_text()
     assert (ROOT / "solidworks" / "src" / "App" / "Program.cs").read_text().count('k.SetValue("Icon Path", icon)') == 2
+
+
+SIGN_DEV = ROOT / "installer" / "sign-development.ps1"
+
+
+def test_development_signing_signs_every_own_binary_in_the_msi():
+    sign = SIGN_DEV.read_text()
+    build = (ROOT / "installer" / "build.ps1").read_text()
+    own = re.search(r"\$OwnFiles = @\(([^)]*)\)", sign).group(1)
+    own = set(re.findall(r"'([^']+)'", own))
+    sources = {Path(f.get("Source")).name for f in ET.parse(WXS).getroot().iterfind(".//w:File", NS)}
+    binaries = {n for n in sources if n.lower().endswith((".dll", ".exe"))}
+    assert own == binaries, "every DLL and EXE the MSI installs is signed and checked (they are all BIZOMAT's own)"
+    signed_by_build = set(re.findall(r"'([^']+\.(?:dll|exe))'", re.search(r"foreach \(\$f in ([^)]*)\) \{ Sign", build).group(1)))
+    assert signed_by_build == binaries, "build.ps1 signs the same files before packaging"
+    # SHA-256 digests, RFC 3161 SHA-256 timestamps, and a store certificate chosen by thumbprint
+    assert "sign /fd sha256 @stamp @by" in build and "@('/tr', $Timestamp, '/td', 'sha256')" in build
+    assert "@('/sha1', $CertThumbprint)" in build
+    assert "never fall back to an unsigned build" in build
+    # checks after signing: signtool verify with the default Authenticode policy, Windows' own check, the MSI's contents
+    assert "verify /pa /v" in sign and "Get-AuthenticodeSignature" in sign and "msiexec.exe -ArgumentList '/a'" in sign
+    assert "exit 1" in sign and "exit 0" in sign
+
+
+def test_development_signing_never_exports_a_private_key():
+    sign = SIGN_DEV.read_text()
+    assert "-KeyExportPolicy NonExportable" in sign
+    assert "-Type CodeSigningCert" in sign and "-HashAlgorithm SHA256" in sign and "-KeyLength 3072" in sign
+    assert "Cert:\\CurrentUser\\My" in sign
+    for bad in ("Export-PfxCertificate", "-Type PFX", ".pfx", "ToByteArray", "Export(", ".PrivateKey"):
+        assert bad not in sign, bad
+    # the only export is the public certificate (DER)
+    assert re.findall(r"Export-Certificate [^\n]*", sign) == ["Export-Certificate -Cert $cert -FilePath $cerFile -Type CERT | Out-Null"]
+    # trust is added for this Windows user on this computer only
+    assert "Cert:\\CurrentUser\\Root" in sign and "LocalMachine\\Root | Out-Null" not in sign
+    assert all(ord(c) < 128 for c in sign), "Windows PowerShell 5.1 reads a file without a BOM as ANSI"
+
+
+def test_the_repository_holds_no_private_key():
+    files = subprocess.run(["git", "ls-files", "-co", "--exclude-standard"], cwd=ROOT, capture_output=True, text=True, check=True).stdout.split()
+    assert not [f for f in files if f.lower().endswith((".pfx", ".p12", ".pvk", ".snk"))]
+    ignore = (ROOT / ".gitignore").read_text().split()
+    assert {"*.pfx", "*.p12", "*.pvk", "installer/out/"} <= set(ignore)
+    for f in files:
+        if f.startswith(("backups/", "installer/")) and (ROOT / f).is_file():
+            data = (ROOT / f).read_bytes()
+            assert b"PRIVATE KEY" not in data, f
+
+
+def test_the_original_installer_backup_is_what_was_released():
+    found = sorted((ROOT / "backups" / "installer" / "original").glob("*/*.msi"))
+    assert found, "the original installer is backed up"
+    for msi in found:
+        line = (msi.parent / (msi.name + ".sha256")).read_text("utf-8-sig").split()
+        digest = hashlib.sha256(msi.read_bytes()).hexdigest()
+        assert line == [digest, msi.name]
+        assert digest in (msi.parent / "MANIFEST.md").read_text()
+    assert "backups/** -text" in (ROOT / ".gitattributes").read_text(), "no line-ending conversion of backups"
