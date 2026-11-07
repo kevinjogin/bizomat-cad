@@ -63,7 +63,14 @@ if ($sign) {
   Write-Host 'No signing certificate (KEVOS_SIGN_THUMBPRINT or KEVOS_SIGN_PFX): building an UNSIGNED test MSI.' -ForegroundColor Yellow
 }
 
-if (-not (Get-Command wix -ErrorAction SilentlyContinue)) { dotnet tool install --global wix --version 5.0.2 | Out-Host }
+if (-not (Get-Command wix -ErrorAction SilentlyContinue)) {
+  if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) { throw 'No dotnet: install the .NET 8 SDK (winget install --id Microsoft.DotNet.SDK.8 -e), then open a new PowerShell window' }
+  dotnet tool install --global wix --version 5.0.2 | Out-Host
+  # on a computer that never had a dotnet tool, the tools folder is not on this window's PATH yet
+  $tools = Join-Path $env:USERPROFILE '.dotnet\tools'
+  if (($env:PATH -split ';') -notcontains $tools) { $env:PATH = "$env:PATH;$tools" }
+  if (-not (Get-Command wix -ErrorAction SilentlyContinue)) { throw "wix was not installed (dotnet tool install --global wix --version 5.0.2; it goes to $tools)" }
+}
 wix extension add -g WixToolset.Util.wixext/5.0.2 WixToolset.UI.wixext/5.0.2 | Out-Host
 $out = Join-Path $PSScriptRoot 'out'
 New-Item -ItemType Directory -Force -Path $out | Out-Null

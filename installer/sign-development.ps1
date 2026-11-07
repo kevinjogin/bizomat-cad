@@ -206,6 +206,12 @@ if ($Build) {
     Step 'Building the add-in and Companion (bash solidworks/build.sh test)'
     $bash = @("$env:ProgramFiles\Git\bin\bash.exe", "${env:ProgramFiles(x86)}\Git\bin\bash.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
     if (-not $bash) { Stop-Here 'Git Bash was not found (Git for Windows). Install it, or build first and run without -Build.' }
+    $ErrorActionPreference = 'Continue'
+    $sdks = @(if (Get-Command dotnet -ErrorAction SilentlyContinue) { dotnet --list-sdks 2>$null })
+    $ErrorActionPreference = 'Stop'
+    if (-not ($sdks | Where-Object { $_ -match '^(\d+)\.' -and [int]$Matches[1] -ge 8 })) {
+        Stop-Here 'No .NET 8 SDK (or later) on this computer. Install it with: winget install --id Microsoft.DotNet.SDK.8 -e   then open a new PowerShell window and run this again.'
+    }
     & $bash solidworks/build.sh test
     if ($LASTEXITCODE -ne 0) { Stop-Here 'The add-in build or its tests failed (above).' }
 }
