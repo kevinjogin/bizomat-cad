@@ -28,7 +28,7 @@ if (-not (Test-Path (Join-Path $src 'KEVOS.Companion.exe'))) { throw "Build firs
 Copy-Item 'LICENSE' (Join-Path $src 'LICENSE.txt') -Force
 @"
 BIZOMAT CAD Automation for SOLIDWORKS $Version is free software under the GNU Affero General Public License v3.0 (LICENSE.txt).
-Its complete source code is at https://github.com/jogkev-creator/CADOS (this version: tag bridge-v$Version).
+Its complete source code (this version: bridge-v$Version) is available from BIZOMAT on request: https://bizomat.ai/contact/
 "@ | Set-Content (Join-Path $src 'SOURCE.txt') -Encoding UTF8
 $lic = (Get-Content 'LICENSE' -Raw) -replace '\\', '\\' -replace '\{', '\{' -replace '\}', '\}' -replace "`r?`n", "\par`r`n"
 "{\rtf1\ansi\deff0{\fonttbl{\f0 Segoe UI;}}\fs16 $lic}" | Set-Content (Join-Path $src 'License.rtf') -Encoding ASCII
@@ -60,7 +60,8 @@ $size = (Get-Item $msi).Length
 $thumb = $null
 if ($sign) { $thumb = (Get-AuthenticodeSignature $msi).SignerCertificate.Thumbprint }
 "$hash  $name" | Set-Content (Join-Path $out "$name.sha256") -Encoding ASCII
-@{ version = $Version; msi_url = "https://github.com/jogkev-creator/CADOS/releases/download/bridge-v$Version/$name";
+# published on bizomat.ai (cloudflare.ps1 publish installer puts the file there; the GitHub releases are private)
+@{ version = $Version; msi_url = "https://bizomat.ai/downloads/cad/$name";
    sha256 = "sha256:$hash"; size = $size; signer_thumbprints = @($thumb | Where-Object { $_ }); notes = "BIZOMAT CAD Automation for SOLIDWORKS $Version";
    published_at = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.fffZ') } | ConvertTo-Json | Set-Content (Join-Path $out 'release.json') -Encoding UTF8
 # the stable name (bridge-latest): what https://bizomat.ai/cad/download/solidworks points at; and the stable name of 0.12

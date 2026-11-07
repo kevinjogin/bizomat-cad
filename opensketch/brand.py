@@ -25,9 +25,9 @@ HEADLINE = "Turn engineering intent into CAD."
 DESCRIPTION = ("BIZOMAT CAD Automation connects your AI assistant to SOLIDWORKS on your own computer. Create, change and "
                "check native parts, assemblies and drawings in plain language.")
 WORK_NAME = "Project Management"
-REPO_URL = "https://github.com/jogkev-creator/CADOS"
-RELEASES_URL = REPO_URL + "/releases"
-SUPPORT_URL = REPO_URL + "/issues"
+# The code is in private GitHub repositories (the owner's decision, 7 Nov 2026): nothing public links there. Support is
+# the website's contact page; the installer and its checksum are published on bizomat.ai (/downloads/cad/, R2).
+INSTALLER_NAME = "BIZOMAT-CAD-Automation-x64.msi"
 
 
 def _url(name: str, default: str) -> str:
@@ -49,6 +49,16 @@ def work_url() -> str:
 def site_page(path: str) -> str:
     """A page of the platform website, e.g. site_page("terms") -> https://bizomat.ai/terms/."""
     return site_url() + "/" + (path.strip("/") + "/" if path.strip("/") else "")
+
+
+def support_url() -> str:
+    """Where people ask for help: the website's contact page."""
+    return site_page("contact")
+
+
+def checksum_url() -> str:
+    """The installer's published SHA-256 (https://bizomat.ai/downloads/cad/BIZOMAT-CAD-Automation-x64.msi.sha256)."""
+    return f"{site_url()}/downloads/cad/{INSTALLER_NAME}.sha256"
 
 
 def bizomat_svg(cls: str = "bz-wordmark", label: str = "BIZOMAT") -> str:
@@ -158,7 +168,7 @@ def app_footer() -> str:
     return (f'<footer class="app-footer"><div class="container"><span>{FULL}</span>'
             f'<nav aria-label="{PLATFORM}"><a href="{escape(site_url())}/" rel="noopener">bizomat.ai</a>'
             f'<a href="{escape(work_url())}/" rel="noopener">{WORK_NAME}</a><a href="/docs">Documentation</a>'
-            f'{legal_links()}<a href="{SUPPORT_URL}" rel="noopener">Support</a></nav></div></footer>')
+            f'{legal_links()}<a href="{escape(support_url())}" rel="noopener">Support</a></nav></div></footer>')
 
 
 def footer() -> str:
@@ -168,9 +178,9 @@ def footer() -> str:
 <div><h4>Product</h4><ul><li><a href="/overview#product">Overview</a></li><li><a href="/overview#how">How it works</a></li>
 <li><a href="/overview#integrations">Integrations</a></li><li><a href="/overview#security">Security</a></li></ul></div>
 <div><h4>Resources</h4><ul><li><a href="/docs">Documentation</a></li><li><a href="/docs#troubleshooting">Troubleshooting</a></li>
-<li><a href="/download/solidworks">Download for SOLIDWORKS</a></li><li><a href="{RELEASES_URL}" rel="noopener">All releases</a></li><li><a href="{SUPPORT_URL}" rel="noopener">Support</a></li></ul></div>
+<li><a href="/download/solidworks">Download for SOLIDWORKS</a></li><li><a href="{escape(checksum_url())}" rel="noopener">Installer checksum</a></li><li><a href="{escape(support_url())}" rel="noopener">Support</a></li></ul></div>
 <div><h4>{PLATFORM}</h4><ul><li><a href="{site}/" rel="noopener">bizomat.ai</a></li><li><a href="{escape(work_url())}/" rel="noopener">{WORK_NAME}</a></li>
-<li><a href="{escape(site_page("engine-room"))}" rel="noopener">The Engine Room</a></li><li><a href="{REPO_URL}" rel="noopener">Source code</a></li></ul></div></div>
+<li><a href="{escape(site_page("engine-room"))}" rel="noopener">The Engine Room</a></li></ul></div></div>
 <div class="footer-base"><span>{FULL}. Part of the {PLATFORM} platform.</span>
 <nav class="footer-legal" aria-label="Legal">{legal_links()}</nav></div></div></footer>"""
 

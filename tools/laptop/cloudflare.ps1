@@ -4,7 +4,10 @@
 
 .DESCRIPTION
   Keep this file next to bizomat.ps1, in the folder that holds CADOS and gocore-website (.\bizomat.ps1 setup makes
-  them). Sign in to Cloudflare once: cd gocore-website; npx wrangler login. Then, in this order:
+  them). The repositories are private, so take it from your signed-in clone, not from a raw GitHub link:
+    git -C C:\BIZOMAT\CADOS pull
+    copy C:\BIZOMAT\CADOS\tools\laptop\cloudflare.ps1 C:\BIZOMAT\
+  Sign in to Cloudflare once: cd gocore-website; npx wrangler login. Then, in this order:
 
     .\cloudflare.ps1 check             what is ready: tools, the Cloudflare sign-in and plan, what exists (read only)
     .\cloudflare.ps1 deploy mcp        CAD Automation's Worker bizomat-mcp and its container (CADOS main, Docker).
@@ -19,6 +22,10 @@
     .\cloudflare.ps1 move cad          CAD Automation's data folder, from Fly to R2. Run it right before the switch.
                                        -Local rehearses into a folder on this computer; -Replace puts a new copy over
                                        one already in R2 (CAD Automation on Cloudflare is paused meanwhile)
+    .\cloudflare.ps1 publish installer -File <msi>
+                                       the SOLIDWORKS installer on bizomat.ai/downloads/cad/ (R2), with its SHA-256
+                                       and the release record that downloads and Companion updates read. The GitHub
+                                       repositories are private, so their releases are for you only
     .\cloudflare.ps1 switch            the switch of bizomat.ai, step by step, with its checks; changes nothing itself
     .\cloudflare.ps1 status            who answers at each address now
 
@@ -47,13 +54,22 @@
 .PARAMETER ApplyMigrations
   deploy tasks only: apply waiting database migrations to bizomat-tasks-db (a Time Travel point is shown first).
 
+.PARAMETER File
+  publish installer only: the MSI to publish (BIZOMAT-CAD-Automation-<version>-x64.msi, from the GitHub release or
+  installer\build.ps1).
+
+.PARAMETER Version
+  publish installer only: the version, when the file name does not carry it.
+
 .PARAMETER CadApp
   move cad only: the Fly app CAD Automation runs on now: cados (default), or bizomat after bizomat.ps1 move cad.
 #>
 [CmdletBinding()]
 param(
-    [Parameter(Position = 0)] [ValidateSet('check', 'deploy', 'secrets', 'move', 'switch', 'status', 'help')] [string] $Command = 'help',
-    [Parameter(Position = 1)] [ValidateSet('mcp', 'tasks', 'website', 'cad')] [string] $App = '',
+    [Parameter(Position = 0)] [ValidateSet('check', 'deploy', 'secrets', 'move', 'publish', 'switch', 'status', 'help')] [string] $Command = 'help',
+    [Parameter(Position = 1)] [ValidateSet('mcp', 'tasks', 'website', 'cad', 'installer')] [string] $App = '',
+    [string] $File = '',
+    [string] $Version = '',
     [switch] $DryRun,
     [switch] $SkipChecks,
     [switch] $Final,
@@ -79,6 +95,8 @@ $CadBucket = 'bizomat-mcp-data'
 $TasksDb = 'bizomat-tasks-db'
 $TasksBucket = 'bizomat-tasks-files'
 $McpHost = 'mcp.bizomat.ai'
+$DownloadsBucket = 'bizomat-downloads'
+$Downloads = 'https://bizomat.ai/downloads/cad'
 
 # ----------------------------------------------------------------------------- helpers (as in bizomat.ps1)
 
@@ -651,6 +669,91 @@ function Move-Cad {
     Write-Host "Sign in at https://$McpHost/login (your usual email and password) and look at Admin and SOLIDWORKS before the switch."
 }
 
+# ----------------------------------------------------------------------------- downloads
+
+function Invoke-Wrangler([string] $Dir, [string[]] $Arguments) {
+    # wrangler with its output shown; stops on failure. Runs with ErrorActionPreference Continue: wrangler writes
+    # progress to stderr, which Windows PowerShell 5.1 would otherwise treat as an error.
+    $w = Get-Wrangler $Dir
+    $saved = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    Write-Host "> wrangler $($Arguments -join ' ')" -ForegroundColor DarkGray
+    Push-Location -LiteralPath $Dir
+    try { & node $w @Arguments 2>&1 | ForEach-Object { "$_" } | Out-Host; $code = $LASTEXITCODE } finally { Pop-Location; $ErrorActionPreference = $saved }
+    if ($code -ne 0) { Stop-Here "wrangler $($Arguments -join ' ') failed (exit code $code)." }
+}
+
+function Publish-Installer {
+    Write-Title "The SOLIDWORKS installer on bizomat.ai ($Downloads/)"
+    Assert-Node
+    if (-not $File) { Stop-Here 'Say which file: .\cloudflare.ps1 publish installer -File <path to BIZOMAT-CAD-Automation-<version>-x64.msi>' }
+    $msi = (Resolve-Path -LiteralPath $File -ErrorAction SilentlyContinue)
+    if (-not $msi) { Stop-Here "No file at $File." }
+    $msi = $msi.Path
+    if ([IO.Path]::GetExtension($msi) -ne '.msi') { Stop-Here 'That is not an .msi file.' }
+    $v = $Version
+    if (-not $v) {
+        $m = [regex]::Match([IO.Path]::GetFileName($msi), '-(\d+\.\d+\.\d+)-x64\.msi$')
+        if ($m.Success) { $v = $m.Groups[1].Value }
+    }
+    if ($v -notmatch '^\d+\.\d+\.\d+$') { Stop-Here 'The version is not in the file name: add -Version <x.y.z>.' }
+    $item = Get-Item -LiteralPath $msi
+    if ($item.Length -lt 1MB) { Stop-Here 'The file is under 1 MB: that is not the installer.' }
+    $hash = (Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash.ToLower()
+    $thumbs = @()
+    if ($IsWin) {
+        $sig = Get-AuthenticodeSignature -LiteralPath $msi
+        if ($sig.Status -eq 'Valid') { $thumbs = @($sig.SignerCertificate.Thumbprint) }
+    }
+    $versioned = "BIZOMAT-CAD-Automation-$v-x64.msi"
+    $names = @($versioned, 'BIZOMAT-CAD-Automation-x64.msi', 'CADOS-for-SOLIDWORKS-x64.msi')
+    Write-Host "  file      $msi"
+    Write-Host "  version   $v, $([math]::Round($item.Length / 1MB, 1)) MB, sha256 $hash"
+    Write-Host "  signed    $(if ($thumbs.Count) { 'yes (' + $thumbs[0] + ')' } else { 'no (Companion updates need a signed installer; downloads work)' })"
+    Write-Host "  goes to   $Downloads/$($names -join ', ') and their .sha256 files"
+    $c = Get-DeployCommit 'CADOS'
+    $dir = Join-Path $c.Dir 'cloudflare\mcp'
+    $tmp = Join-Path ([IO.Path]::GetTempPath()) ('bizomat-publish-' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $tmp | Out-Null
+    try {
+        $release = [ordered]@{
+            version = $v; msi_url = "$Downloads/$versioned"; sha256 = "sha256:$hash"; size = $item.Length
+            signer_thumbprints = $thumbs; notes = "BIZOMAT CAD Automation for SOLIDWORKS $v"
+            published_at = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
+        }
+        $releaseFile = Join-Path $tmp 'release.json'
+        [IO.File]::WriteAllText($releaseFile, ($release | ConvertTo-Json), (New-Object Text.UTF8Encoding($false)))
+        Write-Host ''
+        Write-Host "Also: the release record, as $Downloads/release.json and as CAD Automation's bridge-release.json (in"
+        Write-Host 'its data store), so its Download button and the Companions'' update check use this version from its next start.'
+        if (-not (Confirm-Step 'Publish this installer now?')) { return }
+        Assert-SignedIn
+        $siteDir = Get-SiteDir
+        if (-not (Test-Bucket $DownloadsBucket)) { Invoke-Wrangler $siteDir @('r2', 'bucket', 'create', $DownloadsBucket) }
+        foreach ($n in $names) {
+            Invoke-Wrangler $siteDir @('r2', 'object', 'put', "$DownloadsBucket/cad/$n", '--file', $msi, '--remote', '--content-type', 'application/x-msi')
+            $sumFile = Join-Path $tmp "$n.sha256"
+            [IO.File]::WriteAllText($sumFile, "$hash  $n`n", (New-Object Text.UTF8Encoding($false)))
+            Invoke-Wrangler $siteDir @('r2', 'object', 'put', "$DownloadsBucket/cad/$n.sha256", '--file', $sumFile, '--remote', '--content-type', 'text/plain; charset=utf-8')
+        }
+        Invoke-Wrangler $siteDir @('r2', 'object', 'put', "$DownloadsBucket/cad/release.json", '--file', $releaseFile, '--remote', '--content-type', 'application/json')
+        if (Test-Bucket $CadBucket) {
+            Invoke-Wrangler $dir @('r2', 'object', 'put', "$CadBucket/data/bridge-release.json", '--file', $releaseFile, '--remote', '--content-type', 'application/octet-stream')
+        } else { Write-Host "  note  $CadBucket does not exist yet: run this again after deploy mcp, for the Download button and updates" -ForegroundColor Yellow }
+
+        Write-Title 'Checks (read back from R2)'
+        $back = Join-Path $tmp 'back.msi'
+        Invoke-Wrangler $siteDir @('r2', 'object', 'get', "$DownloadsBucket/cad/$versioned", '--file', $back, '--remote')
+        $ok = Invoke-Checks @(
+            @{ What = "$versioned read back whole (sha256)"; Test = { (Get-FileHash -LiteralPath $back -Algorithm SHA256).Hash.ToLower() -eq $hash } },
+            @{ What = "$Downloads/$versioned answers (once the website Worker serves bizomat.ai)"; Info = $true; Test = { (Get-Code "$Downloads/$versioned") -eq 200 } }
+        )
+        Write-DeployLog 'installer-publish' $c $(if ($ok) { "published $v" } else { "published $v, checks failed" })
+        if (-not $ok) { Stop-Here 'The copy in R2 does not match the file. Run this again.' }
+        Write-Host "Published $v. CAD Automation reads the new release record at its next start (it sleeps after 30 minutes idle)."
+    } finally { Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue }
+}
+
 # ----------------------------------------------------------------------------- the switch
 
 function Show-Switch {
@@ -664,7 +767,8 @@ function Show-Switch {
         @{ What = 'bizomat.ai is still Fly (not switched yet)'; Info = $true; Test = { (Get-ServedBy 'https://bizomat.ai/') -eq 'Fly' } }
     )
     Write-Host ''
-    Write-Host 'Also done: move tasks -Final, then move cad, a few minutes before; secrets website.'
+    Write-Host 'Also done: move tasks -Final, then move cad, a few minutes before; secrets website; publish installer'
+    Write-Host '(the Download button sends people to bizomat.ai/downloads/cad/, as the GitHub releases are private).'
     Write-Host 'Every computer on CAD Automation 0.13 or later (it moves itself from cados.kevos.com, cados.fly.dev and'
     Write-Host 'cad.bizomat.ai to bizomat.ai/cad). An older Companion keeps talking to Fly and gets no commands after the switch.'
     Write-Host 'Outside Cloudflare, each listing these addresses (all on bizomat.ai, as on Fly today):'
@@ -703,6 +807,7 @@ switch ($Command) {
         }
     }
     'secrets' { if ($App -eq 'website') { Set-WebsiteSecrets } else { Stop-Here 'secrets website is the only one.' } }
+    'publish' { if ($App -eq 'installer') { Publish-Installer } else { Stop-Here 'publish installer -File <msi> is the only one.' } }
     'move' {
         switch ($App) {
             'tasks' { Move-Tasks }

@@ -105,7 +105,8 @@ def test_download_names_agree(tmp_path, monkeypatch):
     monkeypatch.delenv("OPENSKETCH_INSTALLER_URL", raising=False)
     from opensketch import server
     r = TestClient(server.app).get("/download/solidworks", follow_redirects=False)
-    assert r.status_code == 302 and r.headers["location"].endswith("/releases/download/bridge-latest/BIZOMAT-CAD-Automation-x64.msi")
+    assert r.status_code == 302 and r.headers["location"] == "https://bizomat.ai/downloads/cad/BIZOMAT-CAD-Automation-x64.msi"
+    assert 'msi_url = "https://bizomat.ai/downloads/cad/$name"' in build, "the release record points where publish puts the file"
     # a release the operator published wins
     (tmp_path / "data").mkdir(exist_ok=True)
     (tmp_path / "data" / "bridge-release.json").write_text(
