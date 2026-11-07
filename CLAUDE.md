@@ -47,7 +47,9 @@ notes). The MSI builds unsigned on Windows in CI (`installer` job); signing wait
   pipe link) must never let an exception escape a thread: it would close SOLIDWORKS.
 - Heavy work never runs on the web server's event loop: OpenCascade goes through the person's "agent" CAD worker
   (`cadworker.lane_for(person, "agent")`), node and big file writes through threads.
-- No personal, client or confidential details in code, comments, tests or docs: the repository is public.
+- No personal, client or confidential details in code, comments, tests or docs (the repository is private since 7 Nov
+  2026, but it may be shared). Nothing public may link to GitHub: every repository is private, so its pages, releases
+  and raw files answer 404 to everyone else. Downloads are published on bizomat.ai (`/downloads/cad/`, R2).
 - CI: `.github/workflows/tests.yml` (pytest in two jobs: main and `-m slow`; npm test; the Cloudflare Worker's
   `npm run check` in `cloudflare/mcp` on Node 22) on pull requests and
   non-main pushes; `deploy.yml` deploys main to Fly after the same tests, skipping pushes that only touch notes,
@@ -183,7 +185,8 @@ notes). The MSI builds unsigned on Windows in CI (`installer` job); signing wait
   (`solidworks/Directory.Build.props`; bump it whenever the add-in learns a command). Its hello sends its version and
   the DLL's path; `swbridge.addin_too_old` makes sw_create_drawing, the dwg/dxf/slddrw exports and sw_status
   (`update_needed`) say which add-in is loaded and how to update, before anything is sent. `solidworks.yml` replaces
-  the `addin-latest` GitHub release with every main build (`swbridge.ADDIN_DOWNLOAD`, `OPENSKETCH_ADDIN_URL`).
+  the `addin-latest` GitHub release with every main build (private: for the owner). The update message points at
+  `swbridge.addin_download()`: `OPENSKETCH_ADDIN_URL`, else this server's own package (`/api/sw/download`).
 - Drawing API (0.10.0; `sw_get_drawing`, `sw_edit_drawing` in `sw_tools.py`, `solidworks/src/Addin/DrawingEdits.cs`):
   read the sheet, views (type, orientation, scale, outline in sheet mm, display, dimension count, model) and title
   block fields; change a drawing with up to 40 actions run in order (`DRAWING_ACTIONS` lists each one's keys and is
@@ -220,15 +223,23 @@ notes). The MSI builds unsigned on Windows in CI (`installer` job); signing wait
 - Installer (`installer/KEVOS-Bridge.wxs`, `installer/build.ps1`): WiX 5 per-machine x64 MSI "BIZOMAT CAD Automation for
   SOLIDWORKS" (UpgradeCode unchanged: upgrades CADOS for SOLIDWORKS and KEVOS Bridge), `BIZOMAT-CAD-Automation-<version>-x64.msi`
   plus the stable `BIZOMAT-CAD-Automation-x64.msi` (and `CADOS-for-SOLIDWORKS-x64.msi`, the 0.12 stable name, as a copy); built and (with secrets) signed by the `installer` job in `solidworks.yml` on Windows;
-  releases `bridge-latest` and `bridge-v<version>`. `/download/solidworks` (public) redirects to
-  OPENSKETCH_INSTALLER_URL, else the published `bridge-release.json` msi_url, else the stable bridge-latest asset.
+  releases `bridge-latest` and `bridge-v<version>` (private: the owner downloads from there). Public copies are on
+  bizomat.ai: `tools/laptop/cloudflare.ps1 publish installer -File <msi>` puts the versioned and stable names and their
+  `.sha256` files in the R2 bucket `bizomat-downloads` (the website Worker serves `/downloads/`). It also writes the
+  release record as `/downloads/cad/release.json` and as CAD's `bridge-release.json` in R2. `build.ps1`'s `release.json`
+  points there too. `/download/solidworks` (signed in) redirects to OPENSKETCH_INSTALLER_URL, else the published
+  `bridge-release.json` msi_url, else `https://bizomat.ai/downloads/cad/BIZOMAT-CAD-Automation-x64.msi`. Pages link the
+  checksum (`brand.checksum_url()`) and support (`brand.support_url()`: the website's contact page), never GitHub.
   `tests/test_installer.py` keeps the MSI, the add-in code and the download link in step.
 
 ## Hosting
 
 - Code: https://github.com/jogkev-creator/CADOS (moved from jogkev-creator/opensketchyz in Nov 2026; release
-  downloads, the MSI's links and `swbridge.ADDIN_DOWNLOAD` point there). The Fly app below was linked to the old
-  repository: relink it in Fly (or deploy by hand) after the move.
+  downloads are on bizomat.ai now, as the repository is private since 7 Nov 2026: see the Rules). The laptop works from
+  its own signed-in clones (`bizomat.ps1 setup`, then `git pull`); raw GitHub links do not work for a private
+  repository. GitHub Actions minutes for private repositories are limited: when they run out, every job fails at once
+  with no log (seen 7 Nov 2026), and `cloudflare.ps1` runs the repository's own checks before each deploy. The Fly app
+  below was linked to the old repository: relink it in Fly (or deploy by hand) after the move.
 - Listens on `::` (`--host ::`, `__main__.listen_sockets`: one dual-stack socket, IPv4 alone where there is no IPv6), so
   the BIZOMAT router (Fly app `bizomat`) reaches it over Fly's private network at cados.internal:8080.
 - Public address https://bizomat.ai/cad: CAD Automation lives under the BIZOMAT website's own address (the owner's
