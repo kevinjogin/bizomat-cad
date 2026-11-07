@@ -302,6 +302,7 @@ notes). The MSI builds unsigned on Windows in CI (`installer` job); signing wait
   with `tools/laptop/cloudflare.ps1`: check, deploy mcp|tasks|website, secrets website, move tasks|cad (-Local,
   -Replace, -Final), switch (prints the DNS steps; DNS stays the owner's), status. It is ASCII and PS 5.1, apart from
   bizomat.ps1.
+  The data moves from Fly with `cloudflare/mcp/scripts/move-from-fly.mjs` (prepare, then apply) before the DNS switch.
 - `cadworker.py`: CAD in worker processes, one per person and kind, at most OPENSKETCH_CAD_LANES (3) live, one place
   kept for the owner, idle ones stop after 15 min, workers over 800 MB replaced. `OPENSKETCH_CAD_WORKERS=0` runs in
   threads (tests/conftest.py sets it).
