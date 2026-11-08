@@ -1,6 +1,6 @@
 # Builds the BIZOMAT CAD for SOLIDWORKS installer, BIZOMAT-CAD-Automation-<version>-x64.msi (and the same file
 # as BIZOMAT-CAD-Automation-x64.msi, the stable name the website links to, and as CADOS-for-SOLIDWORKS-x64.msi, the
-# stable name of 0.12, so links already given out keep working) from solidworks/dist/OpenSketch-SOLIDWORKS (run `bash solidworks/build.sh test`
+# stable name of 0.12, so links already given out keep working) from solidworks/dist/BIZOMAT-CAD-SOLIDWORKS (run `bash solidworks/build.sh test`
 # first). Windows only (WiX Toolset 5 needs Windows). Repeatable: the same sources give the same MSI contents.
 #
 #   powershell -ExecutionPolicy Bypass -File installer\build.ps1 [-Version 0.11.0]
@@ -26,7 +26,7 @@ if (-not $Version) {
   $props = [xml](Get-Content 'solidworks\Directory.Build.props')
   $Version = $props.Project.PropertyGroup.Version
 }
-$src = Join-Path $root 'solidworks\dist\OpenSketch-SOLIDWORKS'
+$src = Join-Path $root 'solidworks\dist\BIZOMAT-CAD-SOLIDWORKS'
 if (-not (Test-Path (Join-Path $src 'KEVOS.Companion.exe'))) { throw "Build first: bash solidworks/build.sh test (no $src\KEVOS.Companion.exe)" }
 
 # the licence (AGPL-3.0: the text goes with the program, and where the source is)
@@ -58,7 +58,7 @@ function Sign($file) {
   if ($LASTEXITCODE -ne 0) { throw "signing $file failed" }
 }
 if ($sign) {
-  foreach ($f in 'OpenSketch.Sw.dll', 'KEVOS.Companion.exe', 'OpenSketchSW.exe') { Sign (Join-Path $src $f) }
+  foreach ($f in 'OpenSketch.Sw.dll', 'KEVOS.Companion.exe', 'BIZOMAT-CAD.exe') { Sign (Join-Path $src $f) }
 } else {
   Write-Host 'No signing certificate (KEVOS_SIGN_THUMBPRINT or KEVOS_SIGN_PFX): building an UNSIGNED test MSI.' -ForegroundColor Yellow
 }

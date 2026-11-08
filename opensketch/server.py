@@ -1,4 +1,4 @@
-"""FastAPI server for OpenSketch, the connector between AI apps and SOLIDWORKS: the signed-in app (app_pages.py) where a
+"""FastAPI server for BIZOMAT CAD, the connector between AI apps and SOLIDWORKS: the signed-in app (app_pages.py) where a
 person sets it up, sign-in (accounts, Google, OAuth for AI apps; auth.py, mcpauth.py), the MCP endpoint
 (mcp_server.py, the sw_ tools), and the link the SOLIDWORKS add-in polls (swbridge.py)."""
 
@@ -168,7 +168,7 @@ class RequestLog:
             if status[0] >= 500 or (took > self.SLOW and status[0] and not path.startswith(self.LONG)):
                 user = (scope.get("state") or {}).get("user") if isinstance(scope.get("state"), dict) else None
                 who = f" (person {user['id']})" if isinstance(user, dict) and user.get("id") else ""
-                print(f"OpenSketch request: {scope.get('method')} {self._path(path)} -> {status[0]} in {took:.1f} s{who}",
+                print(f"BIZOMAT CAD request: {scope.get('method')} {self._path(path)} -> {status[0]} in {took:.1f} s{who}",
                       flush=True)
 
 
@@ -765,7 +765,7 @@ def sw_blob(blob_id: str, request: Request):
                     headers={"Cache-Control": "no-store", "Content-Disposition": f'attachment; filename="{filename}"'})
 
 
-SW_DOWNLOAD = Path(os.environ.get("OPENSKETCH_SW_ZIP", str(Path(__file__).parent / "static" / "downloads" / "OpenSketch-SOLIDWORKS.zip")))
+SW_DOWNLOAD = Path(os.environ.get("OPENSKETCH_SW_ZIP", str(Path(__file__).parent / "static" / "downloads" / "BIZOMAT-CAD-SOLIDWORKS.zip")))
 
 
 @app.get("/api/sw")

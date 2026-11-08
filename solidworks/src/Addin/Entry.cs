@@ -173,7 +173,7 @@ namespace OpenSketch.Sw
 
         public int OsEnable() => 1;
 
-        // regasm /codebase (an admin install) writes these; the per-user install (OpenSketchSW.exe) writes its own.
+        // regasm /codebase (an admin install) writes these; the per-user install (BIZOMAT-CAD.exe) writes its own.
         [ComRegisterFunction]
         public static void Register(Type t)
         {

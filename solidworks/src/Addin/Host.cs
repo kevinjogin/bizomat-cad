@@ -360,7 +360,7 @@ namespace OpenSketch.Sw
                 {
                     Log.Write("link thread ended: " + ex);
                 }
-            }) { IsBackground = true, Name = "OpenSketch link" };
+            }) { IsBackground = true, Name = "BIZOMAT CAD link" };
             thread.Start();
             Changed();
         }

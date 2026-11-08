@@ -9,7 +9,7 @@
   Installs into C:\Program Files\KEVOS\Bridge (the folder keeps its earlier name):
     OpenSketch.Sw.dll          the add-in (COM; Tools > Add-Ins > BIZOMAT CAD; loaded at start-up)
     KEVOS.Companion.exe        the BIZOMAT Companion, the per-user background app (tray), started at every sign-in
-    OpenSketchSW.exe, OpenSketch.swb   the earlier per-user installer and launcher macro (fallback during migration)
+    BIZOMAT-CAD.exe, BIZOMAT CAD.swb   the earlier per-user installer and launcher macro (fallback during migration)
   Registers (HKLM, 64-bit view): the two COM classes as regasm /codebase would, the SOLIDWORKS add-in entry (one entry
   serves every SOLIDWORKS version installed), the install record, and the companion in Run for every user.
 
@@ -78,17 +78,17 @@
         <File Id="CompanionConfig" Source="$(var.Source)/KEVOS.Companion.exe.config" KeyPath="yes" />
       </Component>
       <Component Id="LegacyExe" Bitness="always64">
-        <File Id="LegacyExe" Source="$(var.Source)/OpenSketchSW.exe" KeyPath="yes" />
+        <File Id="LegacyExe" Source="$(var.Source)/BIZOMAT-CAD.exe" KeyPath="yes" />
       </Component>
       <Component Id="LegacyConfig" Bitness="always64">
-        <File Id="LegacyConfig" Source="$(var.Source)/OpenSketchSW.exe.config" KeyPath="yes" />
+        <File Id="LegacyConfig" Source="$(var.Source)/BIZOMAT-CAD.exe.config" KeyPath="yes" />
       </Component>
       <!-- the BIZOMAT mark next to the add-in in Tools > Add-Ins (Icon Path below) -->
       <Component Id="AddinIcon" Bitness="always64">
         <File Id="AddinIcon" Source="$(var.Source)/BIZOMAT.bmp" KeyPath="yes" />
       </Component>
       <Component Id="Macro" Bitness="always64">
-        <File Id="Macro" Source="$(var.Source)/OpenSketch.swb" KeyPath="yes" />
+        <File Id="Macro" Source="$(var.Source)/BIZOMAT CAD.swb" KeyPath="yes" />
       </Component>
       <Component Id="Readme" Bitness="always64">
         <File Id="Readme" Source="$(var.Source)/README.txt" KeyPath="yes" />

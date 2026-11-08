@@ -10,9 +10,9 @@ Stages (each a few minutes at most, so no MCP client gives up on the call):
 - shapes: a cup (draft, shell) and a sweep and a loft.
 - assembly: two blocks, an assembly, components, mates, interference, mate candidates, export.
 
-The features are plain OpenSketch features. A string "@<id>" stands for the SOLIDWORKS name an earlier step gave
+The features are plain BIZOMAT CAD features. A string "@<id>" stands for the SOLIDWORKS name an earlier step gave
 feature <id> (Boss-Extrude2, Plane1, ...), so the test does not depend on SOLIDWORKS' numbering or language.
-tests/test_sw_selftest.py builds every stage with OpenSketch's own kernel to prove the test itself is right.
+tests/test_sw_selftest.py builds every stage with BIZOMAT CAD's own kernel to prove the test itself is right.
 """
 
 from __future__ import annotations
@@ -202,7 +202,7 @@ def _feature_rows(rows: list[dict]) -> list[dict]:
 
 
 def _history_expect(history: list[dict], plain: list[dict]) -> dict:
-    """Predictions from the whole test history built in OpenSketch (exact, and possible for mirrors and patterns of
+    """Predictions from the whole test history built in BIZOMAT CAD (exact, and possible for mirrors and patterns of
     earlier features, which a prediction on SOLIDWORKS' STEP body cannot make)."""
     from . import geometry
     doc = {"version": 1, "type": "part", "name": "selftest", "units": "mm", "rollback": None,

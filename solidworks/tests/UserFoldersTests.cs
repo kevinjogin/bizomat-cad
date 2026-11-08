@@ -118,12 +118,12 @@ namespace OpenSketch.Sw.Tests
             Assert.Equal(1, r.KeptBoth);
             Assert.Equal(1, r.Identical);
             Assert.Equal("my newer bracket", File.ReadAllText(Path.Combine(projects, "Bracket.SLDPRT")));
-            Assert.Equal("part", File.ReadAllText(Path.Combine(projects, "Bracket (from OpenSketch).SLDPRT")));
-            Assert.False(File.Exists(Path.Combine(projects, "selftest", "plate (from OpenSketch).SLDPRT")));
+            Assert.Equal("part", File.ReadAllText(Path.Combine(projects, "Bracket (from earlier folder).SLDPRT")));
+            Assert.False(File.Exists(Path.Combine(projects, "selftest", "plate (from earlier folder).SLDPRT")));
             // an interrupted run that is repeated does not add more copies
             var again = UserFolders.Migrate(new[] { Old }, Root);
             Assert.Equal(0, again.KeptBoth + again.Copied);
-            Assert.Single(Directory.GetFiles(projects, "Bracket (from OpenSketch)*"));
+            Assert.Single(Directory.GetFiles(projects, "Bracket (from earlier folder)*"));
         }
 
         [Fact]

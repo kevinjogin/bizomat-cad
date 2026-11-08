@@ -10,7 +10,7 @@ using Environment = System.Environment;
 namespace OpenSketch.Sw.App
 {
     /// <summary>
-    /// OpenSketchSW.exe. Double-click: a small window to install the link for this Windows user (no admin rights) and,
+    /// BIZOMAT-CAD.exe. Double-click: a small window to install the link for this Windows user (no admin rights) and,
     /// if SOLIDWORKS cannot load add-ins on this PC, to connect to the open SOLIDWORKS from outside.
     /// Command line: --install, --uninstall, --attach.
     /// </summary>
@@ -103,7 +103,7 @@ namespace OpenSketch.Sw.App
 
         public static string Install()
         {
-            if (!File.Exists(Dll)) throw new FileNotFoundException("OpenSketch.Sw.dll is not next to this program. Unzip the whole folder first.");
+            if (!File.Exists(Dll)) throw new FileNotFoundException("The BIZOMAT CAD add-in file is not next to this program. Unzip the whole folder first.");
             Unblock();
             using (var hk = Hkcu())
             using (var classes = hk.CreateSubKey(@"Software\Classes"))
@@ -160,26 +160,26 @@ namespace OpenSketch.Sw.App
         public const string MacroText =
             "' BIZOMAT CAD for SOLIDWORKS: starts the add-in inside SOLIDWORKS (it is not the add-in itself).\r\n" +
             "' Tools > Macro > Run this file, or give it a button (Tools > Customize > Commands > Macro).\r\n" +
-            "' It needs OpenSketchSW.exe > Install for me once (no admin rights).\r\n" +
-            "Dim gOpenSketch As Object\r\n" +
+            "' It needs BIZOMAT-CAD.exe > Install for me once (no admin rights).\r\n" +
+            "Dim gBizomatCad As Object\r\n" +
             "\r\n" +
             "Sub main()\r\n" +
             "    On Error GoTo failed\r\n" +
-            "    Set gOpenSketch = CreateObject(\"OpenSketch.Sw.Launcher\")\r\n" +
-            "    gOpenSketch.Start Application.SldWorks\r\n" +
+            "    Set gBizomatCad = CreateObject(\"OpenSketch.Sw.Launcher\")\r\n" +
+            "    gBizomatCad.Start Application.SldWorks\r\n" +
             "    Exit Sub\r\n" +
             "failed:\r\n" +
-            "    MsgBox \"BIZOMAT CAD is not installed for this Windows user. Install BIZOMAT CAD for SOLIDWORKS, or run OpenSketchSW.exe and click Install for me.\" & vbCrLf & Err.Description, vbExclamation, \"BIZOMAT CAD\"\r\n" +
+            "    MsgBox \"BIZOMAT CAD is not installed for this Windows user. Install BIZOMAT CAD for SOLIDWORKS, or run BIZOMAT-CAD.exe and click Install for me.\" & vbCrLf & Err.Description, vbExclamation, \"BIZOMAT CAD\"\r\n" +
             "End Sub\r\n";
 
         /// <summary>The launcher macro as text (.swb runs from Tools > Macro > Run like a .swp) in Documents\BIZOMAT CAD
-        /// (up to 0.13: Documents\OpenSketch). The shipped file keeps its name OpenSketch.swb in the package; the COM
-        /// name it starts, OpenSketch.Sw.Launcher, is unchanged so earlier macros keep working.</summary>
+        /// (up to 0.13: Documents\OpenSketch). The COM name it starts (the add-in's
+        /// launcher class) is unchanged, so earlier macros keep working.</summary>
         static string WriteMacro()
         {
             var d = Core.UserFolders.Ensure();
             var p = Path.Combine(d, Core.UserFolders.MacroFileName);
-            var shipped = Path.Combine(Folder, "OpenSketch.swb");
+            var shipped = Path.Combine(Folder, "BIZOMAT CAD.swb");
             File.WriteAllText(p, File.Exists(shipped) ? File.ReadAllText(shipped) : MacroText);
             File.WriteAllText(Path.Combine(d, Core.UserFolders.MacroTextFileName), MacroText);
             return p;
@@ -205,7 +205,7 @@ namespace OpenSketch.Sw.App
             catch (Exception)
             {
             }
-            return "Removed for " + Environment.UserName + ". Your key and your files in Documents\\BIZOMAT CAD stay as they are; delete HKEY_CURRENT_USER\\Software\\OpenSketch to forget the key.";
+            return "Removed for " + Environment.UserName + ". Your key and your files in Documents\\BIZOMAT CAD stay as they are.";
         }
 
         public static bool Installed

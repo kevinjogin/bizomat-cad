@@ -1,4 +1,4 @@
-# OpenSketch server on this Windows PC: one-time setup (and again after you pull new code).
+# BIZOMAT CAD server on this Windows PC: one-time setup (and again after you pull new code).
 # From the repository folder:   powershell -ExecutionPolicy Bypass -File windows\setup.ps1
 # Needs Python 3.12 and Node.js 20.6 or newer. Installs into .venv in this folder; nothing system-wide.
 $ErrorActionPreference = 'Stop'
@@ -25,17 +25,17 @@ $python = '.venv\Scripts\python.exe'
 & $python -m pip install -r requirements.txt
 if ($LASTEXITCODE -ne 0) { Stop-With 'Installing the Python packages failed (see above).' }
 & $python -m pip install --no-deps -e .
-if ($LASTEXITCODE -ne 0) { Stop-With 'Installing OpenSketch failed (see above).' }
+if ($LASTEXITCODE -ne 0) { Stop-With 'Installing the BIZOMAT CAD server failed (see above).' }
 
 # The SOLIDWORKS add-in, so the home page can offer it: the zip built by GitHub Actions (see windows\README.md)
-$target = 'opensketch\static\downloads\OpenSketch-SOLIDWORKS.zip'
-$found = Get-ChildItem -Path (Join-Path $HOME 'Downloads') -Filter 'OpenSketch-SOLIDWORKS*.zip' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+$target = 'opensketch\static\downloads\BIZOMAT-CAD-SOLIDWORKS.zip'
+$found = Get-ChildItem -Path (Join-Path $HOME 'Downloads') -Filter 'BIZOMAT-CAD-SOLIDWORKS*.zip' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
 if ($found) {
   New-Item -ItemType Directory -Force -Path (Split-Path $target) | Out-Null
   Copy-Item $found.FullName $target -Force
   Write-Host "Add-in zip copied from $($found.FullName)."
 } elseif (-not (Test-Path $target)) {
-  Write-Host 'No add-in zip yet. Download it from GitHub (Actions > SOLIDWORKS add-in > the latest run > Artifacts) into Downloads; you can install it from there directly.' -ForegroundColor Yellow
+  Write-Host 'No add-in zip yet. Download it from GitHub (Actions > BIZOMAT CAD for Windows > the latest run > Artifacts > BIZOMAT-CAD-SOLIDWORKS-package) into Downloads; you can install it from there directly.' -ForegroundColor Yellow
 }
 
 Write-Host ''

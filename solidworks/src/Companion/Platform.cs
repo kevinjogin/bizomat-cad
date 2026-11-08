@@ -560,7 +560,7 @@ namespace Kevos.Companion
         }
 
         /// <summary>
-        /// Migration from the per-user OpenSketch install (OpenSketchSW.exe > Install for me): its HKCU COM registration
+        /// Migration from the per-user OpenSketch install (BIZOMAT-CAD.exe > Install for me): its HKCU COM registration
         /// would win over the machine-wide one and make SOLIDWORKS load the old DLL from the old folder. When this
         /// companion is the installed one (HKLM), the per-user registration of the same add-in is removed.
         /// </summary>

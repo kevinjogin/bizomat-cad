@@ -27,11 +27,11 @@ namespace OpenSketch.Sw.Core
         public const string MacroFileName = "BIZOMAT CAD.swb";
         public const string MacroTextFileName = "BIZOMAT CAD macro (paste into a new macro).txt";
         /// <summary>The migration's record, in Backups.</summary>
-        public const string RecordName = "OpenSketch migration.json";
+        public const string RecordName = "Earlier folder migration.json";
         /// <summary>The note left in the old folder once everything is copied.</summary>
         public const string MovedNote = "MOVED TO BIZOMAT CAD.txt";
         /// <summary>Added before the extension when both folders hold a different file of the same name.</summary>
-        public const string ConflictSuffix = " (from OpenSketch)";
+        public const string ConflictSuffix = " (from earlier folder)";
         /// <summary>The old folder's launcher files: not copied (the installer writes new ones); they stay in the old folder.</summary>
         static readonly string[] LegacyLauncherFiles = { "OpenSketch.swb", "OpenSketch macro (paste into a new macro).txt" };
 
@@ -158,7 +158,7 @@ namespace OpenSketch.Sw.Core
             }
             catch (Exception ex)
             {
-                log?.Invoke("BIZOMAT CAD folder: the move of the old OpenSketch files did not run (" + ex.Message + "); it is tried again at the next start");
+                log?.Invoke("BIZOMAT CAD folder: the copy of the earlier folder's files did not run (" + ex.Message + "); it is tried again at the next start");
                 return new MigrationResult { State = "partial" };
             }
         }
@@ -261,7 +261,7 @@ namespace OpenSketch.Sw.Core
             return p.StartsWith(r, StringComparison.OrdinalIgnoreCase) ? p.Substring(r.Length) : Path.GetFileName(p);
         }
 
-        /// <summary>A free name beside target ("name (from OpenSketch).ext", then " (2)"...), or null when one of those
+        /// <summary>A free name beside target ("name (from earlier folder).ext", then " (2)"...), or null when one of those
         /// already holds the same content (an earlier run copied it).</summary>
         static string BesideName(string source, string target)
         {
@@ -308,7 +308,7 @@ namespace OpenSketch.Sw.Core
                 "to", Path.Combine(root, "Projects"),
                 "copied", r.Copied, "kept_both", r.KeptBoth, "already_there", r.Identical, "old_launcher_files_left", r.Skipped,
                 "waiting", r.Pending.Cast<object>().ToList(),
-                "note", "Files are copied, never moved or deleted: the old OpenSketch folder is kept as a backup. Files listed under waiting were locked or still syncing and are tried again at the next start.");
+                "note", "Files are copied, never moved or deleted: the earlier folder is kept as a backup. Files listed under waiting were locked or still syncing and are tried again at the next start.");
             var path = Path.Combine(root, "Backups", RecordName);
             File.WriteAllText(path + ".tmp", Json.Write(record));
             if (File.Exists(path)) File.Delete(path);
@@ -322,7 +322,7 @@ namespace OpenSketch.Sw.Core
                 var note = Path.Combine(legacy, MovedNote);
                 if (File.Exists(note)) return;
                 File.WriteAllText(note,
-                    "BIZOMAT CAD (formerly OpenSketch) now keeps its files in:\r\n  " + Path.Combine(root, "Projects") + "\r\n\r\n" +
+                    "BIZOMAT CAD now keeps its files in:\r\n  " + Path.Combine(root, "Projects") + "\r\n\r\n" +
                     "Every file from this folder was copied there; nothing here was changed or deleted. Keep this folder as a\r\n" +
                     "backup until you have checked your files in BIZOMAT CAD, then you may delete it.\r\n" +
                     "Details: " + Path.Combine(root, "Backups", RecordName) + "\r\n");

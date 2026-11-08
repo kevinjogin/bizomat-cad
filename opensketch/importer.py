@@ -391,7 +391,7 @@ def standard_catalog() -> dict:
 
 def build_standard(feat: dict):
     """Solid for a standard part (screw, nut, washer, bearing). Screws run down -Z from the head's underside at Z=0 in
-    bd_warehouse; OpenSketch turns them so the axis is Y (up, as SOLIDWORKS) with the head on top."""
+    bd_warehouse; BIZOMAT CAD turns them so the axis is Y (up, as SOLIDWORKS) with the head on top."""
     import importlib
     from build123d import Axis
     kind = feat.get("kind")

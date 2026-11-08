@@ -122,7 +122,7 @@ def render_preview(doc: dict, view: str = "isometric", width: int = 960, height:
                    view_width: float | None = None, section: dict | None = None, transparent: bool = False) -> bytes:
     """Render a part or solved assembly to PNG without changing its document.
 
-    Views use OpenSketch's Y-up convention. Hidden/suppressed components are not
+    Views use BIZOMAT CAD's Y-up convention. Hidden/suppressed components are not
     drawn. Bounds are fitted to the visible geometry with an eight percent margin,
     unless target / view_width ask for a close-up. yaw and pitch (degrees) give any
     direction. section {point, normal} cuts the solids and removes the normal's side;

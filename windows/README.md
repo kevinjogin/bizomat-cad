@@ -1,10 +1,10 @@
-# OpenSketch on one Windows PC
+# BIZOMAT CAD on one Windows PC
 
-The OpenSketch server runs on the same Windows PC as SOLIDWORKS. SOLIDWORKS connects to it at
+The BIZOMAT CAD server runs on the same Windows PC as SOLIDWORKS. SOLIDWORKS connects to it at
 `http://127.0.0.1:8000`. AI apps (Claude, ChatGPT) reach it through a secure tunnel.
 
 ```
-AI app  --https-->  tunnel  -->  OpenSketch server (this PC, port 8000)  <--  SOLIDWORKS add-in (this PC)
+AI app  --https-->  tunnel  -->  BIZOMAT CAD server (this PC, port 8000)  <--  SOLIDWORKS add-in (this PC)
 ```
 
 You need SOLIDWORKS 2022 or newer, 64-bit Windows 10 or 11, and about 2 GB of free disk space.
@@ -27,8 +27,8 @@ This repository is private, so Git asks you to sign in to GitHub the first time.
 
 ```powershell
 cd $HOME\Documents
-git clone https://github.com/jogkev-creator/CADOS.git
-cd CADOS
+git clone https://github.com/jogkev-creator/bizomat.git
+cd bizomat\apps\cad
 ```
 
 ## 3. Set it up (once, and after each `git pull`)
@@ -41,22 +41,21 @@ This creates `.venv` in the folder and installs the pinned Python packages.
 
 ## 4. Get the SOLIDWORKS add-in (and update it)
 
-GitHub builds it on every change and keeps the newest one on one page:
+The normal way is the installer (`BIZOMAT-CAD-Automation-x64.msi`, see `docs/KEVOS-INSTALL.md`). Without it:
 
 1. Close SOLIDWORKS. In Task Manager, end any `SLDWORKS.exe` that is still running.
-2. Open the repository on github.com (signed in: it is private), then **Releases > OpenSketch for SOLIDWORKS
-   (latest)** (`https://github.com/jogkev-creator/CADOS/releases/tag/addin-latest`), and download
-   **OpenSketch-SOLIDWORKS.zip**. The release notes show the add-in version. A running server also gives its own
-   copy, signed in, at `<server>/api/sw/download`.
-3. Unzip it into `Documents` so the files land in `Documents\OpenSketch-SOLIDWORKS`. Choose **Replace** for every file.
+2. Download **BIZOMAT-CAD-SOLIDWORKS.zip**: a running server gives it, signed in, at `<server>/api/sw/download`;
+   GitHub keeps the package of each build of the add-in (signed in: the repository is private) under
+   **Actions > BIZOMAT CAD for Windows > a run > Artifacts > BIZOMAT-CAD-SOLIDWORKS-package** (for 5 days).
+3. Unzip it into `Documents` so the files land in `Documents\BIZOMAT-CAD-SOLIDWORKS`. Choose **Replace** for every file.
    Always use the same folder.
-4. Run `OpenSketchSW.exe` from that folder and click **Install for me**. If SmartScreen warns, click **More info**, then
+4. Run `BIZOMAT-CAD.exe` from that folder and click **Install for me**. If SmartScreen warns, click **More info**, then
    **Run anyway**: the program is not signed.
 5. Reopen SOLIDWORKS and connect.
 
 Or let a script do steps 1 and 3 to 5 and prove the result: download the zip into Downloads, then run
 `powershell -ExecutionPolicy Bypass -File windows\update-addin.ps1`. It closes SOLIDWORKS (after asking), checks the
-zip is 0.9.0 or newer, installs it into `%LOCALAPPDATA%\OpenSketch\AddIn` (always the same folder, not on OneDrive),
+zip is 0.10.0 or newer, installs it into `%LOCALAPPDATA%\BIZOMAT CAD\AddIn` (always the same folder, not on OneDrive),
 registers it and prints the add-in Windows will load.
 
 To check which add-in SOLIDWORKS loaded, ask Claude for the SOLIDWORKS status. It shows the add-in `version` and its
@@ -84,16 +83,17 @@ Keep the window open while you work. Stop the server with Ctrl+C.
 ## 6. Connect SOLIDWORKS with the macro
 
 1. Start SOLIDWORKS.
-2. Go to **Tools > Macro > Run** and open `Documents\OpenSketch\OpenSketch.swb`. Step 4 put it there.
-3. The OpenSketch window asks for two things:
-   - **OpenSketch address**: `http://127.0.0.1:8000` (already filled in).
-   - **SOLIDWORKS key**: copy it from the home page and paste it here.
+2. Go to **Tools > Macro > Run** and open `Documents\BIZOMAT CAD\BIZOMAT CAD.swb`. Step 4 put it there.
+3. The BIZOMAT CAD window asks for two things:
+   - **Service address**: `http://127.0.0.1:8000` (already filled in).
+   - **Add-in key**: copy it from the home page and paste it here.
 4. Click **Connect**. Tick **Connect when SOLIDWORKS starts** to skip this next time.
 
 To start it with one click, add a toolbar button: **Tools > Customize > Commands > Macro**, drag the
-**New Macro Button** onto a toolbar and choose `OpenSketch.swb`.
+**New Macro Button** onto a toolbar and choose `BIZOMAT CAD.swb`.
 
-The key is saved for your Windows user in `HKEY_CURRENT_USER\Software\OpenSketch`. Treat it like a password.
+The key is saved, encrypted for your Windows user, in the registry under `HKEY_CURRENT_USER\Software\OpenSketch`
+(the key's earlier name, kept so existing settings keep working). Treat it like a password.
 **New key** on the home page replaces it.
 
 ## 7. Connect Claude Desktop on this PC (no tunnel)
@@ -104,7 +104,7 @@ With the server running, run:
 powershell -ExecutionPolicy Bypass -File windows\connect-claude.ps1
 ```
 
-It asks for the private address from the home page (under "Your app cannot sign in?"). It adds OpenSketch to
+It asks for the private address from the home page (under "Your app cannot sign in?"). It adds BIZOMAT CAD to
 Claude Desktop's settings (`%APPDATA%\Claude\claude_desktop_config.json`, with a backup) and restarts Claude Desktop.
 The private address works like a password: keep it to yourself.
 
@@ -126,7 +126,7 @@ opening any port on your PC.
   Copy the `https://....trycloudflare.com` address it prints. Restart `windows\start.ps1` and give that address as
   the public address.
 - **Fixed address**: in the Cloudflare dashboard, use **Zero Trust > Networks > Tunnels** and create a tunnel to
-  `http://127.0.0.1:8000` on a name of your own domain, for example `opensketch.<your-domain>`. Use that address in
+  `http://127.0.0.1:8000` on a name of your own domain, for example `cad.<your-domain>`. Use that address in
   `start.ps1`.
 
 Then add a custom connector in your AI app with the address `https://<public address>/mcp`, and sign in when asked.
@@ -134,15 +134,16 @@ Then add a custom connector in your AI app with the address `https://<public add
 ## 8. First run
 
 Ask the AI: "Run the SOLIDWORKS self test, all three stages." It builds test files in
-`Documents\OpenSketch\selftest` and reports every step.
+`Documents\BIZOMAT CAD\Projects\selftest` and reports every step.
 
-If something fails, you can find the add-in log at `%LOCALAPPDATA%\OpenSketch\SolidWorks\log.txt`. The server
+If something fails, you can find the add-in log at `Documents\BIZOMAT CAD\Logs\log.txt`. The server
 prints its log in the PowerShell window.
 
 ## Good to know
 
-- **Accounts**: the server keeps its accounts and keys in `%USERPROFILE%\opensketch-data`. Back that folder up.
+- **Accounts**: the server keeps its accounts and keys in `%USERPROFILE%\opensketch-data` (the folder's earlier
+  name, kept so an existing server keeps its data). Back that folder up.
 - **Anyone with the address**: when the tunnel is on, anyone who has the public address sees the sign-in page.
   Each person's own password, and the keys, protect it. Stop the tunnel when you are not using the AI app.
-- **Licence**: OpenSketch is AGPL-3.0. A private copy for your own use is fine. If you offer it to other people
+- **Licence**: BIZOMAT CAD is AGPL-3.0. A private copy for your own use is fine. If you offer it to other people
   over a network, the AGPL requires you to offer them its source code.

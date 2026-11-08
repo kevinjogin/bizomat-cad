@@ -1,6 +1,6 @@
-# Installs (or updates) the BIZOMAT CAD add-in for SOLIDWORKS from the newest OpenSketch-SOLIDWORKS*.zip in Downloads,
-# and shows which add-in SOLIDWORKS will load. Download the zip first from the repository's
-# Releases > OpenSketch for SOLIDWORKS (latest).
+# Installs (or updates) the BIZOMAT CAD add-in for SOLIDWORKS from the newest BIZOMAT-CAD-SOLIDWORKS*.zip in Downloads
+# (or an older OpenSketch-SOLIDWORKS*.zip), and shows which add-in SOLIDWORKS will load. Download the zip first: the
+# BIZOMAT CAD for SOLIDWORKS release, or the package on the CAD Automation dashboard.
 # From the repository folder:   powershell -ExecutionPolicy Bypass -File windows\update-addin.ps1
 #
 # It installs into %LOCALAPPDATA%\BIZOMAT CAD\AddIn (up to 0.13: %LOCALAPPDATA%\OpenSketch\AddIn, left as it was): always the same folder, and not on OneDrive (a synced or
@@ -8,8 +8,8 @@
 # stays loaded.
 $ErrorActionPreference = 'Stop'
 function Stop-With($message) { Write-Host $message -ForegroundColor Yellow; exit 1 }
-$Launcher = 'ed25919a-7e4a-4a08-a2db-4c69ae22b1ea'   # OpenSketch.Sw.Launcher (the macro starts this)
-$AddIn = '275256ff-b73a-4e4f-9ea8-842b6626d471'      # OpenSketch.Sw.SwAddin (the add-in)
+$Launcher = 'ed25919a-7e4a-4a08-a2db-4c69ae22b1ea'   # the launcher class the macro starts (COM id unchanged)
+$AddIn = '275256ff-b73a-4e4f-9ea8-842b6626d471'      # the add-in class (COM id unchanged)
 
 function Show-Registered {
   foreach ($id in $Launcher, $AddIn) {
@@ -34,20 +34,20 @@ if ($sw) {
 }
 
 # 2. The newest downloaded zip, and the version inside it
-$zip = Get-ChildItem (Join-Path $HOME 'Downloads') -Filter 'OpenSketch-SOLIDWORKS*.zip' -ErrorAction SilentlyContinue |
+$zip = Get-ChildItem (Join-Path $HOME 'Downloads') -Filter '*-SOLIDWORKS*.zip' -ErrorAction SilentlyContinue |
        Sort-Object LastWriteTime -Descending | Select-Object -First 1
 if (-not $zip) {
-  Stop-With 'No OpenSketch-SOLIDWORKS zip in Downloads. Download it from the repository: Releases > OpenSketch for SOLIDWORKS (latest).'
+  Stop-With 'No BIZOMAT-CAD-SOLIDWORKS zip in Downloads. Download it from the CAD Automation dashboard or the BIZOMAT CAD for SOLIDWORKS release.'
 }
 Write-Host "Using $($zip.FullName) (downloaded $($zip.LastWriteTime))"
-$stage = Join-Path $env:TEMP ('opensketch-addin-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+$stage = Join-Path $env:TEMP ('bizomat-cad-addin-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
 Expand-Archive -Path $zip.FullName -DestinationPath $stage -Force
 $src = Get-ChildItem $stage -Recurse -Filter 'OpenSketch.Sw.dll' | Select-Object -First 1
 if (-not $src) { Stop-With 'That zip has no OpenSketch.Sw.dll. Download the zip again.' }
 $newVersion = [version]$src.VersionInfo.FileVersion
 Write-Host "The zip holds add-in $newVersion"
 if ($newVersion -lt [version]'0.10.0') {
-  Stop-With "That zip is add-in $newVersion, too old for drawings. Download the newest from Releases > OpenSketch for SOLIDWORKS (latest), then run this again."
+  Stop-With "That zip is add-in $newVersion, too old for drawings. Download the newest from the BIZOMAT CAD for SOLIDWORKS release, then run this again."
 }
 
 # 3. Into one fixed local folder, then register it for this Windows user
@@ -55,9 +55,11 @@ $target = Join-Path $env:LOCALAPPDATA 'BIZOMAT CAD\AddIn'
 New-Item -ItemType Directory -Force -Path $target | Out-Null
 Copy-Item (Join-Path $src.DirectoryName '*') $target -Recurse -Force
 Get-ChildItem $target | Unblock-File
-$exe = Join-Path $target 'OpenSketchSW.exe'
+# BIZOMAT-CAD.exe from 0.14; packages up to 0.13 named it OpenSketchSW.exe
+$exe = Join-Path $target 'BIZOMAT-CAD.exe'
+if (-not (Test-Path (Join-Path $src.DirectoryName 'BIZOMAT-CAD.exe'))) { $exe = Join-Path $target 'OpenSketchSW.exe' }
 $p = Start-Process -FilePath $exe -ArgumentList '--install' -Wait -PassThru -NoNewWindow
-if ($p.ExitCode -ne 0) { Stop-With "OpenSketchSW.exe --install failed (exit $($p.ExitCode))." }
+if ($p.ExitCode -ne 0) { Stop-With "$(Split-Path $exe -Leaf) --install failed (exit $($p.ExitCode))." }
 Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
 
 # 4. Proof
@@ -77,5 +79,5 @@ if ($loaded -ge [version]'0.10.0') {
 $downloads = Join-Path (Split-Path $PSScriptRoot -Parent) 'opensketch\static\downloads'
 if (Test-Path (Split-Path $downloads -Parent)) {
   New-Item -ItemType Directory -Force -Path $downloads | Out-Null
-  Copy-Item $zip.FullName (Join-Path $downloads 'OpenSketch-SOLIDWORKS.zip') -Force
+  Copy-Item $zip.FullName (Join-Path $downloads 'BIZOMAT-CAD-SOLIDWORKS.zip') -Force
 }

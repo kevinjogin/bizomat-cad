@@ -16,7 +16,7 @@
 #      -TrustOnThisComputer adds the public certificate to this Windows user's Trusted Root and Trusted Publishers
 #      (Windows asks to confirm). This computer only; never do this on customers' computers.
 #   4. The build (-Build runs `bash solidworks/build.sh test` with Git Bash), then installer\build.ps1 signs
-#      OpenSketch.Sw.dll, KEVOS.Companion.exe and OpenSketchSW.exe (BIZOMAT's own files; the package has no third-party
+#      OpenSketch.Sw.dll, KEVOS.Companion.exe and BIZOMAT-CAD.exe (BIZOMAT's own files; the package has no third-party
 #      binaries), packs them into the MSI and signs the MSI. SHA-256 file digests; an RFC 3161 SHA-256 timestamp from
 #      -TimestampUrl unless -NoTimestamp.
 #   5. Checks: each file with `signtool verify /pa /v` and Get-AuthenticodeSignature (valid, signed by this
@@ -43,8 +43,8 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 Set-Location $root
-$OwnFiles = @('OpenSketch.Sw.dll', 'KEVOS.Companion.exe', 'OpenSketchSW.exe')
-$dist = Join-Path $root 'solidworks\dist\OpenSketch-SOLIDWORKS'
+$OwnFiles = @('OpenSketch.Sw.dll', 'KEVOS.Companion.exe', 'BIZOMAT-CAD.exe')
+$dist = Join-Path $root 'solidworks\dist\BIZOMAT-CAD-SOLIDWORKS'
 $out = Join-Path $PSScriptRoot 'out'
 $record = Join-Path $PSScriptRoot 'signing'
 

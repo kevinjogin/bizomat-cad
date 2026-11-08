@@ -1,9 +1,9 @@
-"""Sign-in for AI apps that connect to OpenSketch: OAuth 2.1 for the MCP endpoint (MCP authorization spec).
+"""Sign-in for AI apps that connect to BIZOMAT CAD: OAuth 2.1 for the MCP endpoint (MCP authorization spec).
 
 An AI app (Claude, ChatGPT, Codex, Cursor, VS Code...) is given only the plain address <site>/mcp. Its first request
 gets 401 with a pointer to the protected-resource metadata; it reads the authorization-server metadata, registers
 itself (Dynamic Client Registration, RFC 7591), and sends the person's browser to /oauth/authorize. There they sign
-in to OpenSketch as usual (password or Google) and click Allow on a consent page. The AI app swaps the one-time
+in to BIZOMAT CAD as usual (password or Google) and click Allow on a consent page. The AI app swaps the one-time
 code (PKCE S256 required) for an access token (1 hour) and a refresh token (90 days, rotated on every use), and sends
 `Authorization: Bearer <access token>` with every MCP request. The token stands for that person: the MCP tools reach
 only their own SOLIDWORKS link. People see and disconnect their apps on the home page.

@@ -45,7 +45,7 @@ def enabled() -> bool:
 
 
 def _log(msg: str) -> None:
-    print(f"OpenSketch CAD worker: {msg}", flush=True)
+    print(f"BIZOMAT CAD worker: {msg}", flush=True)
 
 
 class CadJobError(Exception):

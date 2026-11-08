@@ -32,7 +32,7 @@ MAX_FAILS = 6          # servers in a row that never answered -> the supervisor 
 
 
 def _log(msg: str) -> None:
-    print(f"OpenSketch supervisor: {msg}", flush=True)
+    print(f"BIZOMAT CAD supervisor: {msg}", flush=True)
 
 
 class Supervisor:

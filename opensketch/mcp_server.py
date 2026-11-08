@@ -1,5 +1,5 @@
-"""OpenSketch as an MCP server: an AI app (Claude, ChatGPT...) builds native SOLIDWORKS parts and assemblies in the
-user's own SOLIDWORKS, through the OpenSketch add-in on their PC (swbridge.py). The tools are in sw_tools.py and
+"""BIZOMAT CAD as an MCP server: an AI app (Claude, ChatGPT...) builds native SOLIDWORKS parts and assemblies in the
+user's own SOLIDWORKS, through the BIZOMAT CAD add-in on their PC (swbridge.py). The tools are in sw_tools.py and
 sw_selftest.py; they register on `mcp` here.
 
 Addresses: <site>/mcp, where the AI app signs in (OAuth, mcpauth.py; Bearer token), and <site>/mcp/<key>, the

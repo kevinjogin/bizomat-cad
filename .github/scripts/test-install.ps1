@@ -19,8 +19,8 @@ function Value([string]$key, [string]$name) {
 
 $addin = '{275256ff-b73a-4e4f-9ea8-842b6626d471}'
 $dir = Join-Path $env:ProgramFiles 'KEVOS\Bridge'
-$files = 'OpenSketch.Sw.dll', 'BIZOMAT.bmp', 'KEVOS.Companion.exe', 'KEVOS.Companion.exe.config', 'OpenSketchSW.exe',
-         'OpenSketchSW.exe.config', 'OpenSketch.swb', 'README.txt', 'LICENSE.txt', 'SOURCE.txt'
+$files = 'OpenSketch.Sw.dll', 'BIZOMAT.bmp', 'KEVOS.Companion.exe', 'KEVOS.Companion.exe.config', 'BIZOMAT-CAD.exe',
+         'BIZOMAT-CAD.exe.config', 'BIZOMAT CAD.swb', 'README.txt', 'LICENSE.txt', 'SOURCE.txt'
 $run = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run'
 
 Write-Host "Installing $(Split-Path $Msi -Leaf)"

@@ -1,6 +1,6 @@
 """The link between the AI app (the sw_ tools in sw_tools.py) and SOLIDWORKS on the user's own PC.
 
-The OpenSketch add-in for SOLIDWORKS (solidworks/ in this repo) connects OUT to this server, so the PC needs no
+The BIZOMAT CAD add-in for SOLIDWORKS (solidworks/ in this repo) connects OUT to this server, so the PC needs no
 open port and works behind a company firewall or proxy:
 
 1. POST /mcp/sw/hello with its SOLIDWORKS key (Authorization: Bearer oss_...) -> a session id.

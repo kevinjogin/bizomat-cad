@@ -4,13 +4,13 @@ The model is a real SOLIDWORKS part or assembly on the user's PC, reached throug
 repo, linked by swbridge.py). SOLIDWORKS is the master copy: the user can edit the same file by hand between calls,
 and sw_get_document reads it as it is now.
 
-- Writing: features in OpenSketch's document format (sketches with relations and dimensions, extrudes, revolves,
+- Writing: features in BIZOMAT CAD's document format (sketches with relations and dimensions, extrudes, revolves,
   fillets, patterns... see sw_get_guide) are made as native SOLIDWORKS features, fully defined sketches where the
   sketch says so. Before anything is sent, the features are checked by the registry and each sketch is solved
-  by OpenSketch's sketch solver (solver/solver.js, run with node), so SOLIDWORKS gets exact coordinates.
+  by BIZOMAT CAD's sketch solver (solver/solver.js, run with node), so SOLIDWORKS gets exact coordinates.
 - Reading: the feature tree, errors, sketches and mates come from SOLIDWORKS itself. Topology, measuring,
   previews, interference and mate candidates run here on the STEP of the current body (cached by SOLIDWORKS'
-  update stamp), with OpenSketch's own tested code.
+  update stamp), with BIZOMAT CAD's own tested code.
 - All OpenCascade work (reading SOLIDWORKS' STEP, predictions, topology, measuring, previews, interference) runs in
   the person's "agent" CAD worker (cadworker.lane_for): in the web server it would
   hold the GIL and pause every request on the server. Node (the sketch solver) and big file writes run in threads.
@@ -63,7 +63,7 @@ Workflow:
   than one is online. Deleting, Save As, overwriting a drawing and undo are confirmed by the person at that computer:
   if they decline, say so and do not retry.
 - sw_create_document makes a new part or assembly from the user's default template and saves it in
-  Documents\\BIZOMAT CAD\\Projects (or `folder`; add-ins before 0.14 used Documents\\OpenSketch). Every other tool takes `doc`: its path or window title from sw_status;
+  Documents\\BIZOMAT CAD\\Projects (or `folder`). Every other tool takes `doc`: its path or window title from sw_status;
   leave it out for the active document.
 - sw_add_features writes features in the CAD Automation feature format (below): sketches with entities, relations and
   dimensions, then extrudes, revolves, sweeps, lofts, holes, fillets, chamfers, shells, drafts, mirrors,
@@ -303,7 +303,7 @@ def _solve(feats: list[dict]) -> tuple[list[dict], list[str], dict]:
 
 
 async def _predict(doc: str | None, component: str | None, feats: list[dict]) -> tuple[dict, str | None]:
-    """What OpenSketch's own kernel makes of these features on SOLIDWORKS' current body: each feature's volume
+    """What BIZOMAT CAD's own kernel makes of these features on SOLIDWORKS' current body: each feature's volume
     change, the body's box after it, an extrude's range along its sketch normal and the resolved sketch planes.
     The add-in compares and makes a feature the other way round if SOLIDWORKS read a flag differently. Features that refer to SOLIDWORKS names get no prediction."""
     try:
@@ -331,7 +331,7 @@ def _predict_sync(pdoc: dict) -> dict:
 
 
 def expectations(st, skip: set = frozenset()) -> dict:
-    """{feature id: what the add-in checks it against} from an OpenSketch rebuild."""
+    """{feature id: what the add-in checks it against} from a BIZOMAT CAD rebuild."""
     out: dict = {}
     for s in st.status:
         fid = s.get("id")
@@ -570,13 +570,13 @@ def _part_doc_from_step(raw: bytes, title: str) -> dict:
 
 
 def _matrix_pose(m: list[float]) -> tuple[list[float], list[float]]:
-    """SOLIDWORKS component placement [r00..r22 by rows, tx, ty, tz mm] -> OpenSketch position, rotation."""
+    """SOLIDWORKS component placement [r00..r22 by rows, tx, ty, tz mm] -> BIZOMAT CAD position, rotation."""
     R = np.array(m[:9], dtype=float).reshape(3, 3)
     return [round(float(v), 6) for v in m[9:12]], assembly.euler_of(assembly.orthonormal(R))
 
 
 async def _geometry(doc: str | None, component: str | None = None) -> dict:
-    """An OpenSketch document holding SOLIDWORKS' current geometry: a part with one imported body, or an
+    """A BIZOMAT CAD document holding SOLIDWORKS' current geometry: a part with one imported body, or an
     assembly whose component ids are SOLIDWORKS' component names. Parts are re-exported only when SOLIDWORKS'
     update stamp changed."""
     pid = swbridge.person_id(_who()) + "|" + swbridge.target_key(_who(), _device())

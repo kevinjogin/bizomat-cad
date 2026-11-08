@@ -1,5 +1,5 @@
-# Adds OpenSketch to the Claude Desktop app on this PC (no tunnel needed).
-# It asks for the private address from the OpenSketch home page ("Your app cannot sign in?"), writes it into
+# Adds BIZOMAT CAD to the Claude Desktop app on this PC (no tunnel needed).
+# It asks for the private address from the BIZOMAT CAD home page ("Your app cannot sign in?"), writes it into
 # Claude Desktop's settings (%APPDATA%\Claude\claude_desktop_config.json, keeping anything else there, with a
 # backup), and restarts Claude Desktop.
 # From the repository folder, with the server running (windows\start.ps1):
@@ -13,13 +13,13 @@ function Stop-With($message) { Write-Host $message -ForegroundColor Yellow; exit
 $listening = $false
 try { $tcp = New-Object System.Net.Sockets.TcpClient; $tcp.Connect('127.0.0.1', 8000); $listening = $tcp.Connected; $tcp.Close() } catch { }
 if (-not $listening) {
-  Write-Host 'Nothing is answering on http://127.0.0.1:8000, so the OpenSketch server does not seem to be running.' -ForegroundColor Yellow
+  Write-Host 'Nothing is answering on http://127.0.0.1:8000, so the BIZOMAT CAD server does not seem to be running.' -ForegroundColor Yellow
   Write-Host 'Start it in another window first (and keep that window open): powershell -ExecutionPolicy Bypass -File windows\start.ps1'
   if ((Read-Host 'Continue anyway? (y/N)') -notmatch '^[yY]') { exit 1 }
 }
 if (-not (Get-Command npx -ErrorAction SilentlyContinue)) { Stop-With 'Node.js is needed: winget install OpenJS.NodeJS.LTS' }
 
-Write-Host 'On the OpenSketch home page (http://127.0.0.1:8000), open "Your app cannot sign in?" and copy the private address.'
+Write-Host 'On the BIZOMAT CAD home page (http://127.0.0.1:8000), open "Your app cannot sign in?" and copy the private address.'
 $address = (Read-Host 'Private address').Trim()
 if ($address -notmatch '^https?://[^/\s]+/(solidworks/)?mcp/[^/\s]+$') {
   Stop-With 'That is not the private address. It looks like http://127.0.0.1:8000/mcp/ followed by a long code.'
@@ -43,12 +43,14 @@ if (-not $config.PSObject.Properties['mcpServers']) { $config | Add-Member -Note
 $linkArgs = @('/c', 'npx', '-y', 'mcp-remote', $address)
 if ($address -like 'http://*') { $linkArgs += '--allow-http' }
 $entry = [pscustomobject]@{ command = 'cmd'; args = $linkArgs }
-$config.mcpServers | Add-Member -NotePropertyName opensketch -NotePropertyValue $entry -Force
+# the entry is named bizomat-cad; one written by an earlier version of this script (opensketch) is replaced
+if ($config.mcpServers.PSObject.Properties['opensketch']) { $config.mcpServers.PSObject.Properties.Remove('opensketch') }
+$config.mcpServers | Add-Member -NotePropertyName bizomat-cad -NotePropertyValue $entry -Force
 
 # UTF-8 without a byte order mark (a BOM breaks the JSON for Claude Desktop)
 $json = $config | ConvertTo-Json -Depth 20
 [IO.File]::WriteAllText($file, $json, (New-Object System.Text.UTF8Encoding $false))
-Write-Host "OpenSketch added to $file" -ForegroundColor Green
+Write-Host "BIZOMAT CAD added to $file" -ForegroundColor Green
 
 # Restart Claude Desktop so it loads the new setting
 $running = Get-Process -Name 'Claude' -ErrorAction SilentlyContinue

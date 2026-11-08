@@ -51,7 +51,7 @@ namespace OpenSketch.Sw.Core
             this.log = log ?? (_ => { });
             http = new HttpClient(handler ?? DefaultHandler(), true) { Timeout = TimeSpan.FromSeconds(120) };
             http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", this.key);
-            http.DefaultRequestHeaders.UserAgent.ParseAdd("OpenSketch-SOLIDWORKS/" + (J.Str(hello, "version") ?? "0"));
+            http.DefaultRequestHeaders.UserAgent.ParseAdd("BIZOMAT-CAD-SOLIDWORKS/" + (J.Str(hello, "version") ?? "0"));
         }
 
         /// <summary>
