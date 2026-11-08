@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  BIZOMAT CAD Automation for SOLIDWORKS (called CADOS for SOLIDWORKS in 0.12.0 to 0.12.2, and KEVOS Bridge up to 0.11):
+  BIZOMAT CAD for SOLIDWORKS (called CADOS for SOLIDWORKS in 0.12.0 to 0.12.2, and KEVOS Bridge up to 0.11):
   one MSI (WiX Toolset 5, per machine, x64) for each Windows computer that runs SOLIDWORKS. The UpgradeCode, the
   component key paths (so their generated GUIDs), the install folder, the registry keys and the Run value's name are
   unchanged, so it upgrades every earlier version in place. The MSI is BIZOMAT-CAD-Automation-<version>-x64.msi (the
   stable CADOS-for-SOLIDWORKS-x64.msi of 0.12 is still published as a copy). Only the names people read changed.
 
   Installs into C:\Program Files\KEVOS\Bridge (the folder keeps its earlier name):
-    OpenSketch.Sw.dll          the add-in (COM; Tools > Add-Ins > BIZOMAT CAD Automation; loaded at start-up)
+    OpenSketch.Sw.dll          the add-in (COM; Tools > Add-Ins > BIZOMAT CAD; loaded at start-up)
     KEVOS.Companion.exe        the BIZOMAT Companion, the per-user background app (tray), started at every sign-in
     OpenSketchSW.exe, OpenSketch.swb   the earlier per-user installer and launcher macro (fallback during migration)
   Registers (HKLM, 64-bit view): the two COM classes as regasm /codebase would, the SOLIDWORKS add-in entry (one entry
@@ -16,7 +16,7 @@
   Upgrades: a newer MSI replaces the older one (MajorUpgrade); the companion is closed and the person is asked to close
   SOLIDWORKS while files are replaced. Settings and each user's registration live outside the install folder
   (HKCU\Software\KEVOS, %LOCALAPPDATA%\KEVOS, the Windows key store) and are kept across upgrades, repairs and
-  uninstalls. CAD files are never touched. Repair: msiexec /fa <the .msi> (or Apps > BIZOMAT CAD Automation for
+  uninstalls. CAD files are never touched. Repair: msiexec /fa <the .msi> (or Apps > BIZOMAT CAD for
   SOLIDWORKS > Modify > Repair).
 
   Properties: GATEWAY_URL=https://bizomat.ai/cad (the CAD Automation server the companion pairs with; optional, the
@@ -26,15 +26,15 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
      xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util"
      xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
-  <Package Name="BIZOMAT CAD Automation for SOLIDWORKS" Manufacturer="BIZOMAT" Version="$(var.Version)" UpgradeCode="cef90528-e91b-42ae-9556-f70a612cb58f"
+  <Package Name="BIZOMAT CAD for SOLIDWORKS" Manufacturer="BIZOMAT" Version="$(var.Version)" UpgradeCode="cef90528-e91b-42ae-9556-f70a612cb58f"
            Scope="perMachine" Compressed="yes" InstallerVersion="500" Language="1033">
-    <SummaryInformation Description="BIZOMAT CAD Automation for SOLIDWORKS: your AI assistant works in SOLIDWORKS on this computer" Manufacturer="BIZOMAT" />
-    <MajorUpgrade DowngradeErrorMessage="A newer BIZOMAT CAD Automation for SOLIDWORKS is already installed. To go back to an older one, uninstall the newer one first (your settings and this computer's registration are kept)."
+    <SummaryInformation Description="BIZOMAT CAD for SOLIDWORKS: your AI assistant works in SOLIDWORKS on this computer" Manufacturer="BIZOMAT" />
+    <MajorUpgrade DowngradeErrorMessage="A newer BIZOMAT CAD for SOLIDWORKS is already installed. To go back to an older one, uninstall the newer one first (your settings and this computer's registration are kept)."
                   Schedule="afterInstallInitialize" AllowSameVersionUpgrades="no" />
     <MediaTemplate EmbedCab="yes" />
 
-    <Launch Condition="Installed OR VersionNT64" Message="BIZOMAT CAD Automation for SOLIDWORKS needs 64-bit Windows 10 or 11." />
-    <Launch Condition="Installed OR NETFRAMEWORK48" Message="BIZOMAT CAD Automation for SOLIDWORKS needs .NET Framework 4.8 (part of Windows 10 version 1903 and later, and Windows 11). Install it from Microsoft, then run this again." />
+    <Launch Condition="Installed OR VersionNT64" Message="BIZOMAT CAD for SOLIDWORKS needs 64-bit Windows 10 or 11." />
+    <Launch Condition="Installed OR NETFRAMEWORK48" Message="BIZOMAT CAD for SOLIDWORKS needs .NET Framework 4.8 (part of Windows 10 version 1903 and later, and Windows 11). Install it from Microsoft, then run this again." />
     <!-- any .NET Framework 4.x Release value passes here; Windows 10 1903+ and Windows 11 have 4.8, older ones fail at start with a clear message -->
     <Property Id="NETFRAMEWORK48">
       <RegistrySearch Id="NetFx48" Root="HKLM" Key="SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full" Name="Release" Type="raw" Bitness="always64" />
@@ -49,7 +49,7 @@
 
     <util:CloseApplication Id="CloseCompanion" Target="KEVOS.Companion.exe" CloseMessage="yes" TerminateProcess="1" RebootPrompt="no" />
     <util:CloseApplication Id="AskToCloseSolidWorks" Target="SLDWORKS.exe" PromptToContinue="yes" RebootPrompt="no"
-                           Description="Please close SOLIDWORKS (save your work first) so the BIZOMAT CAD Automation add-in can be installed, then click Retry." />
+                           Description="Please close SOLIDWORKS (save your work first) so the BIZOMAT CAD add-in can be installed, then click Retry." />
 
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="KevosDir" Name="KEVOS">
@@ -61,7 +61,7 @@
       <Directory Id="KevosMenu" Name="BIZOMAT" />
     </StandardDirectory>
 
-    <Feature Id="Main" Title="BIZOMAT CAD Automation for SOLIDWORKS" Level="1">
+    <Feature Id="Main" Title="BIZOMAT CAD for SOLIDWORKS" Level="1">
       <ComponentGroupRef Id="Files" />
       <ComponentGroupRef Id="Registration" />
       <ComponentRef Id="MenuShortcuts" />
@@ -152,9 +152,9 @@
       <Component Id="SolidWorksAddin" Bitness="always64">
         <RegistryKey Root="HKLM" Key="SOFTWARE\SolidWorks\Addins\{275256ff-b73a-4e4f-9ea8-842b6626d471}">
           <RegistryValue Type="integer" Value="1" KeyPath="yes" />
-          <RegistryValue Name="Title" Type="string" Value="BIZOMAT CAD Automation" />
+          <RegistryValue Name="Title" Type="string" Value="BIZOMAT CAD" />
           <RegistryValue Name="Icon Path" Type="string" Value="[#AddinIcon]" />
-          <RegistryValue Name="Description" Type="string" Value="BIZOMAT CAD Automation: your AI assistant (Claude, ChatGPT...) builds parts, assemblies and drawings in SOLIDWORKS" />
+          <RegistryValue Name="Description" Type="string" Value="BIZOMAT CAD: your AI assistant (Claude, ChatGPT...) builds parts, assemblies and drawings in SOLIDWORKS" />
         </RegistryKey>
       </Component>
       <Component Id="InstallRecord" Bitness="always64">
@@ -175,9 +175,9 @@
 
     <Component Id="MenuShortcuts" Directory="KevosMenu" Bitness="always64">
       <Shortcut Id="StartCompanion" Name="BIZOMAT Companion" Target="[#CompanionExe]" WorkingDirectory="INSTALLFOLDER" Description="Status, pairing, pause" />
-      <Shortcut Id="PairComputer" Name="Pair this computer with CAD Automation" Target="[#CompanionExe]" Arguments="--pair" WorkingDirectory="INSTALLFOLDER" />
-      <Shortcut Id="Diagnostics" Name="CAD Automation diagnostics" Target="[#CompanionExe]" Arguments="--diagnose" WorkingDirectory="INSTALLFOLDER" />
-      <Shortcut Id="Unpair" Name="Remove this computer from CAD Automation" Target="[#CompanionExe]" Arguments="--unpair" WorkingDirectory="INSTALLFOLDER" />
+      <Shortcut Id="PairComputer" Name="Pair this computer with BIZOMAT CAD" Target="[#CompanionExe]" Arguments="--pair" WorkingDirectory="INSTALLFOLDER" />
+      <Shortcut Id="Diagnostics" Name="BIZOMAT CAD diagnostics" Target="[#CompanionExe]" Arguments="--diagnose" WorkingDirectory="INSTALLFOLDER" />
+      <Shortcut Id="Unpair" Name="Remove this computer from BIZOMAT CAD" Target="[#CompanionExe]" Arguments="--unpair" WorkingDirectory="INSTALLFOLDER" />
       <RemoveFolder Id="RemoveKevosMenu" On="uninstall" />
       <RegistryValue Root="HKLM" Key="SOFTWARE\KEVOS\Bridge" Name="StartMenu" Type="integer" Value="1" KeyPath="yes" />
     </Component>

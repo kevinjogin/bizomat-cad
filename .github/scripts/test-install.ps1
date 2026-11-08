@@ -1,4 +1,4 @@
-# Installs an MSI of BIZOMAT CAD Automation for SOLIDWORKS silently, checks what it put on the computer, uninstalls it and checks that
+# Installs an MSI of BIZOMAT CAD for SOLIDWORKS silently, checks what it put on the computer, uninstalls it and checks that
 # it is gone. CI runs it on a Windows runner without SOLIDWORKS (.github/workflows/installer-test.yml). On a test PC,
 # from an administrator PowerShell:
 #   powershell -ExecutionPolicy Bypass -File .github\scripts\test-install.ps1 -Msi <path to the .msi>
@@ -29,7 +29,7 @@ Check ($code -eq 0 -or $code -eq 3010) "install finished (exit code $code)"
 foreach ($f in $files) { Check (Test-Path (Join-Path $dir $f)) "installed $f" }
 $codebase = Value "HKLM:\SOFTWARE\Classes\CLSID\$addin\InprocServer32" 'CodeBase'
 Check (("$codebase" -replace '\\', '/') -like '*/KEVOS/Bridge/OpenSketch.Sw.dll') "add-in COM class registered ($codebase)"
-Check ((Value "HKLM:\SOFTWARE\SolidWorks\Addins\$addin" 'Title') -eq 'BIZOMAT CAD Automation') 'listed in SOLIDWORKS Add-Ins as BIZOMAT CAD Automation'
+Check ((Value "HKLM:\SOFTWARE\SolidWorks\Addins\$addin" 'Title') -eq 'BIZOMAT CAD') 'listed in SOLIDWORKS Add-Ins as BIZOMAT CAD'
 $icon = Value "HKLM:\SOFTWARE\SolidWorks\Addins\$addin" 'Icon Path'
 Check ($icon -and $icon.EndsWith('BIZOMAT.bmp') -and (Test-Path $icon)) "with the BIZOMAT icon in Tools > Add-Ins ($icon)"
 $version = Value 'HKLM:\SOFTWARE\KEVOS\Bridge' 'Version'
@@ -43,6 +43,18 @@ $loads = "$loads".Trim()
 if ($loads -match 'SolidWorks\.Interop') { Write-Host "skip  the add-in type needs SOLIDWORKS' interop files, which this computer lacks ($loads)" }
 else { Check ($loads -eq 'True') "the add-in loads in .NET Framework ($loads)" }
 
+# A second install of the same MSI (a repair) leaves exactly one add-in registration
+$code = Msiexec "/fa `"$Msi`" /qn /norestart /l*v `"$logs\cados-repair.log`""
+Check ($code -eq 0 -or $code -eq 3010) "repair (reinstall) finished (exit code $code)"
+$listed = @(Get-ChildItem 'HKLM:\SOFTWARE\SolidWorks\Addins' -ErrorAction SilentlyContinue | Where-Object { (Get-ItemProperty $_.PSPath).Title -like 'BIZOMAT CAD*' })
+Check ($listed.Count -eq 1) "one SOLIDWORKS add-in registration after a reinstall ($($listed.Count))"
+
+# The person's own files (Documents\BIZOMAT CAD, made by the add-in, never by the MSI) must survive the uninstall
+$docs = [Environment]::GetFolderPath('MyDocuments')
+$keep = Join-Path $docs 'BIZOMAT CAD\Projects\install-test-keep.txt'
+New-Item -ItemType Directory -Force -Path (Split-Path $keep) | Out-Null
+Set-Content -Path $keep -Value 'kept'
+
 Write-Host 'Uninstalling'
 $code = Msiexec "/x `"$Msi`" /qn /norestart /l*v `"$logs\cados-uninstall.log`""
 Check ($code -eq 0 -or $code -eq 3010) "uninstall finished (exit code $code)"
@@ -51,6 +63,8 @@ Check (-not (Value "HKLM:\SOFTWARE\Classes\CLSID\$addin\InprocServer32" 'CodeBas
 Check (-not (Test-Path "HKLM:\SOFTWARE\Classes\CLSID\$addin")) "add-in COM keys removed (0.12.3 and later)"
 Check (-not (Test-Path "HKLM:\SOFTWARE\SolidWorks\Addins\$addin")) 'SOLIDWORKS listing removed'
 Check (-not (Value $run 'KEVOS Companion')) 'start at sign-in removed'
+Check ((Test-Path $keep) -and ((Get-Content $keep) -eq 'kept')) 'the person''s files in Documents\BIZOMAT CAD are kept by the uninstall'
+Remove-Item -Force $keep -ErrorAction SilentlyContinue
 
 if ($script:failed.Count) { Write-Host "$($script:failed.Count) check(s) failed. Logs: $logs\cados-install.log, $logs\cados-uninstall.log"; exit 1 }
 Write-Host 'All install checks passed'

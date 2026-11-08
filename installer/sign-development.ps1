@@ -1,4 +1,4 @@
-# Signs BIZOMAT CAD Automation for SOLIDWORKS with a code-signing certificate from the Windows certificate store, builds
+# Signs BIZOMAT CAD for SOLIDWORKS with a code-signing certificate from the Windows certificate store, builds
 # the signed MSI and checks every signature. Made for the BIZOMAT development certificate (self-signed, CN=BIZOMAT
 # Development); the same script signs with a commercial OV certificate later: pass its -Thumbprint, nothing else changes.
 # Windows PowerShell 5.1 or later, on the Windows development computer. See docs\BIZOMAT-DEV-SIGNING.md.
@@ -320,7 +320,7 @@ $report = [ordered]@{
     trust_note = $(if ($selfSigned) { 'Self-signed development certificate: verified on this computer because it trusts the certificate. Other computers do not trust it.' } else { '' })
 }
 $report | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $out 'signing-report.json') -Encoding UTF8
-$txt = @("BIZOMAT CAD Automation for SOLIDWORKS: signing report", "Result: $($report.result)", "Made: $($report.made_at)",
+$txt = @("BIZOMAT CAD for SOLIDWORKS: signing report", "Result: $($report.result)", "Made: $($report.made_at)",
     "Version: $Version   Commit: $commit$(if ($dirty) { ' (with local changes)' })", "MSI: $msiName", "MSI SHA-256: $msiHash",
     "Certificate: $($cert.Subject), thumbprint $thumb, valid $($report.certificate.not_before) to $($report.certificate.not_after)$(if ($selfSigned) { ', self-signed' })",
     "SignTool: $($signtool.FullName) $signtoolVersion", "Digest: SHA-256   Timestamp: $($report.timestamp)", "MSI contents: $inside", '', 'Files:')

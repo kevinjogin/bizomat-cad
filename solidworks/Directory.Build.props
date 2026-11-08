@@ -8,9 +8,9 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <Deterministic>true</Deterministic>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
-    <Version>0.13.0</Version>
+    <Version>0.14.0</Version>
     <Company>BIZOMAT</Company>
-    <Product>BIZOMAT CAD Automation for SOLIDWORKS</Product>
+    <Product>BIZOMAT CAD for SOLIDWORKS</Product>
     <Copyright>BIZOMAT</Copyright>
   </PropertyGroup>
 </Project>

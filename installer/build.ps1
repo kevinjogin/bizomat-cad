@@ -1,4 +1,4 @@
-# Builds the BIZOMAT CAD Automation for SOLIDWORKS installer, BIZOMAT-CAD-Automation-<version>-x64.msi (and the same file
+# Builds the BIZOMAT CAD for SOLIDWORKS installer, BIZOMAT-CAD-Automation-<version>-x64.msi (and the same file
 # as BIZOMAT-CAD-Automation-x64.msi, the stable name the website links to, and as CADOS-for-SOLIDWORKS-x64.msi, the
 # stable name of 0.12, so links already given out keep working) from solidworks/dist/OpenSketch-SOLIDWORKS (run `bash solidworks/build.sh test`
 # first). Windows only (WiX Toolset 5 needs Windows). Repeatable: the same sources give the same MSI contents.
@@ -32,7 +32,7 @@ if (-not (Test-Path (Join-Path $src 'KEVOS.Companion.exe'))) { throw "Build firs
 # the licence (AGPL-3.0: the text goes with the program, and where the source is)
 Copy-Item 'LICENSE' (Join-Path $src 'LICENSE.txt') -Force
 @"
-BIZOMAT CAD Automation for SOLIDWORKS $Version is free software under the GNU Affero General Public License v3.0 (LICENSE.txt).
+BIZOMAT CAD for SOLIDWORKS $Version is free software under the GNU Affero General Public License v3.0 (LICENSE.txt).
 Its complete source code (this version: bridge-v$Version) is available from BIZOMAT on request: https://bizomat.ai/contact/
 "@ | Set-Content (Join-Path $src 'SOURCE.txt') -Encoding UTF8
 $lic = (Get-Content 'LICENSE' -Raw) -replace '\\', '\\' -replace '\{', '\{' -replace '\}', '\}' -replace "`r?`n", "\par`r`n"
@@ -54,7 +54,7 @@ if ($CertThumbprint) {
 $sign = $signtool -and ($CertThumbprint -or ($env:KEVOS_SIGN_PFX -and (Test-Path $env:KEVOS_SIGN_PFX)))
 $stamp = if ($Timestamp) { @('/tr', $Timestamp, '/td', 'sha256') } else { @() }
 function Sign($file) {
-  & $signtool.FullName sign /fd sha256 @stamp @by /d "BIZOMAT CAD Automation for SOLIDWORKS" $file
+  & $signtool.FullName sign /fd sha256 @stamp @by /d "BIZOMAT CAD for SOLIDWORKS" $file
   if ($LASTEXITCODE -ne 0) { throw "signing $file failed" }
 }
 if ($sign) {
@@ -87,7 +87,7 @@ if ($sign) { $thumb = (Get-AuthenticodeSignature $msi).SignerCertificate.Thumbpr
 "$hash  $name" | Set-Content (Join-Path $out "$name.sha256") -Encoding ASCII
 # published on bizomat.ai (cloudflare.ps1 publish installer puts the file there; the GitHub releases are private)
 @{ version = $Version; msi_url = "https://bizomat.ai/downloads/cad/$name";
-   sha256 = "sha256:$hash"; size = $size; signer_thumbprints = @($thumb | Where-Object { $_ }); notes = "BIZOMAT CAD Automation for SOLIDWORKS $Version";
+   sha256 = "sha256:$hash"; size = $size; signer_thumbprints = @($thumb | Where-Object { $_ }); notes = "BIZOMAT CAD for SOLIDWORKS $Version";
    published_at = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.fffZ') } | ConvertTo-Json | Set-Content (Join-Path $out 'release.json') -Encoding UTF8
 # the stable name (bridge-latest): what https://bizomat.ai/cad/download/solidworks points at; and the stable name of 0.12
 foreach ($stableName in @('BIZOMAT-CAD-Automation-x64.msi', 'CADOS-for-SOLIDWORKS-x64.msi')) {

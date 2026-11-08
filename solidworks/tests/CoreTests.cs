@@ -348,7 +348,7 @@ namespace OpenSketch.Sw.Tests
         {
             Assert.Equal("BIZOMAT", BrandArt.TabName);
             Assert.Equal(new[] { "KEVOS", "CADOS", "BIZOMAT" }, BrandArt.TabsToReplace());
-            Assert.Equal("BIZOMAT CAD Automation", BrandArt.Product);
+            Assert.Equal("BIZOMAT CAD", BrandArt.Product);
             Assert.Equal("BIZOMAT Companion", BrandArt.Companion);
             Assert.DoesNotContain("KEVOS", BrandArt.Package + BrandArt.Product + BrandArt.Companion);
         }

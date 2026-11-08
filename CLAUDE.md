@@ -1,6 +1,33 @@
 # CLAUDE.md
 
-Guidance for AI coding agents (and people) working in this repository.
+Guidance for AI coding agents (and people) working on CAD MCP and BIZOMAT CAD for Windows.
+
+**Since 8 Nov 2026 this folder (`apps/cad` in `jogkev-creator/bizomat`) is where CAD Automation is changed.** It was
+imported from `jogkev-creator/CADOS` at e669cc6 (`../apps/cad-source.json`); CADOS keeps the history and the installer
+backups (`backups/installer`, not copied here). Production is the single Fly app `cados` (one Machine, 1 GB) described
+in `../docs/BIZOMAT-SINGLE-APP.md`: this server runs there as the `cad` role of `bizomat-entrypoint all`, with its data
+in `/data/cad`, CAD geometry in its own process (`OPENSKETCH_CAD_WORKERS=0`), behind the platform proxy. It is
+deployed only by `../.github/workflows/deploy.yml`; the add-in and MSI are built by
+`../.github/workflows/cad-windows.yml`. The `.github/workflows` of CADOS were moved there or retired; where this file
+mentions `deploy.yml`, `solidworks.yml`, `tests.yml`, `domain.yml`, `fly-status.yml`, the cados `fly.toml` or Fly's own
+GitHub deploys, read the root workflows and `../fly.toml` instead.
+
+**BIZOMAT CAD (owner, 8 Nov 2026):** the Windows add-in, its toolbar, task pane, status window, installer, Start menu and
+messages are called **BIZOMAT CAD** (0.14.0; "BIZOMAT CAD Automation" up to 0.13). Its folder is
+`Documents\BIZOMAT CAD` (Documents from the Windows known-folder API, local or OneDrive) with Settings, Projects,
+Templates, Logs, Cache and Backups (`solidworks/src/Core/UserFolders.cs`): saves and exports default to Projects, the
+log is `Logs\log.txt`, the manual installer's launcher macro is `BIZOMAT CAD.swb` in the root, working copies go to
+`%TEMP%\BIZOMAT CAD` (never synced). Nothing creates an `OpenSketch` folder any more. On its first start the add-in
+(and the manual installer's Install for me) copies the old `Documents\OpenSketch` files into Projects once: copies
+only, never overwrites (a different file of the same name is kept beside it as "name (from OpenSketch).ext"), never
+deletes; locked or syncing files are retried at the next start; the record is `Backups\OpenSketch migration.json` and
+the old folder gets a note. Kept on purpose for compatibility: the COM ProgIDs and CLSIDs (`OpenSketch.Sw.SwAddin`,
+`OpenSketch.Sw.Launcher`), file names (`OpenSketch.Sw.dll`, `OpenSketchSW.exe`, the MSI names
+`BIZOMAT-CAD-Automation-*.msi` that the update record and download links use), the registry key
+`HKCU\Software\OpenSketch\SolidWorks` with the encrypted add-in key and its DPAPI entropy, the MCP tool names and
+endpoints. Tests: `solidworks/tests/UserFoldersTests.cs`, `tests/test_installer.py`
+(`test_no_code_makes_an_opensketch_folder`, `test_the_msi_never_touches_documents_so_uninstall_keeps_user_files`),
+`.github/scripts/test-install.ps1` (repair keeps one registration; uninstall keeps Documents files).
 
 ## What this repo is
 
@@ -37,8 +64,9 @@ released; development-signed), never overwritten.
   `brand.copyright_line()` ("(c) <year> BIZOMAT. All rights reserved.") in the site footer, the app footer and the
   sign-in panel; the footer's BIZOMAT column links Home, About (/engine-room/), Products, Project Management and
   Contact on bizomat.ai; legal links read Privacy Policy and Terms of Use. Product name, headline, logo and colours unchanged.
-- Brand: CADOS by KEVOS. Never "OpenSketch" in anything people read (pages, MCP server name, messages); real file
-  paths and file names (`Documents\OpenSketch`, `OpenSketchSW.exe`) stay as they are. Logos are SVG paths in
+- Brand: never "OpenSketch" in anything people read (pages, MCP server name, messages, Windows names, folders); the
+  Windows product is BIZOMAT CAD and its folder Documents\BIZOMAT CAD (above). File names that installs and updates
+  depend on (`OpenSketchSW.exe`, `OpenSketch.Sw.dll`, `OpenSketch.swb` in the package) stay as they are. Logos are SVG paths in
   `brand.py`: the CADOS wordmark (built from the KEVOS letterforms) with "by KEVOS"; the KEVOS logo links to
   https://kevos.com/. One design system for every page: tokens and components in `opensketch/static/ui/cados.css`,
   set to kevos.com's own tokens (its `src/styles/global.css`: paper #fbfaf7, ink #1c1b19, muted #69665f, logo orange

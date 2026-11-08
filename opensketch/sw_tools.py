@@ -63,7 +63,7 @@ Workflow:
   than one is online. Deleting, Save As, overwriting a drawing and undo are confirmed by the person at that computer:
   if they decline, say so and do not retry.
 - sw_create_document makes a new part or assembly from the user's default template and saves it in
-  Documents\\OpenSketch (or `folder`). Every other tool takes `doc`: its path or window title from sw_status;
+  Documents\\BIZOMAT CAD\\Projects (or `folder`; add-ins before 0.14 used Documents\\OpenSketch). Every other tool takes `doc`: its path or window title from sw_status;
   leave it out for the active document.
 - sw_add_features writes features in the CAD Automation feature format (below): sketches with entities, relations and
   dimensions, then extrudes, revolves, sweeps, lofts, holes, fillets, chamfers, shells, drafts, mirrors,
@@ -232,7 +232,7 @@ def sw_get_guide() -> str:
 @mcp.tool()
 @_routed
 async def sw_create_document(name: str, kind: Literal["part", "assembly"] = "part",
-                             folder: Annotated[str | None, Field(description="Windows folder; default Documents\\OpenSketch")] = None,
+                             folder: Annotated[str | None, Field(description="Windows folder; default Documents\\BIZOMAT CAD\\Projects")] = None,
                              units: Literal["mm", "inch"] = "mm", device: _DEV = None) -> CallToolResult:
     """A new SOLIDWORKS part or assembly from the user's default template, saved as <name>.SLDPRT / .SLDASM
     (a free name is chosen if the file exists). Units MMGS by default. Returns its path: pass it as `doc`."""
@@ -969,7 +969,7 @@ async def sw_export(format: Literal["step", "stl", "x_t", "igs", "sldprt", "slda
 async def sw_import(filename: Annotated[str | None, Field(description="e.g. bracket.step; optional with upload_id")] = None,
                     data: Annotated[str | None, Field(description="Base64 file bytes, small files only")] = None,
                     upload_id: Annotated[str | None, Field(description="From request_upload, after sending the file")] = None,
-                    folder: Annotated[str | None, Field(description="Where to save the SOLIDWORKS files; default Documents\\OpenSketch")] = None, device: _DEV = None) -> CallToolResult:
+                    folder: Annotated[str | None, Field(description="Where to save the SOLIDWORKS files; default Documents\\BIZOMAT CAD\\Projects")] = None, device: _DEV = None) -> CallToolResult:
     """Open a STEP, IGES or Parasolid file in SOLIDWORKS (an assembly if it has several bodies) and save it as
     SOLIDWORKS files. For anything over about 100 KB use request_upload first, as for import_document."""
     who = _who()
@@ -1005,7 +1005,7 @@ async def sw_import(filename: Annotated[str | None, Field(description="e.g. brac
 @mcp.tool()
 @_routed
 async def sw_standard_part(kind: StdKind, size: str, length: float | None = None,
-                           folder: Annotated[str | None, Field(description="Default Documents\\OpenSketch\\Toolbox")] = None, device: _DEV = None) -> CallToolResult:
+                           folder: Annotated[str | None, Field(description="Default Documents\\BIZOMAT CAD\\Projects\\Toolbox")] = None, device: _DEV = None) -> CallToolResult:
     """An ISO screw, nut, washer or ball bearing made to size and saved as a SOLIDWORKS part (from STEP), ready
     for sw_insert_component. size e.g. "M6-1" (screws, nuts, washers) or "M8-22-7" (bore-OD-width bearings);
     length mm for screws. Axis along the part Y axis, head above Y = 0, shank down -Y."""

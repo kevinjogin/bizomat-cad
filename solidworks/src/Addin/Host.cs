@@ -121,7 +121,7 @@ namespace OpenSketch.Sw
                 Current.Stop();
             }
             Current = new Host(app, mode);
-            Log.Write($"BIZOMAT CAD Automation for SOLIDWORKS {Version} started as {mode} from {SafeLocation()}; SOLIDWORKS {Current.swRevision}");
+            Log.Write($"BIZOMAT CAD for SOLIDWORKS {Version} started as {mode} from {SafeLocation()}; SOLIDWORKS {Current.swRevision}");
             if (mode != "program" && Settings.UseCompanion) Current.StartPipe();
             return Current;
         }

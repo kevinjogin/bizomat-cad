@@ -8,7 +8,7 @@ using SolidWorks.Interop.sldworks;
 
 namespace OpenSketch.Sw
 {
-    /// <summary>The BIZOMAT CAD Automation status window: the Companion link and this computer's registration, the confirmation setting, the
+    /// <summary>The BIZOMAT CAD status window: the Companion link and this computer's registration, the confirmation setting, the
     /// optional direct link (address and key), Connect / Disconnect, and what is happening.</summary>
     public sealed class ConnectForm : Form
     {
@@ -26,7 +26,7 @@ namespace OpenSketch.Sw
         public ConnectForm(Host host)
         {
             this.host = host;
-            Text = "BIZOMAT CAD Automation: status";
+            Text = "BIZOMAT CAD: status";
             Font = new Font("Segoe UI", 9f);
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;

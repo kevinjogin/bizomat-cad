@@ -5,27 +5,41 @@ using System.Text;
 
 namespace OpenSketch.Sw
 {
-    /// <summary>The add-in's log: %LOCALAPPDATA%\OpenSketch\SolidWorks\log.txt (kept under 2 MB, the previous one
-    /// as log.old.txt), and the last lines in memory for the window. Send it with a problem report after a first run.</summary>
+    /// <summary>The add-in's log: Documents\BIZOMAT CAD\Logs\log.txt (kept under 2 MB, the previous one as log.old.txt;
+    /// up to 0.13 it was %LOCALAPPDATA%\OpenSketch\SolidWorks), and the last lines in memory for the window. Send it
+    /// with a problem report after a first run. If Documents cannot be written (offline OneDrive, a policy), the
+    /// Windows temp folder.</summary>
     public static class Log
     {
         static readonly object Gate = new object();
         static readonly LinkedList<string> Recent = new LinkedList<string>();
         public static event Action<string> Line;
 
+        static string folder;
+
         public static string Folder
         {
             get
             {
-                var d = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OpenSketch", "SolidWorks");
+                var d = folder;
+                if (d != null && Directory.Exists(d)) return d;
                 try
                 {
-                    Directory.CreateDirectory(d);
+                    d = Core.UserFolders.Sub("Logs");
                 }
                 catch (Exception)
                 {
-                    d = Path.GetTempPath();
+                    d = Path.Combine(Path.GetTempPath(), Core.UserFolders.RootName);
+                    try
+                    {
+                        Directory.CreateDirectory(d);
+                    }
+                    catch (Exception)
+                    {
+                        d = Path.GetTempPath();
+                    }
                 }
+                folder = d;
                 return d;
             }
         }

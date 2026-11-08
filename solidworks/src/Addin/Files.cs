@@ -14,7 +14,8 @@ namespace OpenSketch.Sw
     {
         static string Temp(string name)
         {
-            var d = Path.Combine(Path.GetTempPath(), "OpenSketch-SW");
+            // Windows' temp folder, not Documents: these working copies are made for every check and must not be synced
+            var d = Path.Combine(Path.GetTempPath(), Core.UserFolders.RootName);
             Directory.CreateDirectory(d);
             return Path.Combine(d, Guid.NewGuid().ToString("N").Substring(0, 8) + "_" + name);
         }

@@ -59,7 +59,7 @@ namespace OpenSketch.Sw
                     case "read_drawing": return ReadDrawing(a);
                     case "edit_drawing": return EditDrawing(a);
                     default:
-                        throw new UserError($"This add-in does not know the command '{op}'. Update it: install the latest BIZOMAT CAD Automation for SOLIDWORKS (or download the add-in package again from your CAD Automation dashboard).", "UNKNOWN_OP");
+                        throw new UserError($"This add-in does not know the command '{op}'. Update it: install the latest BIZOMAT CAD for SOLIDWORKS (or download the add-in package again from your CAD Automation dashboard).", "UNKNOWN_OP");
                 }
             }
         }
@@ -280,7 +280,9 @@ namespace OpenSketch.Sw
             var f = J.Str(a, "folder");
             if (string.IsNullOrWhiteSpace(f))
             {
-                f = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "OpenSketch");
+                // Documents\BIZOMAT CAD\Projects (Documents from the known-folder API: local or OneDrive); never an
+                // OpenSketch folder (up to 0.13 it was Documents\OpenSketch, whose files UserFolders copies over)
+                f = Core.UserFolders.Sub("Projects");
                 var s = sub ?? J.Str(a, "subfolder");
                 if (!string.IsNullOrEmpty(s)) f = Path.Combine(f, s);
             }

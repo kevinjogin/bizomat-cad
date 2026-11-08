@@ -10,7 +10,7 @@ using OpenSketch.Sw.Core;
 namespace OpenSketch.Sw
 {
     /// <summary>
-    /// The BIZOMAT CAD Automation add-in for SOLIDWORKS (Tools > Add-Ins > BIZOMAT CAD Automation; called CADOS up to
+    /// The BIZOMAT CAD add-in for SOLIDWORKS (Tools > Add-Ins > BIZOMAT CAD; called CADOS up to
     /// 0.12.2), loaded when SOLIDWORKS starts. Adds the BIZOMAT menu, toolbar, CommandManager tab and task pane, connects
     /// to the BIZOMAT Companion by itself, and (when a key is saved) to the direct link. The COM ids and ProgIds keep
     /// their earlier names, so existing registrations and the launcher macro keep working.
@@ -23,8 +23,8 @@ namespace OpenSketch.Sw
     {
         public const string ClassId = "275256ff-b73a-4e4f-9ea8-842b6626d471";
         public const string ProgIdName = "OpenSketch.Sw.SwAddin";
-        public const string Title = "BIZOMAT CAD Automation";
-        public const string Description = "BIZOMAT CAD Automation: your AI assistant (Claude, ChatGPT...) builds parts, assemblies and drawings in SOLIDWORKS";
+        public const string Title = "BIZOMAT CAD";
+        public const string Description = "BIZOMAT CAD: your AI assistant (Claude, ChatGPT...) builds parts, assemblies and drawings in SOLIDWORKS";
 
         ISldWorks app;
         int cookie;
@@ -57,6 +57,12 @@ namespace OpenSketch.Sw
                         app.AddMenuItem5(t, cookie, name + "@" + MenuName, -1, cb, "OsEnable", hint, null);
                 // the Companion link starts here by itself; the direct link only when its key is saved (as before)
                 var host = Host.Start(app, "add-in");
+                // Documents\BIZOMAT CAD, and a one-time copy of the old Documents\OpenSketch files, off SOLIDWORKS' thread
+                // (MigrateIfNeeded never throws: a locked or syncing file is simply tried again at the next start)
+                System.Threading.ThreadPool.QueueUserWorkItem(_ =>
+                {
+                    try { Core.UserFolders.MigrateIfNeeded(Log.Write); } catch (Exception) { }
+                });
                 if (Settings.AutoConnect && Settings.Key.StartsWith("oss_") && !host.Running) host.Connect();
                 try
                 {

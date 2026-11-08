@@ -5,7 +5,7 @@
     <TargetFramework>net48</TargetFramework>
     <OutputType>Library</OutputType>
     <AssemblyName>OpenSketch.Sw</AssemblyName>
-    <AssemblyTitle>BIZOMAT CAD Automation add-in for SOLIDWORKS</AssemblyTitle>
+    <AssemblyTitle>BIZOMAT CAD add-in for SOLIDWORKS</AssemblyTitle>
     <RootNamespace>OpenSketch.Sw</RootNamespace>
     <PlatformTarget>x64</PlatformTarget>
     <ComVisible>false</ComVisible>

@@ -1,9 +1,9 @@
-# Installs (or updates) the OpenSketch add-in for SOLIDWORKS from the newest OpenSketch-SOLIDWORKS*.zip in Downloads,
+# Installs (or updates) the BIZOMAT CAD add-in for SOLIDWORKS from the newest OpenSketch-SOLIDWORKS*.zip in Downloads,
 # and shows which add-in SOLIDWORKS will load. Download the zip first from the repository's
 # Releases > OpenSketch for SOLIDWORKS (latest).
 # From the repository folder:   powershell -ExecutionPolicy Bypass -File windows\update-addin.ps1
 #
-# It installs into %LOCALAPPDATA%\OpenSketch\AddIn: always the same folder, and not on OneDrive (a synced or
+# It installs into %LOCALAPPDATA%\BIZOMAT CAD\AddIn (up to 0.13: %LOCALAPPDATA%\OpenSketch\AddIn, left as it was): always the same folder, and not on OneDrive (a synced or
 # online-only copy can keep SOLIDWORKS on an old file). SOLIDWORKS must be closed: while it runs, the old add-in
 # stays loaded.
 $ErrorActionPreference = 'Stop'
@@ -51,7 +51,7 @@ if ($newVersion -lt [version]'0.10.0') {
 }
 
 # 3. Into one fixed local folder, then register it for this Windows user
-$target = Join-Path $env:LOCALAPPDATA 'OpenSketch\AddIn'
+$target = Join-Path $env:LOCALAPPDATA 'BIZOMAT CAD\AddIn'
 New-Item -ItemType Directory -Force -Path $target | Out-Null
 Copy-Item (Join-Path $src.DirectoryName '*') $target -Recurse -Force
 Get-ChildItem $target | Unblock-File
@@ -68,7 +68,7 @@ $cb = (Get-ItemProperty "HKCU:\Software\Classes\CLSID\{$Launcher}\InprocServer32
 $loaded = [version](Get-Item ([Uri]$cb).LocalPath).VersionInfo.FileVersion
 if ($loaded -ge [version]'0.10.0') {
   Write-Host "Done: SOLIDWORKS will load add-in $loaded from $target" -ForegroundColor Green
-  Write-Host 'Open SOLIDWORKS and connect (the OpenSketch menu, or Tools > Macro > Run > Documents\OpenSketch\OpenSketch.swb).'
+  Write-Host 'Open SOLIDWORKS and connect (the BIZOMAT menu, or Tools > Macro > Run > Documents\BIZOMAT CAD\BIZOMAT CAD.swb).'
 } else {
   Stop-With "Still registered: $loaded. Send this window's text to whoever helps you."
 }

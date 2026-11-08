@@ -1,4 +1,4 @@
-BIZOMAT CAD Automation for SOLIDWORKS
+BIZOMAT CAD for SOLIDWORKS
 =====================================
 
 AI apps (Claude, ChatGPT and other MCP apps) build native SOLIDWORKS parts, assemblies and drawings on this
@@ -43,4 +43,4 @@ Logs: %LOCALAPPDATA%\KEVOS\Bridge\logs (Companion) and %LOCALAPPDATA%\OpenSketch
 (add-in). The folders keep their earlier names. Tray icon > Copy diagnostics, and send that with the self-test
 report ("Run the SOLIDWORKS self test, all three stages").
 
-BIZOMAT CAD Automation for SOLIDWORKS is free software under the GNU AGPL v3.0 (LICENSE.txt); source in SOURCE.txt.
+BIZOMAT CAD for SOLIDWORKS is free software under the GNU AGPL v3.0 (LICENSE.txt); source in SOURCE.txt.

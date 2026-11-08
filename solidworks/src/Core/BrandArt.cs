@@ -13,10 +13,10 @@ namespace OpenSketch.Sw.Core
     public static class BrandArt
     {
         public const string Platform = "BIZOMAT";
-        public const string Product = "BIZOMAT CAD Automation";
+        public const string Product = "BIZOMAT CAD";
         public const string ShortProduct = "CAD Automation";
         public const string Companion = "BIZOMAT Companion";
-        public const string Package = "BIZOMAT CAD Automation for SOLIDWORKS";
+        public const string Package = "BIZOMAT CAD for SOLIDWORKS";
         public const string PlatformUrl = "https://bizomat.ai/";
 
         /// <summary>The CommandManager tab is named after the platform. Tabs of earlier versions stay in SOLIDWORKS'

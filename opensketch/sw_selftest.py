@@ -192,8 +192,8 @@ class _Report:
                 "files": files,
                 "next": ("All steps passed." if not bad and not check else
                          "Send CAD Automation support this report and the add-in log (Copy log in BIZOMAT > Status in SOLIDWORKS, or "
-                         "%LOCALAPPDATA%\\OpenSketch\\SolidWorks\\log.txt): each failed or check step names the SOLIDWORKS call to fix."),
-                "note": "The test files stay open in SOLIDWORKS and are saved in Documents\\OpenSketch\\selftest; close or delete them when done."}
+                         "Documents\\BIZOMAT CAD\\Logs\\log.txt): each failed or check step names the SOLIDWORKS call to fix."),
+                "note": "The test files stay open in SOLIDWORKS and are saved in Documents\\BIZOMAT CAD\\Projects\\selftest; close or delete them when done."}
 
 
 def _feature_rows(rows: list[dict]) -> list[dict]:
@@ -442,7 +442,7 @@ async def sw_selftest(stage: Annotated[Literal["plate", "shapes", "assembly"], F
         "plate: every part feature on one part, reading back, variables, a batch rollback, export, save. "
         "shapes: draft, shell, sweep, loft. assembly: components, mates, interference, export."))] = "plate"
 , device: _DEV = None) -> CallToolResult:
-    """Check the SOLIDWORKS add-in on this PC: make new test files in Documents\\OpenSketch\\selftest and try every
+    """Check the SOLIDWORKS add-in on this PC: make new test files in Documents\\BIZOMAT CAD\\Projects\\selftest and try every
     kind of thing the add-in does, one step at a time, each checked against what the CAD Automation kernel makes of
     it. Run the three stages in turn (plate, shapes, assembly) when the user asks to test the add-in or after
     installing it. Reports each step as ok, check (made, but not as predicted) or failed, with SOLIDWORKS' reason."""

@@ -10,7 +10,7 @@ using SolidWorks.Interop.sldworks;
 namespace OpenSketch.Sw
 {
     /// <summary>
-    /// The BIZOMAT CAD Automation task pane in SOLIDWORKS (a tab in the Task Pane, next to Design Library and File
+    /// The BIZOMAT CAD task pane in SOLIDWORKS (a tab in the Task Pane, next to Design Library and File
     /// Explorer): the connection state (BIZOMAT Companion, this computer, the direct link), Connect / Disconnect, the
     /// prompts to give the AI assistant, the confirmation setting, live activity, and links to the dashboard,
     /// documentation and logs. CAD Automation runs no AI of its own: the assistant (Claude, ChatGPT...) does the work and

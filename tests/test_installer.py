@@ -35,8 +35,8 @@ def test_msi_registers_the_add_in_solidworks_loads():
     keys = {k.get("Key"): k for k in tree.iter("{%s}RegistryKey" % NS["w"])}
     addin = keys[r"SOFTWARE\SolidWorks\Addins\{" + clsid + "}"]
     vals = {v.get("Name"): v.get("Value") for v in addin.iter("{%s}RegistryValue" % NS["w"])}
-    assert vals["Title"] == _const("Title") == "BIZOMAT CAD Automation"
-    assert vals["Description"] == _const("Description") and vals["Description"].startswith("BIZOMAT CAD Automation:")
+    assert vals["Title"] == _const("Title") == "BIZOMAT CAD"
+    assert vals["Description"] == _const("Description") and vals["Description"].startswith("BIZOMAT CAD:")
     assert vals[None] == "1"  # listed for every SOLIDWORKS version installed
     # the COM class SOLIDWORKS creates: CLSID -> InprocServer32 (mscoree) with the class, assembly and code base
     text = WXS.read_text()
@@ -44,10 +44,10 @@ def test_msi_registers_the_add_in_solidworks_loads():
     assert 'Name="CodeBase" Type="string" Value="file:///[#AddinDll]"' in text and "mscoree.dll" in text.lower()
 
 
-def test_msi_is_bizomat_cad_automation_and_upgrades_every_earlier_version():
+def test_msi_is_bizomat_cad_and_upgrades_every_earlier_version():
     root = ET.parse(WXS).getroot()
     pkg = root.find("w:Package", NS)
-    assert pkg.get("Name") == "BIZOMAT CAD Automation for SOLIDWORKS" and pkg.get("Manufacturer") == "BIZOMAT"
+    assert pkg.get("Name") == "BIZOMAT CAD for SOLIDWORKS" and pkg.get("Manufacturer") == "BIZOMAT"
     assert pkg.get("UpgradeCode") == "cef90528-e91b-42ae-9556-f70a612cb58f"  # never change: upgrades depend on it
     assert pkg.get("Scope") == "perMachine"
     assert "KEVOS Bridge" not in re.sub(r"<!--.*?-->", "", WXS.read_text(), flags=re.S)
@@ -64,8 +64,10 @@ def test_msi_is_bizomat_cad_automation_and_upgrades_every_earlier_version():
     for text in shown:
         assert "CADOS" not in text and "KEVOS" not in text and "kevos.com" not in text, text
     names = {s.get("Id"): s.get("Name") for s in root.iter("{%s}Shortcut" % NS["w"])}
-    assert names == {"StartCompanion": "BIZOMAT Companion", "PairComputer": "Pair this computer with CAD Automation",
-                     "Diagnostics": "CAD Automation diagnostics", "Unpair": "Remove this computer from CAD Automation"}
+    assert names == {"StartCompanion": "BIZOMAT Companion", "PairComputer": "Pair this computer with BIZOMAT CAD",
+                     "Diagnostics": "BIZOMAT CAD diagnostics", "Unpair": "Remove this computer from BIZOMAT CAD"}
+    for text in shown:
+        assert "OpenSketch" not in text, text
 
 
 def test_the_ids_existing_installs_depend_on_are_unchanged():
@@ -85,7 +87,7 @@ def test_version_can_upgrade():
     props = (ROOT / "solidworks" / "Directory.Build.props").read_text()
     v = re.search(r"<Version>([\d.]+)</Version>", props).group(1)
     assert tuple(map(int, v.split("."))) > (0, 12, 3)  # the last CADOS for SOLIDWORKS release (KEVOS Bridge up to 0.11)
-    assert "<Company>BIZOMAT</Company>" in props and "<Product>BIZOMAT CAD Automation for SOLIDWORKS</Product>" in props
+    assert "<Company>BIZOMAT</Company>" in props and "<Product>BIZOMAT CAD for SOLIDWORKS</Product>" in props
     # the server still asks only for the versions each feature needs
     from opensketch import swbridge
     assert swbridge.version_tuple(v) >= (0, 10, 0)
@@ -208,6 +210,9 @@ def test_the_repository_holds_no_private_key():
 
 
 def test_the_original_installer_backup_is_what_was_released():
+    import pytest
+    if not (ROOT / "backups" / "installer").is_dir():
+        pytest.skip("the installer backups stay in jogkev-creator/CADOS (backups/installer); this repository does not copy them")
     found = sorted((ROOT / "backups" / "installer" / "original").glob("*/*.msi"))
     assert found, "the original installer is backed up"
     for msi in found:
@@ -276,3 +281,31 @@ def test_the_installer_on_the_volume_is_served_whole_under_cad(tmp_path, monkeyp
     # the pages link the checksum this server answers for, under /cad
     page = c.get("/cad/docs", headers={"host": "bizomat.ai"}).text
     assert 'href="/cad/download/solidworks.sha256"' in page and "downloads/cad/BIZOMAT-CAD-Automation-x64.msi.sha256" not in page
+
+
+def test_the_msi_never_touches_documents_so_uninstall_keeps_user_files():
+    """Documents\\BIZOMAT CAD is made by the add-in for each Windows user, never by the MSI: an uninstall, a repair or an
+    upgrade cannot remove or change anyone's files there (nor the old Documents\\OpenSketch folder)."""
+    text = re.sub(r"<!--.*?-->", "", WXS.read_text(), flags=re.S)
+    for word in ("PersonalFolder", "MyDocuments", "Documents", "OneDrive", "BIZOMAT CAD\\", "OpenSketch\\"):
+        assert word not in text, word
+    assert "RemoveFolderEx" not in text and "util:RemoveFolderEx" not in text
+
+
+def test_no_code_makes_an_opensketch_folder():
+    """Since 0.14 nothing creates a folder called OpenSketch (Documents, LocalAppData, Temp): the add-in and the manual
+    installer use Documents\\BIZOMAT CAD (Core/UserFolders.cs), whose migration only reads the old folder."""
+    src = ROOT / "solidworks" / "src"
+    offenders = []
+    for f in src.rglob("*.cs"):
+        if "/bin/" in str(f) or "/obj/" in str(f):
+            continue
+        code = re.sub(r"//.*", "", f.read_text())
+        if re.search(r'Path\.Combine\([^;]*SpecialFolder\.(MyDocuments|LocalApplicationData|Personal)[^;]*"OpenSketch"', code) or \
+           re.search(r'Path\.Combine\([^;]*GetTempPath\(\)[^;]*"OpenSketch', code):
+            offenders.append(f.relative_to(ROOT).as_posix())
+    assert offenders == []
+    folders = (src / "Core" / "UserFolders.cs").read_text()
+    assert 'RootName = "BIZOMAT CAD"' in folders and "FDD39AD0-238F-46AF-ADB4-6C85480369C7" in folders  # FOLDERID_Documents
+    assert "File.Delete(" not in folders.replace('File.Delete(temp)', '').replace('File.Delete(path)', ''), "the migration deletes nothing of the user's"
+    assert "Directory.Delete" not in folders
