@@ -94,7 +94,7 @@ Windows** (per user), **Exit**. The add-in's KEVOS window has **Ask me before de
 
 ## Without the installer (development and the earlier route)
 
-The earlier per-user route still works: unzip the add-in package, run `OpenSketchSW.exe` > Install for me, and use
+The earlier per-user route still works: unzip the add-in package, run `BIZOMAT-CAD.exe` > Install for me, and use
 the add-in's KEVOS window (direct link with the address and key from the home page) or the launcher macro
-`Documents\OpenSketch\OpenSketch.swb`. Running `KEVOS.Companion.exe` from the same folder adds the Companion and
+`Documents\OpenSketch\BIZOMAT CAD.swb`. Running `KEVOS.Companion.exe` from the same folder adds the Companion and
 pairing.

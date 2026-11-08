@@ -1,5 +1,9 @@
 # KEVOS Bridge and Cloudflare
 
+> **Superseded on 8 Nov 2026.** Cloudflare is used for DNS only; the Worker `bizomat-mcp` and its container were never
+> deployed and their code (`cloudflare/mcp`) was removed. Current setup: `docs/BIZOMAT-SINGLE-APP.md` in the bizomat
+> repository. Kept as history.
+
 ## Production on Cloudflare (from November 2026)
 
 Production runs on Cloudflare, all on bizomat.ai. Two independent Workers, each deployed on its own: `bizomat` (the

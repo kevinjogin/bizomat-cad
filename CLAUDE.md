@@ -19,13 +19,21 @@ Templates, Logs, Cache and Backups (`solidworks/src/Core/UserFolders.cs`): saves
 log is `Logs\log.txt`, the manual installer's launcher macro is `BIZOMAT CAD.swb` in the root, working copies go to
 `%TEMP%\BIZOMAT CAD` (never synced). Nothing creates an `OpenSketch` folder any more. On its first start the add-in
 (and the manual installer's Install for me) copies the old `Documents\OpenSketch` files into Projects once: copies
-only, never overwrites (a different file of the same name is kept beside it as "name (from OpenSketch).ext"), never
-deletes; locked or syncing files are retried at the next start; the record is `Backups\OpenSketch migration.json` and
-the old folder gets a note. Kept on purpose for compatibility: the COM ProgIDs and CLSIDs (`OpenSketch.Sw.SwAddin`,
-`OpenSketch.Sw.Launcher`), file names (`OpenSketch.Sw.dll`, `OpenSketchSW.exe`, the MSI names
-`BIZOMAT-CAD-Automation-*.msi` that the update record and download links use), the registry key
-`HKCU\Software\OpenSketch\SolidWorks` with the encrypted add-in key and its DPAPI entropy, the MCP tool names and
-endpoints. Tests: `solidworks/tests/UserFoldersTests.cs`, `tests/test_installer.py`
+only, never overwrites (a different file of the same name is kept beside it as "name (from earlier folder).ext"),
+never deletes; locked or syncing files are retried at the next start; the record is `Backups\Earlier folder
+migration.json` and the old folder gets a note.
+
+**No "OpenSketch" where people or AI apps can see it (owner, 9 Nov 2026), also in the background:** the manual
+installer is `BIZOMAT-CAD.exe` (was OpenSketchSW.exe), the add-in package and its zip `BIZOMAT-CAD-SOLIDWORKS` (was
+OpenSketch-SOLIDWORKS), the shipped launcher macro `BIZOMAT CAD.swb`, the User-Agent `BIZOMAT-CAD-SOLIDWORKS/<version>`,
+log lines `BIZOMAT CAD request|worker|supervisor:`, module docstrings and the MCP guide say BIZOMAT CAD. Kept on purpose,
+because installs, macros and saved keys depend on them (renaming them needs a migration tested on Windows): the add-in
+file `OpenSketch.Sw.dll` and its namespace, the COM ProgIDs and CLSIDs (`OpenSketch.Sw.SwAddin`, `OpenSketch.Sw.Launcher`:
+earlier launcher macros call it), the registry key `HKCU\Software\OpenSketch\SolidWorks` with the encrypted add-in key
+and its DPAPI entropy, the upload header `X-OpenSketch-Gzip` that earlier add-ins send, the old folder and file names the
+migration recognises, the Python package `opensketch` and the `OPENSKETCH_*` settings (Fly secrets use these names),
+the MSI file names `BIZOMAT-CAD-Automation-*.msi` that the update record and download links use, and the MCP tool names
+and endpoints. Tests: `solidworks/tests/UserFoldersTests.cs`, `tests/test_installer.py`
 (`test_no_code_makes_an_opensketch_folder`, `test_the_msi_never_touches_documents_so_uninstall_keeps_user_files`),
 `.github/scripts/test-install.ps1` (repair keeps one registration; uninstall keeps Documents files).
 
@@ -55,8 +63,8 @@ released; development-signed), never overwritten.
 
 - After completing any phase or significant change, update this file to reflect the current state before committing.
 - Test before committing: `pytest -q` (needs node for the sketch solver; the slow KEVOS end-to-end test needs the .NET
-  8 SDK) and `npm test` (the solver alone); the add-in and Companion with `bash solidworks/build.sh test` (.NET 8 SDK);
-  the Cloudflare Worker with `cd cloudflare/mcp && npm ci && npm run check` (Node 22, python3). For page changes, check the page in Chromium with
+  8 SDK) and `npm test` (the solver alone); the add-in and Companion with `bash solidworks/build.sh test` (.NET 8 SDK).
+  For page changes, check the page in Chromium with
   Playwright at desktop and phone width.
 - No emojis anywhere. Plain language, short sentences, little text on pages.
 - BIZOMAT corporate footer (owner, 8 Nov 2026; the website's `src/config/platform.ts` is the source): `brand.SLOGAN`
@@ -65,8 +73,8 @@ released; development-signed), never overwritten.
   sign-in panel; the footer's BIZOMAT column links Home, About (/engine-room/), Products, Project Management and
   Contact on bizomat.ai; legal links read Privacy Policy and Terms of Use. Product name, headline, logo and colours unchanged.
 - Brand: never "OpenSketch" in anything people read (pages, MCP server name, messages, Windows names, folders); the
-  Windows product is BIZOMAT CAD and its folder Documents\BIZOMAT CAD (above). File names that installs and updates
-  depend on (`OpenSketchSW.exe`, `OpenSketch.Sw.dll`, `OpenSketch.swb` in the package) stay as they are. Logos are SVG paths in
+  Windows product is BIZOMAT CAD and its folder Documents\BIZOMAT CAD (above). Only the compatibility names listed
+  above keep OpenSketch. Logos are SVG paths in
   `brand.py`: the CADOS wordmark (built from the KEVOS letterforms) with "by KEVOS"; the KEVOS logo links to
   https://kevos.com/. One design system for every page: tokens and components in `opensketch/static/ui/cados.css`,
   set to kevos.com's own tokens (its `src/styles/global.css`: paper #fbfaf7, ink #1c1b19, muted #69665f, logo orange
@@ -87,13 +95,13 @@ released; development-signed), never overwritten.
 - No personal, client or confidential details in code, comments, tests or docs (the repository is private since 7 Nov
   2026, but it may be shared). Nothing public may link to GitHub: every repository is private, so its pages, releases
   and raw files answer 404 to everyone else. Downloads are published on bizomat.ai (`/downloads/cad/`, R2).
-- CI: `.github/workflows/tests.yml` (pytest in two jobs: main and `-m slow`; npm test; the Cloudflare Worker's
-  `npm run check` in `cloudflare/mcp` on Node 22) on pull requests and
-  non-main pushes; `deploy.yml` deploys main to Fly after the same tests, skipping pushes that only touch notes,
-  docs or tests, and fails if the live /healthz does not show the new version within 3 minutes; `solidworks.yml`
-  builds and tests the add-in and keeps the zip as an artifact. `domain.yml` (run by hand, `.github/scripts/kevos-domain.sh`) gives the Fly app
-  its own address on a Cloudflare domain: DNS record, Fly certificate and validation record, OPENSKETCH_PUBLIC_URL
-  (secrets CLOUDFLARE_API_TOKEN, FLY_API_TOKEN). Python pins live in requirements.txt (image) and
+- CI (since 8 Nov 2026, in the bizomat repository's root `.github/workflows/`; workflows under `apps/cad/.github/` do
+  not run): `bizomat-ci.yml` (the `cad` job: pytest in two parts, main and `-m slow`; `cad-npm`: npm test) on pull
+  requests that change code and by hand; `cad-windows.yml` (the add-in, the Companion, the MSI on Windows) on pull
+  requests that change `solidworks/` or `installer/`, on a tag `bridge-v*` and by hand; `deploy.yml` deploys to the
+  Fly app `cados` only when run by hand (confirm DEPLOY, branch main). GitHub Free: the minutes are scarce, so
+  nothing runs on every push. The CADOS workflows described below (`tests.yml`, `solidworks.yml`, `installer-test.yml`,
+  `domain.yml`, `fly-status.yml`) are history. Python pins live in requirements.txt (image) and
   requirements-dev.txt (CI), with hashes.
 
 ## Current state (v0.8 server, CADOS for SOLIDWORKS 0.12.3)
@@ -182,7 +190,7 @@ released; development-signed), never overwritten.
 - Server (`server.py`): lifespan (warms the owner's agent CAD worker, runs the MCP session manager), BodyLimit,
   RequestLog, PasswordGate; /healthz; account routes; add-in link (`/mcp/sw/hello|next|result|file|blob`), `/api/sw*`;
   upload links (`/mcp/uploads/{id}`) and artifact downloads (`/mcp/artifacts/...`); OAuth routes; static files
-  (favicon, fonts, `static/downloads/OpenSketch-SOLIDWORKS.zip` built by the Dockerfile). `/privacy` is public.
+  (favicon, fonts, `static/downloads/BIZOMAT-CAD-SOLIDWORKS.zip` built by the Dockerfile). `/privacy` is public.
 - Kernel used by the tools: geometry, features (registry), assembly, naming, params, inspection (sketch DOF via
   `solver/solve_cli.mjs`), measure, preview, importer (STEP), artifacts, uploads, cadworker. `store.py` is the data
   folder and its shared helpers. `docformat.py` is the feature-format text `sw_get_guide` appends and the rebuild
@@ -247,8 +255,8 @@ released; development-signed), never overwritten.
   Safety confirmation of destructive ops; CompanionPipe: the pipe client that checks its server is the installed
   Companion; ConnectForm; Settings in HKCU\Software\OpenSketch and HKCU\Software\KEVOS\Bridge; Log in
   %LOCALAPPDATA%\OpenSketch\SolidWorks; Commands, Files, Pick, Sketches, Features, Edits with Journal rollback,
-  Assembly), App `OpenSketchSW.exe` (Install for me = per-user COM registration + the launcher macro
-  `Documents\OpenSketch\OpenSketch.swb`; Remove; "Connect to the open SOLIDWORKS" from outside, direct link only).
+  Assembly), App `BIZOMAT-CAD.exe` (Install for me = per-user COM registration + the launcher macro
+  `Documents\BIZOMAT CAD\BIZOMAT CAD.swb`; Remove; "Connect to the open SOLIDWORKS" from outside, direct link only).
   The COM ids are unchanged (existing registrations and the macro keep working); the add-in's title is CADOS.
 - KEVOS Companion (`solidworks/src/Companion`, `KEVOS.Companion.exe`, net48, compiles Core, no SOLIDWORKS reference):
   tray app, one per Windows user, starts at sign-in (HKLM Run from the MSI; per-user opt-out flag), pairing window,
@@ -284,12 +292,13 @@ released; development-signed), never overwritten.
 
 ## Hosting
 
-- Code: https://github.com/jogkev-creator/CADOS (moved from jogkev-creator/opensketchyz in Nov 2026; release
-  downloads are on bizomat.ai now, as the repository is private since 7 Nov 2026: see the Rules). The laptop works from
-  its own signed-in clones (`bizomat.ps1 setup`, then `git pull`); raw GitHub links do not work for a private
-  repository. GitHub Actions minutes for private repositories are limited: when they run out, every job fails at once
-  with no log (seen 7 Nov 2026), and `cloudflare.ps1` runs the repository's own checks before each deploy. The Fly app
-  below was linked to the old repository: relink it in Fly (or deploy by hand) after the move.
+- Code (since 8 Nov 2026): `apps/cad` in the private repository `jogkev-creator/bizomat` (imported from
+  `jogkev-creator/CADOS` e669cc6, which is history only). Production: the Fly app `cados`, one Machine in syd with
+  1 GB, where this server runs as the `cad` role of `bizomat-entrypoint all` next to Task Management and the proxy
+  (the repository root's `fly.toml`, `infrastructure/fly/`, `docs/BIZOMAT-SINGLE-APP.md`); its data is `/data/cad` on
+  the volume `opensketch_data`. Deployed only by the root `deploy.yml`, run by hand. Three services only: GitHub Free,
+  Fly.io and Cloudflare DNS. The paragraphs below on CADOS's own `fly.toml`, Fly Launch and Cloudflare describe the
+  earlier setup and are kept as history.
 - Listens on `::` (`--host ::`, `__main__.listen_sockets`: one dual-stack socket, IPv4 alone where there is no IPv6), so
   the BIZOMAT router (Fly app `bizomat`) reaches it over Fly's private network at cados.internal:8080.
 - Public address https://bizomat.ai/cad: CAD Automation lives under the BIZOMAT website's own address (the owner's
@@ -329,36 +338,10 @@ released; development-signed), never overwritten.
   after 120 s without an answer (stacks to the log first), tells a suspended machine from a hang. With
   OPENSKETCH_PERSIST_URL it first restores the data folder from an object store and copies changes back
   (`persist.py`, below).
-- Cloudflare (migration from Fly, Nov 2026; plan in gocore-website `docs/BIZOMAT-CLOUDFLARE-MIGRATION.md`):
-  `cloudflare/mcp` is the Worker `bizomat-mcp` (custom domain mcp.bizomat.ai; the website Worker hands bizomat.ai/cad
-  here by service binding) in front of one Cloudflare Container built from this Dockerfile (`CadServer`, standard-2,
-  `max_instances` 1, instance "main", sleeps after 30 min). The Worker sets X-Forwarded-Proto and X-Forwarded-Host
-  from the visitor's own address (`settings.ts` `forServer`) and gives the container OPENSKETCH_DATA=/data,
-  OPENSKETCH_PERSIST_URL=http://persist.bizomat.internal and OPENSKETCH_CLIENT_IP_HEADER=cf-connecting-ip
-  (`auth._client` then believes only CF-Connecting-IP). Container disks do not last, so `persist.py` (run by the
-  supervisor) restores the top-level state files from R2 (`bizomat-mcp-data`, keys `data/<name>`, names
-  `persist.NAME`) through the Worker's outbound handler (`src/persist.ts`: GET /list, GET/PUT/DELETE /o/<key>,
-  streamed, R2 checks each PUT's SHA-256; no R2 keys in the container), refuses to start the server when R2 holds no
-  `accounts.enabled` (exit 2; visitors get 503, never /setup; OPENSKETCH_PERSIST_EMPTY_OK=1 for a deliberate empty
-  start), copies changed files every 2 s (SQLite through the online backup; a refused file never holds back the
-  others) and once more on SIGTERM. OPENSKETCH_MCP_URL (`server._mcp_base`) makes the connector address
-  https://mcp.bizomat.ai/mcp; mcp.bizomat.ai is in OPENSKETCH_REDIRECT_HOSTS, so OAuth there has issuer
-  https://mcp.bizomat.ai. Tests: `tests/test_persist.py`; `cloudflare/mcp/test` (vitest; `contract.test.ts` runs
-  persist.py against the Worker's store). A local run of the whole stack (`wrangler dev` with Docker: Worker,
-  container, local R2) passed: fail-closed 503 on an empty store, cold start about 3 s, sign-in, OAuth discovery,
-  the MCP SDK client (31 tools), a stand-in Companion paired through the page with 25 s long polls and commands,
-  and sessions, computers and command history restored onto a fresh disk. Not yet deployed. `CAD_PAUSED=1` (a Worker
-  secret) answers 503 and stops a running server so a new copy of the data can go into R2. The laptop runs the move
-  with `tools/laptop/cloudflare.ps1`: check, deploy mcp|tasks|website, secrets website, move tasks|cad (-Local,
-  -Replace, -Final), switch (prints the DNS steps; DNS stays the owner's), status. It is ASCII and PS 5.1, apart from
-  bizomat.ps1.
-  The data moves from Fly with `cloudflare/mcp/scripts/move-from-fly.mjs` (prepare, then apply) before the DNS switch.
-  Secrets a Fly server may have (OPENSKETCH_PASSWORD or OPENSKETCH_MCP_TOKEN: the private address and link signature seed;
-  OPENSKETCH_KEY_SECRET; GOOGLE_CLIENT_ID/SECRET; OPENSKETCH_ADDIN_URL) are passed to the container when set as Worker
-  secrets (`settings.ts` PASSED); `cloudflare.ps1 secrets mcp` copies them from the Fly Machine unseen. Readiness
-  rehearsal (7 Nov 2026): the production image seeded over HTTP, `move cad -Local`, the restored stack behind the website
-  Worker over https: same accounts, settings, OAuth grants, private address, add-in key, paired computer and history as
-  Fly; every tool; a 150 s call with a keep-alive every 15 s (gocore-website docs/BIZOMAT-CLOUDFLARE-MIGRATION.md).
+- Cloudflare Worker and Container hosting (`cloudflare/mcp`, planned Nov 2026, never deployed) was removed on 8 Nov
+  2026: CAD MCP runs on the Fly volume. `persist.py` (restore and copy-back of the data folder through an object
+  store) stays in the code but is dormant: it runs only when OPENSKETCH_PERSIST_URL is set, which nothing sets.
+  `tools/laptop/cloudflare.ps1` is superseded (its README says so).
 - `cadworker.py`: CAD in worker processes, one per person and kind, at most OPENSKETCH_CAD_LANES (3) live, one place
   kept for the owner, idle ones stop after 15 min, workers over 800 MB replaced. `OPENSKETCH_CAD_WORKERS=0` runs in
   threads (tests/conftest.py sets it), so `tests/test_cadworker.py` imports every module first in a fresh process and
@@ -366,8 +349,8 @@ released; development-signed), never overwritten.
 
 - One Windows PC (`windows/`): `setup.ps1` (Python 3.12 venv, pinned packages, copies the add-in zip from
   Downloads), `start.ps1` (asks for an optional public https address for a tunnel; no server password; runs on port
-  8000), `update-addin.ps1` (newest add-in zip from Downloads, checked >= 0.10.0, into `%LOCALAPPDATA%\OpenSketch\AddIn`,
-  `OpenSketchSW.exe --install`, prints the registered CodeBase and its version), `connect-claude.ps1` (adds the private address to Claude Desktop's config through
+  8000), `update-addin.ps1` (newest add-in zip from Downloads, checked >= 0.10.0, into `%LOCALAPPDATA%\BIZOMAT CAD\AddIn`,
+  `BIZOMAT-CAD.exe --install` (OpenSketchSW.exe for packages up to 0.13), prints the registered CodeBase and its version), `connect-claude.ps1` (adds the private address to Claude Desktop's config through
   `cmd /c npx mcp-remote`, with a backup, and restarts it), `README.md` (steps: add-in from the Actions artifact, the
   macro, Claude Desktop, Cloudflare Tunnel for web AI apps). The add-in's default address is `http://127.0.0.1:8000` (`Settings.DefaultServer`).
   On Windows the CAD workers lower their priority with psutil (there is no `os.nice`).
@@ -385,9 +368,6 @@ released; development-signed), never overwritten.
 - Large assemblies are slow to read: each read exports a STEP of the bodies that changed.
 - Account admin page (`/admin`) covers people, passwords, invites and open sign-up; early access codes and Google
   sign-in setup are still API only (`/api/account/settings`, `/api/account/google`).
-- On Cloudflare: a state file over 64 MiB is not copied to R2 (logged; `bridge.sqlite` grows with the command
-  history); files in transit (uploads, exports, file chunks) do not survive a container restart; a container killed
-  without SIGTERM loses up to 2 s of changes.
 - KEVOS: not yet run on Windows or in a real SOLIDWORKS; the MSI is built only by CI; no MCP progress notifications
   (JSON responses), progress is in `sw_command_status`; ChatGPT and Grok connectors untested; the gateway is one
   process (SQLite, live sessions in memory).

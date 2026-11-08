@@ -51,12 +51,12 @@ Needs Windows PowerShell 5.1, Git for Windows (Git Bash), the .NET 8 SDK and the
      Windows asks to confirm the Trusted Root change. Without it the checks cannot pass, and the script stops before
      signing.
    - `-Build` runs `bash solidworks/build.sh test`. Without it the script uses the package already in
-     `solidworks\dist\OpenSketch-SOLIDWORKS`.
+     `solidworks\dist\BIZOMAT-CAD-SOLIDWORKS`.
 
 3. Later runs: `installer\sign-development.ps1 -Build -Backup`. The script finds the certificate by its subject.
    Pass `-Thumbprint` to choose one.
 
-What it signs: `OpenSketch.Sw.dll`, `KEVOS.Companion.exe` and `OpenSketchSW.exe` (BIZOMAT's own files; the package
+What it signs: `OpenSketch.Sw.dll`, `KEVOS.Companion.exe` and `BIZOMAT-CAD.exe` (BIZOMAT's own files; the package
 holds no third-party binaries) before they go into the MSI, then the MSI. SHA-256 file digests and an RFC 3161 SHA-256
 timestamp from `http://timestamp.digicert.com` (`-TimestampUrl` for another; `-NoTimestamp` signs without one, and
 those signatures stop being valid when the certificate expires). A self-signed build is named

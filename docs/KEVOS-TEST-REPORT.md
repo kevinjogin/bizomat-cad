@@ -89,7 +89,7 @@ a registered computer.
 
 All 28 existing SOLIDWORKS tools keep their names and arguments (plus an optional `device`) and run through the new
 path unchanged; three tools were added (`sw_list_devices`, `sw_command_status`, `sw_cancel_command`). Not migrated:
-the out-of-process "Connect to the open SOLIDWORKS" mode of `OpenSketchSW.exe` (`--attach`) uses only the direct link,
+the out-of-process "Connect to the open SOLIDWORKS" mode of `BIZOMAT-CAD.exe` (`--attach`) uses only the direct link,
 because the Companion accepts only a SOLIDWORKS process on the pipe; it stays as a legacy fallback. The macro and the
 direct link stay as fallbacks and are untouched.
 

@@ -31,7 +31,7 @@ bash solidworks/build.sh test
 `pytest -q` includes the KEVOS end-to-end test (`tests/test_bridge_e2e.py`, marked slow) when the .NET SDK is
 installed: it builds `solidworks/tests/BridgeProbe` and runs the real C# Companion engine and add-in link against the
 real server. `solidworks/build.sh` puts the add-in, Companion, legacy installer, macro and README in
-`solidworks/dist/OpenSketch-SOLIDWORKS`.
+`solidworks/dist/BIZOMAT-CAD-SOLIDWORKS`.
 
 ## The MSI (Windows)
 

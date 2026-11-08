@@ -1,6 +1,6 @@
 # Security
 
-OpenSketch signs people in, holds keys that let an AI app and the add-in act on someone's SOLIDWORKS, and accepts
+BIZOMAT CAD Automation signs people in, holds keys that let an AI app and the add-in act on someone's SOLIDWORKS, and accepts
 file uploads, so security reports matter.
 
 ## Reporting

@@ -1,5 +1,9 @@
 # BIZOMAT on your laptop
 
+> **Superseded on 8 Nov 2026.** Nothing is deployed from a laptop any more: production is the Fly app `cados`, deployed
+> by hand from GitHub Actions in `jogkev-creator/bizomat` (`docs/BIZOMAT-SINGLE-APP.md` there). No Cloudflare Worker or R2
+> bucket is used. These scripts are kept as history; do not run `deploy`, `move` or `publish` from them.
+
 One folder holds the three repositories, and every deploy is made from it with `bizomat.ps1`. GitHub stays the home
 of the code (history, backup, pull requests); deploys come from your laptop, not from GitHub.
 

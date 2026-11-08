@@ -66,15 +66,15 @@ The feature format is in [docs/DOCUMENT.md](docs/DOCUMENT.md).
 2. **Install BIZOMAT CAD Automation** on the SOLIDWORKS computer (SOLIDWORKS 2022 or newer, Windows 64-bit): the Windows
    installer (`BIZOMAT-CAD-Automation-x64.msi`, "Download for SOLIDWORKS" on the website) adds the add-in and the BIZOMAT Companion; see
    [docs/KEVOS-INSTALL.md](docs/KEVOS-INSTALL.md). Without the installer: download the add-in package from the
-   dashboard, unzip it, run `OpenSketchSW.exe` and click Install for me (per Windows user).
+   dashboard, unzip it, run `BIZOMAT-CAD.exe` and click Install for me (per Windows user).
 3. **Pair the computer** when the KEVOS Companion asks, then open SOLIDWORKS: the CADOS tab and task pane show the link. (Direct
    link without the Companion: CADOS > Status in SOLIDWORKS, then paste the address and add-in key from the
-   dashboard; or run the macro `Documents\OpenSketch\OpenSketch.swb`.)
+   dashboard; or run the macro `Documents\BIZOMAT CAD\BIZOMAT CAD.swb`.)
 4. **Add the connector** in your AI app: a custom connector with the address from the dashboard. Apps that cannot
    sign in can use the private address shown under "Assistant cannot sign in?".
 5. **Run the self test** the first time: ask "Run the SOLIDWORKS self test, all three stages." It builds test
-   files in `Documents\OpenSketch\selftest` and reports every step as ok, check or failed. The add-in's log is
-   `%LOCALAPPDATA%\OpenSketch\SolidWorks\log.txt`.
+   files in `Documents\BIZOMAT CAD\Projects\selftest` and reports every step as ok, check or failed. The add-in's log is
+   `Documents\BIZOMAT CAD\Logs\log.txt`.
 
 Then ask for real work, for example: "In SOLIDWORKS, make a 60 x 40 x 8 mm mounting plate with four M5
 clearance holes."

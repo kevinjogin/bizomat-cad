@@ -6,7 +6,7 @@
 |---|---|---|
 | `OpenSketch.Sw.dll` | The KEVOS SOLIDWORKS add-in (COM, .NET Framework 4.8, x64) | Inside SOLIDWORKS |
 | `KEVOS.Companion.exe` | The KEVOS Companion (tray app, .NET Framework 4.8, x64) | At Windows sign-in, as the user |
-| `OpenSketchSW.exe` | The earlier per-user installer and fallback launcher | Only when the person runs it |
+| `BIZOMAT-CAD.exe` | The earlier per-user installer and fallback launcher | Only when the person runs it |
 | `BIZOMAT-CAD-Automation-<version>-x64.msi` | The installer, holding the three files above | Once per computer, elevated |
 
 All four are built by GitHub Actions (`.github/workflows/solidworks.yml`): the DLL and EXEs on a Linux runner and
@@ -70,7 +70,7 @@ Details for the application form:
 | Repository | https://github.com/jogkev-creator/CADOS (private since 7 Nov 2026: the free programme for open-source projects needs a public repository, so a paid service applies, such as Azure Trusted Signing or an OV code-signing certificate) |
 | Licence | GNU Affero General Public License v3.0 only |
 | Description | Connects AI apps (Claude, ChatGPT and other MCP clients) to SOLIDWORKS on the user's own Windows computer. A COM add-in runs inside SOLIDWORKS; a tray app keeps a signed outbound link to the user's KEVOS server. |
-| Files to sign | `OpenSketch.Sw.dll`, `KEVOS.Companion.exe`, `OpenSketchSW.exe`, `BIZOMAT-CAD-Automation-<version>-x64.msi` (Authenticode, SHA-256, timestamped) |
+| Files to sign | `OpenSketch.Sw.dll`, `KEVOS.Companion.exe`, `BIZOMAT-CAD.exe`, `BIZOMAT-CAD-Automation-<version>-x64.msi` (Authenticode, SHA-256, timestamped) |
 | Build system | GitHub Actions, GitHub-hosted `windows-latest`, workflow `.github/workflows/solidworks.yml`, job `installer` |
 | Release channel | https://bizomat.ai/downloads/cad/ (`cloudflare.ps1 publish installer`; the GitHub releases are private) |
 | Maintainers | (your name and GitHub account; reviewers and approvers) |
