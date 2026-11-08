@@ -1,5 +1,9 @@
 """Keeps the data folder in an object store when the server runs where local disk does not last.
 
+Dormant since 8 Nov 2026: production runs on a Fly volume and nothing sets OPENSKETCH_PERSIST_URL. The Cloudflare
+Worker it was written for (cloudflare/mcp) was never deployed and its code was removed; this module is kept so that
+design can be brought back from history without rewriting the server side.
+
 Cloudflare Containers start from a fresh disk after every sleep, restart, host move or deploy ("All disk is
 ephemeral", Cloudflare's Containers FAQ). With OPENSKETCH_PERSIST_URL set (the Worker bizomat-mcp sets
 http://persist.bizomat.internal, cloudflare/mcp), the supervisor (supervisor.py):
