@@ -242,6 +242,20 @@ released; development-signed), never overwritten.
   (AutoInsertCenterMarks2), note (CreateText2), properties, sheet (scale, projection), bom (InsertBomTable4 with the
   first BOM template in SOLIDWORKS' file locations, then AutoBalloon5). A failing action stops the list; the result
   says which, with what was done before it. Not run in a real SOLIDWORKS yet.
+- Drafting intelligence (8 Nov 2026; `opensketch/drafting/`, tools in `sw_drafting.py`, docs in the bizomat repository's
+  `docs/drafting-intelligence/`): six tools (sw_drafting_analyse, _plan, _build, _check, _knowledge, _feedback) that
+  reason over the model and reuse the existing commands for every SOLIDWORKS operation (read, geometry, read_drawing,
+  sw_create_drawing, sw_edit_drawing, sw_export): no new add-in API. Modules: facts (OpenCascade, in the CAD worker via
+  `engine.recognise_part`), features, understanding (confirmed / inferred / unknown), disciplines (17 labels, override),
+  reasoning (per discipline), knowledge (`drafting/knowledge/entries.json`, BM25, company guidelines per account),
+  strategy (the plan), dimensioning, standards (AS1100 / ISO / ASME profiles, no standard text, compliance never
+  claimed), layout (moves only), qa (100-point index, release blockers apart, `manufacturing_ready` always false),
+  learning (SQLite per account in `<data>/drafting/<account>/`), benchmarks (12 synthetic cases, labelled as such).
+  Rules: never choose a tolerance, fit, thread, weld, material or finish (TO BE CONFIRMED and a release blocker
+  instead); never fill CheckedBy / ApprovedBy; corrections are view moves only; the model is never changed; feedback
+  stays on the server, examples kept only when the person says so. Tests: `tests/test_drafting_engine.py`,
+  `tests/test_drafting_tools.py` (simulated SOLIDWORKS: not a live test). Not yet run against a live SOLIDWORKS: the
+  live checklist is in TECHNICAL_SPECIFICATION.md, section 8.
 - `sw_selftest.py`: stages plate / shapes / assembly in `Documents\OpenSketch\selftest` (the plate stage ends with its drawing and a PDF of it), each step ok / check /
   failed with the reason; the first thing to run on a new PC. Tests run it against SimSW, a stand-in add-in built
   on the kernel and mate solver.
