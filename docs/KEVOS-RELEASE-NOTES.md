@@ -1,5 +1,27 @@
 # BIZOMAT CAD Automation for SOLIDWORKS release notes (CADOS for SOLIDWORKS in 0.12, KEVOS Bridge up to 0.11)
 
+## 0.14.0 (BIZOMAT CAD for SOLIDWORKS)
+
+- New name: **BIZOMAT CAD** in Tools > Add-Ins, the toolbar, the task pane, the status window, the installer, the Start
+  menu and every message. The COM ids, file names and the MSI's file names are unchanged, so upgrades and the update
+  record keep working.
+- New folder: **Documents\BIZOMAT CAD** (Documents found through Windows' known-folder API, local or OneDrive) with
+  Settings, Projects, Templates, Logs, Cache and Backups. Saves and exports go to Projects, the log to Logs, the
+  launcher macro is `BIZOMAT CAD.swb`, working copies go to the Windows temp folder. No OpenSketch folder is made any
+  more.
+- The old **Documents\OpenSketch** files are copied into Projects once, on the first start: never overwritten (a
+  different file of the same name is kept as "name (from OpenSketch)"), never deleted; locked or syncing files are
+  copied at a later start. The old folder stays as a backup with a note. Uninstalling never touches Documents.
+- Includes 0.13.1 (TLS 1.2 inside SOLIDWORKS).
+
+## 0.13.1 (BIZOMAT CAD Automation for SOLIDWORKS)
+
+- The add-in connects over HTTPS inside SOLIDWORKS. It runs in SLDWORKS.exe and took that program's .NET settings,
+  which can leave only TLS 1.0 on; the servers need TLS 1.2, so the add-in's direct link failed with "Could not create
+  SSL/TLS secure channel" (found on SOLIDWORKS 2022 SP5), while the Companion connected. The add-in and the Companion
+  now always offer TLS 1.2, and leave Windows' own choice alone where it makes it. (Built on the CADOS branch
+  claude/practical-lovelace-hi2nio, never merged there; brought into jogkev-creator/bizomat on 8 Nov 2026.)
+
 ## 0.13.0 (BIZOMAT CAD Automation for SOLIDWORKS)
 
 - New names, in BIZOMAT's style: the add-in is **BIZOMAT CAD Automation** (Tools > Add-Ins, the **BIZOMAT** tab, menu

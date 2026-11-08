@@ -54,8 +54,33 @@ namespace OpenSketch.Sw.Core
             http.DefaultRequestHeaders.UserAgent.ParseAdd("OpenSketch-SOLIDWORKS/" + (J.Str(hello, "version") ?? "0"));
         }
 
+        /// <summary>
+        /// The TLS versions .NET may offer, with TLS 1.2 added. The add-in runs inside SLDWORKS.exe and takes that
+        /// program's .NET settings, which can leave only SSL 3 and TLS 1.0 on; Fly and Cloudflare accept TLS 1.2 or
+        /// later, so every request failed with "Could not create SSL/TLS secure channel" (SOLIDWORKS 2022, Nov 2026),
+        /// while the Companion, a program of its own, connected. SystemDefault (Windows chooses: TLS 1.2 and later on
+        /// Windows 10 and 11) is left as it is, and no version is taken away.
+        /// </summary>
+        public static SecurityProtocolType WithTls12(SecurityProtocolType current) =>
+            current == SecurityProtocolType.SystemDefault ? current : current | SecurityProtocolType.Tls12;
+
+        static void EnsureTls12()
+        {
+            try
+            {
+#pragma warning disable SYSLIB0014 // ServicePointManager: obsolete on .NET 8 (the tests), the setting that counts on .NET Framework
+                ServicePointManager.SecurityProtocol = WithTls12(ServicePointManager.SecurityProtocol);
+#pragma warning restore SYSLIB0014
+            }
+            catch (Exception)
+            {
+                // never let this stop the link (or escape into SOLIDWORKS): the request then says what failed
+            }
+        }
+
         public static HttpMessageHandler DefaultHandler()
         {
+            EnsureTls12();
             var h = new HttpClientHandler();
             try
             {
