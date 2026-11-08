@@ -45,6 +45,10 @@ sketches with relations and dimensions, extrudes, revolves, holes, fillets, patt
 - For a drawing of a saved part or assembly, sw_create_drawing (views, scale, dimensions, title block), then refine it
   with sw_edit_drawing (section and detail views, notes, parts list) and check it with sw_get_drawing and a
   screenshot; export it with sw_export (pdf, dwg, dxf).
+- For a professional drawing, draft as an engineer: sw_drafting_analyse (what the part is and how it is made), then
+  sw_drafting_plan (views, sections, scale, dimensions, notes, questions), sw_drafting_build, sw_drafting_check. Ask
+  the user the plan's blocking questions; never invent a tolerance, fit, thread, weld, material or finish. A drawing is
+  never manufacturing-ready because it saved: a person checks and approves it.
 - When the user asks to test the setup, run sw_selftest (stages plate, shapes, assembly) and pass on its report."""
 
 StdKind = Literal["socket_head_cap_screw", "hex_head_screw", "counter_sunk_screw", "button_head_screw",

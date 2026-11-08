@@ -59,7 +59,10 @@ def test_only_the_solidworks_tools_on_both_addresses(app):
         names = {t["name"] for t in rpc(r)["result"]["tools"]}
         assert names == {n for n in names if n.startswith("sw_")} | {"request_upload"}
         assert {"sw_status", "sw_get_guide", "sw_add_features", "sw_batch", "sw_add_mate", "sw_selftest"} <= names
-        assert len(names) == 31 and {"sw_create_drawing", "sw_get_drawing", "sw_edit_drawing"} <= names
+        # 31 SOLIDWORKS tools and, since 8 Nov 2026, the six drafting intelligence tools (sw_drafting.py)
+        assert len(names) == 37 and {"sw_create_drawing", "sw_get_drawing", "sw_edit_drawing"} <= names
+        assert {"sw_drafting_analyse", "sw_drafting_plan", "sw_drafting_build", "sw_drafting_check", "sw_drafting_knowledge",
+                "sw_drafting_feedback"} <= names
         assert {"sw_list_devices", "sw_command_status", "sw_cancel_command"} <= names  # registered computers
     init = rpc(_rpc(app, "/mcp", "initialize", {"protocolVersion": "2025-06-18", "capabilities": {},
                                                 "clientInfo": {"name": "t", "version": "1"}}))["result"]

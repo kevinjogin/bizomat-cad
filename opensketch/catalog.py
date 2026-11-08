@@ -41,6 +41,14 @@ GROUPS: list[tuple[str, list[tuple[str, str, str]]]] = [
         ("sw_get_drawing", "Read a drawing", "Reads the sheet, every view and the title block."),
         ("sw_edit_drawing", "Edit a drawing", "Adds section, detail and projected views, notes and a bill of materials, and moves or rescales views."),
     ]),
+    ("Drafting intelligence", [
+        ("sw_drafting_analyse", "Understand the model", "Recognises the features, the drafting disciplines and how the part is made, and lists what is confirmed, inferred and still unknown."),
+        ("sw_drafting_plan", "Plan the drawing", "Plans the views, sections, details, scale, dimensions and notes, says why, and asks only what affects correctness."),
+        ("sw_drafting_build", "Make the planned drawing", "Makes the planned drawing in SOLIDWORKS, fixes its layout and checks it."),
+        ("sw_drafting_check", "Check a drawing", "Gives a drawing a quality score and lists what stops it being released."),
+        ("sw_drafting_knowledge", "Drafting knowledge", "Looks up drafting practice with its source, to explain a recommendation."),
+        ("sw_drafting_feedback", "Feedback and guidelines", "Records what was accepted, changed or approved, and your company's own drafting rules."),
+    ]),
     ("Files", [
         ("sw_import", "Import a file", "Opens a STEP, IGES or Parasolid file and saves it as SOLIDWORKS files."),
         ("request_upload", "Send a large file", "Gives the assistant a one-time link to send a large file for import."),

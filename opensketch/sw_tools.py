@@ -110,6 +110,10 @@ Drafting practice (AS 1100.101 and 201, ISO 128, ISO 129-1), for drawings a work
   the layout with sw_get_drawing (outlines in sheet mm) and look at it with a screenshot after each step.
 - Assembly drawings: views of the assembly, a parts list (bom) with balloons, no detail dimensions except overall
   sizes and those needed to assemble.
+- The drafting intelligence tools do this reasoning for you: sw_drafting_analyse (features, disciplines, what is
+  confirmed, inferred and unknown), sw_drafting_plan (views with the reason for each, sections, details, scale,
+  dimensions, notes, the questions that matter), sw_drafting_build, sw_drafting_check (quality index and release
+  blockers), sw_drafting_knowledge (cited practice). Prefer them for manufacturing, fabrication and assembly drawings.
 - Check every drawing: take a screenshot, read the result's notes, and fix what a checker would reject (views off
   the sheet or crowded, dimensions crossing or missing, a needed view absent) by changing the views, scale, sheet
   or the model's sketch dimensions, then make it again with overwrite=true. Tell the user what still needs a
@@ -1088,3 +1092,5 @@ async def sw_cancel_command(command_id: Annotated[str, Field(description="The co
 # The self test's tools, last: sw_selftest takes _DEV and _routed from this module, so it may only be imported once
 # they exist (a CAD worker process imports this module first, before mcp_server).
 from . import sw_selftest  # noqa: E402,F401
+# The drafting intelligence tools (opensketch/drafting): they reuse this module's helpers and tools, so they come last too.
+from . import sw_drafting  # noqa: E402,F401

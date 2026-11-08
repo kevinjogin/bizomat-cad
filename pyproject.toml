@@ -29,10 +29,10 @@ Issues = "https://github.com/jogkev-creator/CADOS/issues"
 opensketch = "opensketch.__main__:main"
 
 [tool.setuptools]
-packages = ["opensketch", "opensketch.features"]
+packages = ["opensketch", "opensketch.features", "opensketch.drafting"]
 
 [tool.setuptools.package-data]
-opensketch = ["static/*.svg", "static/*.ico", "static/fonts/*", "static/ui/*", "solver/*.js", "solver/*.mjs"]
+opensketch = ["static/*.svg", "static/*.ico", "static/fonts/*", "static/ui/*", "solver/*.js", "solver/*.mjs", "drafting/knowledge/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
