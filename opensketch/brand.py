@@ -13,6 +13,7 @@ https://bizomat.ai) and BIZOMAT_WORK_URL (default https://bizomat.ai/tasks).
 from __future__ import annotations
 
 import os
+import time
 from html import escape
 
 from . import bizomat_brand as bz
@@ -25,6 +26,16 @@ HEADLINE = "Turn engineering intent into CAD."
 DESCRIPTION = ("BIZOMAT CAD Automation connects your AI assistant to SOLIDWORKS on your own computer. Create, change and "
                "check native parts, assemblies and drawings in plain language.")
 WORK_NAME = "Project Management"
+# The BIZOMAT corporate language (owner, 8 Nov 2026; the website's src/config/platform.ts is its source). This product
+# keeps its own name, headline and description; the footer carries the parent brand's slogan and short description.
+SLOGAN = "Connecting Intelligence. Empowering Progress."
+CORPORATE = ("BIZOMAT connects intelligent technologies, software and practical automation to simplify work and advance "
+             "business and industry.")
+
+
+def copyright_line() -> str:
+    """The copyright line every BIZOMAT site carries."""
+    return f"\u00a9 {time.gmtime().tm_year} {PLATFORM}. All rights reserved."
 # The code is in private GitHub repositories (the owner's decision, 7 Nov 2026): nothing public links there. Support is
 # the website's contact page; the installer and its checksum are published on bizomat.ai (/downloads/cad/, R2).
 INSTALLER_NAME = "BIZOMAT-CAD-Automation-x64.msi"
@@ -159,14 +170,14 @@ def header(active: str = "", signed_in: bool = False, *, app: bool = False, user
 
 def legal_links() -> str:
     """This app's own privacy notice and the platform's privacy, terms and disclaimer."""
-    return (f'<a href="/privacy">Privacy</a><a href="{escape(site_page("privacy"))}" rel="noopener">Platform privacy</a>'
-            f'<a href="{escape(site_page("terms"))}" rel="noopener">Terms</a>'
+    return (f'<a href="/privacy">{PRODUCT} privacy</a><a href="{escape(site_page("privacy"))}" rel="noopener">Privacy Policy</a>'
+            f'<a href="{escape(site_page("terms"))}" rel="noopener">Terms of Use</a>'
             f'<a href="{escape(site_page("disclaimer"))}" rel="noopener">Disclaimer</a>')
 
 
 def app_footer() -> str:
     """The app's short footer: CAD Automation within the BIZOMAT platform, and the legal pages."""
-    return (f'<footer class="app-footer"><div class="container"><span>{FULL}</span>'
+    return (f'<footer class="app-footer"><div class="container"><span>{FULL} \u00b7 {copyright_line()}</span>'
             f'<nav aria-label="{PLATFORM}"><a href="{escape(site_url())}/" rel="noopener">bizomat.ai</a>'
             f'<a href="{escape(work_url())}/" rel="noopener">{WORK_NAME}</a><a href="/docs">Documentation</a>'
             f'{legal_links()}<a href="{escape(support_url())}" rel="noopener">Support</a></nav></div></footer>')
@@ -175,14 +186,16 @@ def app_footer() -> str:
 def footer() -> str:
     site = escape(site_url())
     return f"""<footer class="site-footer"><div class="container"><div class="footer-grid">
-<div class="footer-brand">{wordmark()}<p>{escape(DESCRIPTION)} Part of the {PLATFORM} platform.</p></div>
+<div class="footer-brand">{wordmark()}<p>{escape(DESCRIPTION)}</p>
+<p class="footer-corp"><strong>{SLOGAN}</strong> {escape(CORPORATE)}</p></div>
 <div><h4>Product</h4><ul><li><a href="/overview#product">Overview</a></li><li><a href="/overview#how">How it works</a></li>
 <li><a href="/overview#integrations">Integrations</a></li><li><a href="/overview#security">Security</a></li></ul></div>
 <div><h4>Resources</h4><ul><li><a href="/docs">Documentation</a></li><li><a href="/docs#troubleshooting">Troubleshooting</a></li>
 <li><a href="/download/solidworks">Download for SOLIDWORKS</a></li><li><a href="/download/solidworks.sha256">Installer checksum</a></li><li><a href="{escape(support_url())}" rel="noopener">Support</a></li></ul></div>
-<div><h4>{PLATFORM}</h4><ul><li><a href="{site}/" rel="noopener">bizomat.ai</a></li><li><a href="{escape(work_url())}/" rel="noopener">{WORK_NAME}</a></li>
-<li><a href="{escape(site_page("engine-room"))}" rel="noopener">The Engine Room</a></li></ul></div></div>
-<div class="footer-base"><span>{FULL}. Part of the {PLATFORM} platform.</span>
+<div><h4>{PLATFORM}</h4><ul><li><a href="{site}/" rel="noopener">Home</a></li><li><a href="{escape(site_page("engine-room"))}" rel="noopener">About</a></li>
+<li><a href="{escape(site_page("products"))}" rel="noopener">Products</a></li><li><a href="{escape(work_url())}/" rel="noopener">{WORK_NAME}</a></li>
+<li><a href="{escape(site_page("contact"))}" rel="noopener">Contact</a></li></ul></div></div>
+<div class="footer-base"><span>{copyright_line()} {FULL} is part of the {PLATFORM} platform.</span>
 <nav class="footer-legal" aria-label="Legal">{legal_links()}</nav></div></div></footer>"""
 
 

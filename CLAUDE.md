@@ -32,6 +32,11 @@ released; development-signed), never overwritten.
   the Cloudflare Worker with `cd cloudflare/mcp && npm ci && npm run check` (Node 22, python3). For page changes, check the page in Chromium with
   Playwright at desktop and phone width.
 - No emojis anywhere. Plain language, short sentences, little text on pages.
+- BIZOMAT corporate footer (owner, 8 Nov 2026; the website's `src/config/platform.ts` is the source): `brand.SLOGAN`
+  ("Connecting Intelligence. Empowering Progress."), `brand.CORPORATE` (short description) and
+  `brand.copyright_line()` ("(c) <year> BIZOMAT. All rights reserved.") in the site footer, the app footer and the
+  sign-in panel; the footer's BIZOMAT column links Home, About (/engine-room/), Products, Project Management and
+  Contact on bizomat.ai; legal links read Privacy Policy and Terms of Use. Product name, headline, logo and colours unchanged.
 - Brand: CADOS by KEVOS. Never "OpenSketch" in anything people read (pages, MCP server name, messages); real file
   paths and file names (`Documents\OpenSketch`, `OpenSketchSW.exe`) stay as they are. Logos are SVG paths in
   `brand.py`: the CADOS wordmark (built from the KEVOS letterforms) with "by KEVOS"; the KEVOS logo links to
