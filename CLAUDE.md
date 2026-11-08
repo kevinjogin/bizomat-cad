@@ -292,8 +292,11 @@ released; development-signed), never overwritten.
   names, releases, logs and /healthz: both need the repository secret FLY_API_TOKEN (a deploy token for cados).
   No password secret is needed on Fly (fly.toml sets OPENSKETCH_PUBLIC_URL, so a fresh server waits in setup mode);
   an old OPENSKETCH_PASSWORD secret can be unset. The Windows PC server (`windows/`) is the other way to run it.
-- fly.toml: app `cados`, performance-1x (one dedicated core, 2 GB), `auto_stop_machines = "suspend"`, kill_timeout 15, volume
-  `opensketch_data` at /data. The add-in's long poll keeps the machine awake while SOLIDWORKS is linked.
+- fly.toml: app `cados`, performance-1x (one dedicated core, 2 GB), always on (`auto_stop_machines = 'off'`,
+  `min_machines_running = 1`), kill_timeout 15, volume `opensketch_data` at /data. It was 'suspend': the BIZOMAT router
+  reaches cados over the private network (cados.internal), which Fly's proxy does not count, so the machine slept
+  while in use and the router answered 502 until a request came in at cados.fly.dev (8 Nov 2026). The machine runs
+  in ams although primary_region is syd (its volume is there).
 - `supervisor.py` (`python -m opensketch --supervise`, the image's CMD): asks /healthz every 5 s, restarts the server
   after 120 s without an answer (stacks to the log first), tells a suspended machine from a hang. With
   OPENSKETCH_PERSIST_URL it first restores the data folder from an object store and copies changes back

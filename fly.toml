@@ -31,9 +31,13 @@ kill_timeout = '15s'
 [http_service]
   internal_port = 8080
   force_https = true
-  auto_stop_machines = 'suspend'
+  # Always on. The BIZOMAT router (Fly app bizomat) reaches this app over Fly's private network
+  # (cados.internal:8080), which Fly's proxy does not see: with 'suspend' it put the machine to sleep while the
+  # Companion and AI apps were using it through bizomat.ai/cad, and a private-network request cannot wake it, so the
+  # router answered 502 Bad Gateway until something came in at cados.fly.dev (8 Nov 2026).
+  auto_stop_machines = 'off'
   auto_start_machines = true
-  min_machines_running = 0
+  min_machines_running = 1
 
   [http_service.concurrency]
     type = 'requests'
