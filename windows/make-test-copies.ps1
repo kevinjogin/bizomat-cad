@@ -4,6 +4,8 @@
 # Run in a normal (not administrator) PowerShell, with SOLIDWORKS 2022 open, from the repository's apps\cad folder:
 #   powershell -ExecutionPolicy Bypass -File windows\make-test-copies.ps1
 #
+# The SOLIDWORKS calls are in windows\PackAndGoHelper.cs, compiled here against the interop library of the SOLIDWORKS
+# installation (Windows PowerShell cannot late-bind SOLIDWORKS' COM methods: TYPE_E_ELEMENTNOTFOUND).
 # It stops at the first failure, and:
 #  1. checks the original drawing exists and records the SHA-256 of the drawing and of every file it references;
 #  2. opens the original read-only (or uses it if it is already open with no unsaved changes);
@@ -11,7 +13,7 @@
 #     it refuses when a copy would land on an original, outside the destination, or on a copy that already exists;
 #  4. closes only the original it opened itself (closing never saves);
 #  5. opens the copied drawing and checks that every reference (stored and resolved) and every view shows a copied
-#     file in the destination, and that no original is loaded;
+#     file in the destination;
 #  6. hashes the originals again: any change stops the run with ORIGINAL CHANGED;
 #  7. writes <destination>\evidence\pack-and-go.json and prints the live verification command.
 # It never saves, overwrites, renames or edits an original.
@@ -22,9 +24,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $evidence = [ordered]@{ started_utc = (Get-Date).ToUniversalTime().ToString('o'); source = $Source; destination = $Destination; suffix = $Suffix }
-$sw = $null
-$doc = $null
-$openedOriginal = $false
+$helperReady = $false
 
 function Save-Evidence {
   $dir = Join-Path $Destination 'evidence'
@@ -33,9 +33,8 @@ function Save-Evidence {
   $evidence | ConvertTo-Json -Depth 6 | Set-Content -Encoding UTF8 -Path (Join-Path $dir 'pack-and-go.json')
 }
 function Close-Original {
-  if ($openedOriginal -and $sw -ne $null -and $doc -ne $null) {
-    try { $sw.CloseDoc($doc.GetTitle()) } catch { }   # CloseDoc never saves
-    $script:openedOriginal = $false
+  if ($helperReady) {
+    try { if ([Bizomat.Phase21.PackHelper]::CloseOriginal()) { $evidence.original_closed = $true } } catch { }
   }
 }
 function Stop-With([string]$message) {
@@ -45,17 +44,14 @@ function Stop-With([string]$message) {
   Write-Host ('STOPPED: ' + $message) -ForegroundColor Yellow
   exit 1
 }
+function Reason($err) {
+  $e = $err.Exception
+  while ($e.InnerException -ne $null) { $e = $e.InnerException }
+  return $e.Message
+}
 function Hash([string]$path) { (Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash }
 function Full([string]$path) { [IO.Path]::GetFullPath($path) }
 function Same([string]$a, [string]$b) { [string]::Equals((Full $a).TrimEnd('\'), (Full $b).TrimEnd('\'), [StringComparison]::OrdinalIgnoreCase) }
-function Paths($deps) {
-  # GetDependencies2 gives file name, full path, file name, full path, ...
-  $out = @()
-  if ($deps -eq $null) { return ,$out }
-  $a = @($deps)
-  for ($i = 0; $i + 1 -lt $a.Count; $i += 2) { $out += [string]$a[$i + 1] }
-  return ,$out
-}
 
 # 1. the original drawing, and the hashes before anything is opened
 if (-not (Test-Path -LiteralPath $Source)) { Stop-With "No such drawing: $Source" }
@@ -68,38 +64,35 @@ $part = [IO.Path]::ChangeExtension($Source, '.SLDPRT')
 if (Test-Path -LiteralPath $part) { $before[$part] = Hash $part }
 Write-Host "Original drawing: $Source"
 
-# 2. SOLIDWORKS, and the original opened read-only
+# 2. SOLIDWORKS, its interop library, the helper, and the original opened read-only
 $proc = @(Get-Process -Name SLDWORKS -ErrorAction SilentlyContinue)
 $evidence.solidworks_processes = @($proc | ForEach-Object { $_.Id })
 if ($proc.Count -eq 0) { Stop-With 'SOLIDWORKS is not running (no SLDWORKS.exe process). Open SOLIDWORKS 2022 and run this again.' }
-$problems = @()
-foreach ($progId in @('SldWorks.Application', 'SldWorks.Application.30')) {   # 30 = SOLIDWORKS 2022
-  try {
-    $sw = [Runtime.InteropServices.Marshal]::GetActiveObject($progId)
-    if ($sw -ne $null) { $evidence.solidworks_progid = $progId; break }
-  } catch {
-    $problems += ($progId + ': ' + $_.Exception.Message)
-  }
+$swDir = $null
+try { $swDir = Split-Path $proc[0].Path } catch { }
+$candidates = @()
+foreach ($d in @($swDir, 'C:\Program Files\SOLIDWORKS Corp\SOLIDWORKS')) {
+  if ($d) { $candidates += (Join-Path $d 'api\redist\SolidWorks.Interop.sldworks.dll'); $candidates += (Join-Path $d 'SolidWorks.Interop.sldworks.dll') }
 }
-if ($sw -eq $null) {
-  Stop-With ('SOLIDWORKS is running (process ' + ($evidence.solidworks_processes -join ', ') + ') but did not answer: ' + ($problems -join ' | ') +
+$interop = $candidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+if (-not $interop) { Stop-With ('The SOLIDWORKS interop library was not found. Looked in: ' + ($candidates -join '; ')) }
+$evidence.interop = $interop
+$helper = Join-Path $PSScriptRoot 'PackAndGoHelper.cs'
+try {
+  Add-Type -Path $interop
+  Add-Type -Path $helper -ReferencedAssemblies $interop
+  $helperReady = $true
+} catch {
+  Stop-With ('The Pack and Go helper did not compile: ' + (Reason $_))
+}
+try { $evidence.solidworks = [Bizomat.Phase21.PackHelper]::Connect() } catch {
+  Stop-With ('SOLIDWORKS is running (process ' + ($evidence.solidworks_processes -join ', ') + ') but did not answer: ' + (Reason $_) +
              '. Usual causes: SOLIDWORKS runs as administrator while this window does not (start both normally), or it is still starting or showing a dialog.')
 }
-$evidence.solidworks = $sw.RevisionNumber()
-$doc = $sw.GetOpenDocumentByName($Source)
-if ($doc -ne $null) {
-  if ($doc.GetSaveFlag()) { Stop-With 'The original drawing is open with unsaved changes. Close it without saving (Window > Close All, Don''t Save), then run this again.' }
-  $evidence.original_was_open = $true
-} else {
-  $err = 0
-  $warn = 0
-  $doc = $sw.OpenDoc6($Source, 3, 3, '', [ref]$err, [ref]$warn)   # swDocDRAWING; swOpenDocOptions Silent + ReadOnly
-  if ($doc -eq $null) { Stop-With "SOLIDWORKS could not open the original drawing (error $err, warning $warn)." }
-  $openedOriginal = $true
-  $evidence.original_was_open = $false
-}
-$evidence.original_opened_read_only = $doc.IsOpenedReadOnly()
-$refs = Paths ($doc.GetDependencies2($true, $true, $false))
+Write-Host "SOLIDWORKS $($evidence.solidworks)"
+try { $evidence.original_open = [Bizomat.Phase21.PackHelper]::OpenOriginal($Source) } catch { Stop-With (Reason $_) }
+$evidence.original_opened_read_only = [Bizomat.Phase21.PackHelper]::OriginalReadOnly()
+$refs = @([Bizomat.Phase21.PackHelper]::OriginalReferences())
 $evidence.original_references = $refs
 if ($refs.Count -lt 1) { Stop-With 'SOLIDWORKS lists no referenced part for the original drawing.' }
 foreach ($r in $refs) {
@@ -110,22 +103,12 @@ $evidence.originals_sha256_before = $before
 foreach ($k in $before.Keys) { Write-Host ("  before  {0}  {1}" -f $before[$k], $k) }
 
 # 3. Pack and Go: the plan first, then the save
-$pg = $doc.Extension.GetPackAndGo()
-$pg.IncludeDrawings = $true
-try { $pg.IncludeSimulationResults = $false } catch { }
-try { $pg.IncludeToolboxComponents = $false } catch { }
-$pg.FlattenToSingleFolder = $true
-$pg.AddSuffix = $Suffix
-if (-not $pg.SetSaveToName($true, $Destination)) { Stop-With 'Pack and Go did not accept the destination folder.' }
-$names = $null
-[void]$pg.GetDocumentNames([ref]$names)
-$saveTo = $null
-$state = $null
-[void]$pg.GetDocumentSaveToNames([ref]$saveTo, [ref]$state)
-$names = @($names)
-$saveTo = @($saveTo)
+try { $lines = @([Bizomat.Phase21.PackHelper]::Plan($Destination, $Suffix)) } catch { Stop-With ('Pack and Go could not be planned: ' + (Reason $_)) }
 $plan = @()
-for ($i = 0; $i -lt $names.Count; $i++) { $plan += [ordered]@{ original = [string]$names[$i]; copy = [string]$saveTo[$i] } }
+foreach ($l in $lines) {
+  $parts = $l.Split('|')
+  $plan += [ordered]@{ original = $parts[0]; copy = $parts[1] }
+}
 $evidence.plan = $plan
 if ($plan.Count -lt 2) { Stop-With "Pack and Go found $($plan.Count) document(s); the drawing and its part are expected." }
 foreach ($p in $plan) {
@@ -136,7 +119,7 @@ foreach ($p in $plan) {
   if (Test-Path -LiteralPath $p.copy) { Stop-With "A copy already exists: $($p.copy). Move it away (or use another -Suffix) and run this again." }
   if (-not [IO.Path]::GetFileNameWithoutExtension($p.copy).EndsWith($Suffix, [StringComparison]::OrdinalIgnoreCase)) { Stop-With "Pack and Go would not add the suffix to $($p.copy)." }
 }
-$codes = @($doc.Extension.SavePackAndGo($pg))
+try { $codes = @([Bizomat.Phase21.PackHelper]::Save()) } catch { Stop-With ('Pack and Go failed: ' + (Reason $_)) }
 $labels = @{ 0 = 'saved'; 1 = 'user input not correct'; 2 = 'file already exists'; 3 = 'save-to name empty'; 4 = 'save error' }
 $evidence.save_status = @()
 $failed = @()
@@ -160,38 +143,34 @@ Close-Original
 foreach ($p in $plan) { if (-not (Test-Path -LiteralPath $p.copy)) { Stop-With "Pack and Go reported success, but $($p.copy) is not there." } }
 $copyDrawing = ($plan | Where-Object { $_.copy -match '\.slddrw$' } | Select-Object -First 1).copy
 if (-not $copyDrawing) { Stop-With 'No drawing among the copies.' }
-$err = 0
-$warn = 0
-$copy = $sw.OpenDoc6($copyDrawing, 3, 1, '', [ref]$err, [ref]$warn)   # swDocDRAWING; Silent
-if ($copy -eq $null) { Stop-With "SOLIDWORKS could not open the copied drawing (error $err, warning $warn)." }
-$evidence.copy_open = [ordered]@{ path = $copyDrawing; errors = $err; warnings = $warn }
-$stored = Paths ($copy.GetDependencies2($true, $false, $false))
-$resolved = Paths ($copy.GetDependencies2($true, $true, $false))
+try { $check = @([Bizomat.Phase21.PackHelper]::CheckCopy($copyDrawing)) } catch { Stop-With ('The copied drawing could not be checked: ' + (Reason $_)) }
+$stored = @()
+$resolved = @()
+$views = @()
+foreach ($l in $check) {
+  $f = $l.Split('|')
+  switch ($f[0]) {
+    'open' { $evidence.copy_open = [ordered]@{ path = $copyDrawing; errors = [int]$f[1]; warnings = [int]$f[2] } }
+    'stored' { $stored += $f[1] }
+    'resolved' { $resolved += $f[1] }
+    'view' { $views += [ordered]@{ view = $f[1]; model = $f[2] } }
+  }
+}
 $evidence.copy_references_stored = $stored
 $evidence.copy_references_resolved = $resolved
+$evidence.copy_views = $views
 $bad = @()
+if (($stored.Count + $resolved.Count) -eq 0) { $bad += 'SOLIDWORKS lists no reference for the copied drawing' }
 foreach ($r in @($stored + $resolved)) {
   if (-not (Same (Split-Path $r) $Destination)) { $bad += "$r is not in the destination" }
   elseif (-not (Test-Path -LiteralPath $r)) { $bad += "$r does not exist" }
 }
-$views = @()
-try {
-  foreach ($sheet in @($copy.GetViews())) {
-    $arr = @($sheet)
-    for ($k = 1; $k -lt $arr.Count; $k++) {   # [0] is the sheet itself
-      $model = [string]$arr[$k].GetReferencedModelName()
-      $views += [ordered]@{ view = [string]$arr[$k].GetName2(); model = $model }
-      if ($model -and -not (Same (Split-Path $model) $Destination)) { $bad += "view $($arr[$k].GetName2()) shows $model" }
-    }
-  }
-} catch {
-  $evidence.views_note = 'views could not be listed from PowerShell (' + $_.Exception.Message + '); the references above and the harness check P4 cover them'
+foreach ($v in $views) {
+  if ($v.model -and -not (Same (Split-Path $v.model) $Destination)) { $bad += "view $($v.view) shows $($v.model)" }
 }
-$evidence.copy_views = $views
 $loaded = @()
-foreach ($o in $before.Keys) { if ($sw.GetOpenDocumentByName($o) -ne $null) { $loaded += $o } }
+foreach ($o in $before.Keys) { if ([Bizomat.Phase21.PackHelper]::IsLoaded($o)) { $loaded += $o } }
 $evidence.originals_loaded_after = $loaded   # a note only: the copies have other names, so an open original is never picked up
-try { $sw.CloseDoc($copy.GetTitle()) } catch { }   # the harness opens it again; nothing was changed in it
 if ($bad.Count -gt 0) { Stop-With ('The copies do not reference only copies: ' + ($bad -join '; ')) }
 foreach ($v in $views) { Write-Host ("  view    {0}  shows  {1}" -f $v.view, $v.model) }
 foreach ($r in $resolved) { Write-Host "  ref     $r" }

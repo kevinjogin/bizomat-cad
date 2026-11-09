@@ -120,14 +120,22 @@ def test_an_older_addin_stops_the_run(sim, tmp_path):  # noqa: F811
 
 
 def test_the_pack_and_go_script_never_saves_an_original():
-    """windows/make-test-copies.ps1 makes the test copies with SOLIDWORKS' own Pack and Go. It cannot run here (Windows
-    and SOLIDWORKS); these checks keep its safety rules in place."""
-    text = (Path(__file__).resolve().parent.parent / "windows" / "make-test-copies.ps1").read_text(encoding="utf-8")
-    text.encode("ascii")                                                  # PowerShell 5.1 reads it as ANSI
-    assert "OpenDoc6($Source, 3, 3," in text, "the original is opened silent and read-only"
-    assert "GetPackAndGo()" in text and "SavePackAndGo($pg)" in text
-    for forbidden in ("SaveAs", "Save3", ".Save(", "ForceRebuild", "EditRebuild", "CloseAllDocuments"):
-        assert forbidden not in text, forbidden
-    assert "Would overwrite an original" in text.replace("would", "Would") and "A copy already exists" in text
-    assert "ORIGINAL CHANGED" in text and "Get-FileHash -Algorithm SHA256" in text
-    assert "GetDependencies2($true, $false, $false)" in text, "the copy's stored references are checked"
+    """windows/make-test-copies.ps1 with its C# helper (windows/PackAndGoHelper.cs, compiled by PowerShell against the
+    SOLIDWORKS interop) makes the test copies with SOLIDWORKS' own Pack and Go. It cannot run here (Windows and
+    SOLIDWORKS); these checks keep its safety rules in place."""
+    win = Path(__file__).resolve().parent.parent / "windows"
+    ps = (win / "make-test-copies.ps1").read_text(encoding="utf-8")
+    cs = (win / "PackAndGoHelper.cs").read_text(encoding="utf-8")
+    ps.encode("ascii")                                                   # PowerShell 5.1 reads it as ANSI
+    cs.encode("ascii")
+    assert "Add-Type -Path $helper -ReferencedAssemblies $interop" in ps
+    assert "OpenDoc6(path, DocDrawing, OpenSilent | OpenReadOnly," in cs, "the original is opened silent and read-only"
+    assert "GetPackAndGo()" in cs and "SavePackAndGo(pack)" in cs
+    for text in (ps, cs):
+        for forbidden in ("SaveAs", "Save3", ".Save(", "ForceRebuild", "EditRebuild", "CloseAllDocuments", "QuitDoc"):
+            assert forbidden not in text, forbidden
+    assert "Pack and Go would overwrite an original" in ps and "A copy already exists" in ps
+    assert "ORIGINAL CHANGED" in ps and "Get-FileHash -Algorithm SHA256" in ps
+    assert "GetDependencies2(true, false, false)" in cs, "the copy's stored references are checked"
+    code = "\n".join(line.split("//")[0] for line in cs.splitlines())   # without comments
+    assert '$"' not in code and "?." not in code and "out var" not in code, "C# 5 only (the compiler of Windows PowerShell 5.1)"
