@@ -436,11 +436,19 @@ namespace OpenSketch.Sw
                 if (pm == null) throw new UserError($"{comp} is lightweight or suppressed; resolve it in SOLIDWORKS first.");
                 var r = ReadPart(pm, J.Bool(a, "sketches"));
                 r["component"] = c.Name2;
+                if (J.Bool(a, "details")) r["details"] = Details(pm);
                 return r;
             }
-            if (Kind(m) == "assembly") return ReadAssembly(m);
+            if (Kind(m) == "assembly")
+            {
+                var ra = ReadAssembly(m);
+                if (J.Bool(a, "details")) ra["details"] = Details(m);
+                return ra;
+            }
             if (Kind(m) != "part") throw new UserError("Only parts and assemblies can be read.");
-            return ReadPart(m, J.Bool(a, "sketches"));
+            var rp = ReadPart(m, J.Bool(a, "sketches"));
+            if (J.Bool(a, "details")) rp["details"] = Details(m);
+            return rp;
         }
 
         Dictionary<string, object> ReadPart(IModelDoc2 m, bool sketches)
@@ -586,13 +594,14 @@ namespace OpenSketch.Sw
         List<object> Dimensions(IModelDoc2 m)
         {
             var o = new List<object>();
+            var seen = new HashSet<string>();   // a feature and its sketch show the same dimensions: each one once (0.15)
             foreach (var f in Tree(m))
             {
-                AddDims(f, o);
+                AddDims(f, o, seen);
                 var s = f.GetFirstSubFeature() as IFeature;
                 while (s != null)
                 {
-                    AddDims(s, o);
+                    AddDims(s, o, seen);
                     s = s.GetNextSubFeature() as IFeature;
                 }
                 if (o.Count > 300) break;
@@ -600,14 +609,14 @@ namespace OpenSketch.Sw
             return o;
         }
 
-        static void AddDims(IFeature f, List<object> into)
+        static void AddDims(IFeature f, List<object> into, HashSet<string> seen)
         {
             var dd = f.GetFirstDisplayDimension() as IDisplayDimension;
             var guard = 0;
             while (dd != null && guard++ < 500)
             {
                 var d = dd.GetDimension2(0) as IDimension;
-                if (d != null)
+                if (d != null && seen.Add(d.FullName))
                 {
                     var angle = d.GetType() == (int)swDimensionParamType_e.swDimensionParamTypeDoubleAngular;
                     var v = d.GetSystemValue3((int)swInConfigurationOpts_e.swThisConfiguration, null) is double[] vals && vals.Length > 0 ? vals[0] : d.SystemValue;

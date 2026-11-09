@@ -104,10 +104,12 @@ namespace OpenSketch.Sw
             catch (Exception)
             {
             }
-            return J.O("doc", Ref(m), "title", m.GetTitle(),
-                       "sheet", p == null || p.Length < 7 ? null : J.O("name", sheet.GetName(), "width_mm", Math.Round(p[5] * 1000, 1), "height_mm", Math.Round(p[6] * 1000, 1),
-                                                                      "scale", Num(p[2]) + ":" + Num(p[3]), "projection", p[4] != 0 ? "first angle" : "third angle"),
-                       "sheets", drw.GetSheetCount(), "views", Views(drw).Select(v => (object)ViewInfo(v)).ToList(), "properties", props);
+            var o = J.O("doc", Ref(m), "title", m.GetTitle(),
+                        "sheet", p == null || p.Length < 7 ? null : J.O("name", sheet.GetName(), "width_mm", Math.Round(p[5] * 1000, 1), "height_mm", Math.Round(p[6] * 1000, 1),
+                                                                       "scale", Num(p[2]) + ":" + Num(p[3]), "projection", p[4] != 0 ? "first angle" : "third angle"),
+                        "sheets", drw.GetSheetCount(), "views", Views(drw).Select(v => (object)ViewInfo(v)).ToList(), "properties", props);
+            if (J.Bool(a, "annotations")) o["annotations"] = Annotations(drw);   // 0.15
+            return o;
         }
 
         Dictionary<string, object> EditDrawing(Dictionary<string, object> a)
@@ -263,7 +265,10 @@ namespace OpenSketch.Sw
                 }
                 case "bom": return ActBom(m, drw, act);
                 default:
-                    throw new UserError("Unknown action. Actions: view, projected, section, detail, move, scale, display, delete, rename, dimensions, arrange_dimensions, centre_marks, note, properties, sheet, bom.");
+                    var added = ActAnnotation(m, drw, what, act);   // the 0.15 dimensioning and annotation actions
+                    if (added != null) return added;
+                    throw new UserError("Unknown action. Actions: view, projected, section, detail, move, scale, display, delete, rename, dimensions, arrange_dimensions, centre_marks, note, properties, sheet, bom, "
+                                        + "dimension, ordinate, hole_callout, chamfer_dimension, centre_line, centre_mark, move_annotation, tolerance, surface_finish, datum, gtol, weld_symbol, revision_table, hole_table, cut_list.");
             }
         }
 
