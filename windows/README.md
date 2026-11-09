@@ -141,7 +141,8 @@ prints its log in the PowerShell window.
 
 ## 9. Live verification of a branch (developers)
 
-`windows\live_verify.py` runs the Phase 2.1 checks against this PC's own server and SOLIDWORKS, on Pack and Go copies
+`windows\make-test-copies.ps1` makes the test copies with SOLIDWORKS' own Pack and Go (originals opened read-only,
+hashed before and after, never saved). `windows\live_verify.py` runs the Phase 2.1 checks against this PC's own server and SOLIDWORKS, on Pack and Go copies
 of a part and its drawing, and records what SOLIDWORKS answered (screenshots, PDFs, `results.md`). It refuses any
 server that is not on this PC, copies next to the originals, and a copied drawing that still shows the original part,
 and it hashes the originals before and after. The whole procedure, with the backup and rollback of the installed add-in,

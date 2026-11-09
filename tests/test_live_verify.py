@@ -117,3 +117,17 @@ def test_an_older_addin_stops_the_run(sim, tmp_path):  # noqa: F811
     res = anyio.run(lambda: lv.run_all(_client(), tmp_path / "out", part, drawing, [str(tmp_path / "o.SLDPRT")], exists=lambda p: True,
                                        hasher=lambda p: "same"))
     assert "0.15.0" in res["facts"]["stopped"] and len(res["operations"]) == 1
+
+
+def test_the_pack_and_go_script_never_saves_an_original():
+    """windows/make-test-copies.ps1 makes the test copies with SOLIDWORKS' own Pack and Go. It cannot run here (Windows
+    and SOLIDWORKS); these checks keep its safety rules in place."""
+    text = (Path(__file__).resolve().parent.parent / "windows" / "make-test-copies.ps1").read_text(encoding="utf-8")
+    text.encode("ascii")                                                  # PowerShell 5.1 reads it as ANSI
+    assert "OpenDoc6($Source, 3, 3," in text, "the original is opened silent and read-only"
+    assert "GetPackAndGo()" in text and "SavePackAndGo($pg)" in text
+    for forbidden in ("SaveAs", "Save3", ".Save(", "ForceRebuild", "EditRebuild", "CloseAllDocuments"):
+        assert forbidden not in text, forbidden
+    assert "Would overwrite an original" in text.replace("would", "Would") and "A copy already exists" in text
+    assert "ORIGINAL CHANGED" in text and "Get-FileHash -Algorithm SHA256" in text
+    assert "GetDependencies2($true, $false, $false)" in text, "the copy's stored references are checked"
