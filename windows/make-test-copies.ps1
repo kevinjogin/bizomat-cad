@@ -69,10 +69,21 @@ if (Test-Path -LiteralPath $part) { $before[$part] = Hash $part }
 Write-Host "Original drawing: $Source"
 
 # 2. SOLIDWORKS, and the original opened read-only
-try {
-  $sw = [Runtime.InteropServices.Marshal]::GetActiveObject('SldWorks.Application')
-} catch {
-  Stop-With 'SOLIDWORKS is not running (or it runs as administrator while this window does not). Open SOLIDWORKS 2022 and run this again.'
+$proc = @(Get-Process -Name SLDWORKS -ErrorAction SilentlyContinue)
+$evidence.solidworks_processes = @($proc | ForEach-Object { $_.Id })
+if ($proc.Count -eq 0) { Stop-With 'SOLIDWORKS is not running (no SLDWORKS.exe process). Open SOLIDWORKS 2022 and run this again.' }
+$problems = @()
+foreach ($progId in @('SldWorks.Application', 'SldWorks.Application.30')) {   # 30 = SOLIDWORKS 2022
+  try {
+    $sw = [Runtime.InteropServices.Marshal]::GetActiveObject($progId)
+    if ($sw -ne $null) { $evidence.solidworks_progid = $progId; break }
+  } catch {
+    $problems += ($progId + ': ' + $_.Exception.Message)
+  }
+}
+if ($sw -eq $null) {
+  Stop-With ('SOLIDWORKS is running (process ' + ($evidence.solidworks_processes -join ', ') + ') but did not answer: ' + ($problems -join ' | ') +
+             '. Usual causes: SOLIDWORKS runs as administrator while this window does not (start both normally), or it is still starting or showing a dialog.')
 }
 $evidence.solidworks = $sw.RevisionNumber()
 $doc = $sw.GetOpenDocumentByName($Source)
