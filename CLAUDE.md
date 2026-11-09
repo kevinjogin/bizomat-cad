@@ -273,6 +273,14 @@ released; development-signed), never overwritten.
   (`sw_drafting_feedback` submit_for_review, then expert_approve / expert_reject with reviewer_name) are kept apart
   from the 12 synthetic benchmark cases. All compiled and tested against the stand-in only; the live checklist is
   PHASE2_EXECUTION.md section 8, run against a local server (`windows/start.ps1`), with copies of the files.
+- Phase 2.1 (9 Nov 2026; `docs/drafting-intelligence/PHASE2_1_LIVE_VERIFICATION.md`): the live run has not happened
+  yet (the computer was offline). `windows/live_verify.py` runs it on the Windows computer: local server only
+  (production refused), Pack and Go copies only (a copied drawing that shows another part is refused), originals
+  hashed before and after, each operation once with SOLIDWORKS' own answer, screenshots and PDFs; tested against the
+  stand-in only (`tests/test_live_verify.py`). `sw_open_document(reopen=true)` (0.15) closes a saved drawing and opens
+  it again from disk. On a computer with the MSI, the per-user development install is removed by the Companion at
+  each start, and `BIZOMAT-CAD.exe --uninstall` must not be used there (it also removes the add-in's start-up entry
+  and tries to remove the MSI's machine-wide entry): the report's section 13 has the backup and rollback.
 - `sw_selftest.py`: stages plate / shapes / assembly in `Documents\OpenSketch\selftest` (the plate stage ends with its drawing and a PDF of it), each step ok / check /
   failed with the reason; the first thing to run on a new PC. Tests run it against SimSW, a stand-in add-in built
   on the kernel and mate solver.
