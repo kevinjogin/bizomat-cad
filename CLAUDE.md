@@ -104,7 +104,7 @@ released; development-signed), never overwritten.
   `domain.yml`, `fly-status.yml`) are history. Python pins live in requirements.txt (image) and
   requirements-dev.txt (CI), with hashes.
 
-## Current state (v0.8 server, CADOS for SOLIDWORKS 0.12.3)
+## Current state (v0.8 server, BIZOMAT CAD add-in 0.15.0 on this branch; 0.14.0 released)
 
 - KEVOS registered computers (`devicebridge.py`, router included in `server.py`): pairing (`/v2/devices/pair/*`, the
   signed-in page `/devices/pair`), device proofs (`Authorization: KEVOS-Device <JWS>`, ES256 by the computer's
@@ -252,15 +252,32 @@ released; development-signed), never overwritten.
   claimed), layout (moves only), qa (100-point index, release blockers apart, `manufacturing_ready` always false),
   learning (SQLite per account in `<data>/drafting/<account>/`), benchmarks (12 synthetic cases, labelled as such).
   Rules: never choose a tolerance, fit, thread, weld, material or finish (TO BE CONFIRMED and a release blocker
-  instead); never fill CheckedBy / ApprovedBy; corrections are view moves only; the model is never changed; feedback
+  instead); never fill CheckedBy / ApprovedBy; corrections are view moves (from 0.15 also annotation text moves) only;
+  the model is never changed (except a fit the designer allows with apply_fits_to_model); feedback
   stays on the server, examples kept only when the person says so. Tests: `tests/test_drafting_engine.py`,
   `tests/test_drafting_tools.py` (simulated SOLIDWORKS: not a live test). Not yet run against a live SOLIDWORKS: the
   live checklist is in TECHNICAL_SPECIFICATION.md, section 8.
+- Drafting phase 2 (9 Nov 2026, add-in 0.15.0; `docs/drafting-intelligence/PHASE2_EXECUTION.md` in the bizomat
+  repository): `read` with `details` (`solidworks/src/Addin/ModelData.cs`: units, configurations, custom properties,
+  material per configuration with `assigned` and the document density, mass properties read in system units and
+  converted once by `Core/DrawingMath.cs` with the units stated and a consistency flag, Hole Wizard, cosmetic
+  threads, feature parameters, cut list, dimensions with tolerances); `read_drawing` with `annotations`
+  (`Addin/DrawingAnnotations.cs`: every annotation with its box in sheet mm, tables); `edit_drawing` actions
+  dimension, ordinate, hole_callout, chamfer_dimension, centre_line, centre_mark, move_annotation, tolerance,
+  surface_finish, datum, gtol, weld_symbol, revision_table, hole_table, cut_list (`DRAWING_ACTIONS` in sw_tools.py,
+  checked first; `DETAILS_FROM` gates them). Rules: engineering values need `confirmed_by`; a tolerance on a model
+  dimension needs `model_change=true` (it lives in the part); symbols are SOLIDWORKS objects, never text; a material
+  is claimed missing only when the details say `assigned: false`, and never inferred from mass. The drafting tools
+  use them when the add-in is 0.15 or later (hole callouts per group, the designer's fits and surface symbols, a
+  weldment's cut list; never a weld), and report them as deferred otherwise. Expert reviews
+  (`sw_drafting_feedback` submit_for_review, then expert_approve / expert_reject with reviewer_name) are kept apart
+  from the 12 synthetic benchmark cases. All compiled and tested against the stand-in only; the live checklist is
+  PHASE2_EXECUTION.md section 8, run against a local server (`windows/start.ps1`), with copies of the files.
 - `sw_selftest.py`: stages plate / shapes / assembly in `Documents\OpenSketch\selftest` (the plate stage ends with its drawing and a PDF of it), each step ok / check /
   failed with the reason; the first thing to run on a new PC. Tests run it against SimSW, a stand-in add-in built
   on the kernel and mate solver.
 - Add-in (`solidworks/`, .NET Framework 4.8 x64, SOLIDWORKS 2022 interop embedded; version in
-  `Directory.Build.props`, 0.12.3): Core (Json, Geom, SketchPlan, BridgeClient; Bridge2: Crypto (ES256 JWS, JWK),
+  `Directory.Build.props`, 0.15.0 on this branch): Core (Json, Geom, SketchPlan, BridgeClient; Bridge2: Crypto (ES256 JWS, JWK),
   Wire (ids, times, 4-byte-length frames), ReplayGuard, PipeLink (the add-in's pipe client: reader thread for pings and
   cancels, one worker for commands, outbox across reconnects, at-most-once by command id), CloudLink and
   CompanionEngine (the Companion's core: signed long poll, verification, routing to a SOLIDWORKS session, spool,
@@ -269,7 +286,7 @@ released; development-signed), never overwritten.
   Safety confirmation of destructive ops; CompanionPipe: the pipe client that checks its server is the installed
   Companion; ConnectForm; Settings in HKCU\Software\OpenSketch and HKCU\Software\KEVOS\Bridge; Log in
   %LOCALAPPDATA%\OpenSketch\SolidWorks; Commands, Files, Pick, Sketches, Features, Edits with Journal rollback,
-  Assembly), App `BIZOMAT-CAD.exe` (Install for me = per-user COM registration + the launcher macro
+  Assembly, ModelData, DrawingAnnotations), App `BIZOMAT-CAD.exe` (Install for me = per-user COM registration + the launcher macro
   `Documents\BIZOMAT CAD\BIZOMAT CAD.swb`; Remove; "Connect to the open SOLIDWORKS" from outside, direct link only).
   The COM ids are unchanged (existing registrations and the macro keep working); the add-in's title is CADOS.
 - KEVOS Companion (`solidworks/src/Companion`, `KEVOS.Companion.exe`, net48, compiles Core, no SOLIDWORKS reference):

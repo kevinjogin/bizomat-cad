@@ -1,5 +1,18 @@
 # BIZOMAT CAD Automation for SOLIDWORKS release notes (CADOS for SOLIDWORKS in 0.12, KEVOS Bridge up to 0.11)
 
+## 0.15.0 (BIZOMAT CAD for SOLIDWORKS; built, not yet released or run in SOLIDWORKS)
+
+- Reads the model's details when asked: units, configurations, custom properties, the material per configuration
+  (and whether one is assigned), the mass properties with their units and any override, Hole Wizard holes, cosmetic
+  threads, feature parameters, the weldment cut list, each dimension once with its tolerance.
+- Reads a drawing's annotations when asked: every dimension, note and symbol with its position and size on the
+  sheet, and the tables.
+- New drawing actions: dimensions between picked edges, ordinate dimensions, hole callouts, chamfer dimensions, centre
+  lines and marks, moving an annotation, tolerances and fits, surface texture, datum, GD&T and weld symbols (native
+  SOLIDWORKS symbols), revision, hole and cut-list tables. Engineering values only as the designer gave them; a
+  tolerance on a model dimension is refused unless the change to the part is confirmed.
+- Takes the same commands as 0.14 from a server that does not use these.
+
 ## 0.14.0 (BIZOMAT CAD for SOLIDWORKS)
 
 - New name: **BIZOMAT CAD** in Tools > Add-Ins, the toolbar, the task pane, the status window, the installer, the Start
