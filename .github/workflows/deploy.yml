@@ -1,7 +1,13 @@
 # Deploy BIZOMAT CAD (the CAD MCP server in opensketch/: MCP, OAuth, the device bridge, installer and update
-# endpoints) to its Fly.io app `cados` (Amsterdam, ams). Run by hand only:
-#   Actions > Deploy to Fly.io (cados) > Run workflow on main, confirm = DEPLOY.
-# No push, merge, tag or schedule starts it, so nothing reaches production by accident.
+# endpoints) to its Fly.io app `cados` (Amsterdam, ams).
+#
+# When it runs (owner's choice, 9 Nov 2026: automatic deploys on merge):
+# - automatically on every push to main (a merged pull request) that changes something the server is built from.
+#   Pushes that only change docs/, root *.md files or backups/ do not deploy. The tests always run first, and the
+#   preflight cannot be overridden on this path. A commit whose message contains [skip ci] is not deployed.
+# - by hand: Actions > Deploy to Fly.io (cados) > Run workflow on main, confirm = DEPLOY (to redeploy, to deploy a
+#   docs-only change, or with skip_tests / allow_machine_change for an exceptional deploy).
+# No other branch, tag or schedule deploys.
 #
 # It only ever targets the app `cados` (fixed below, not a variable). It never touches the app `bizomat`, DNS or
 # Cloudflare.
@@ -12,9 +18,9 @@
 # - GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET (optional), OPENSKETCH_ACCESS_CODE (optional): passed to Fly as the app's
 #   secrets when set. There is no server password.
 #
-# Steps: the tests (tests.yml) unless skip_tests; the preflight (.github/scripts/fly-preflight.py) compares fly.toml
+# Steps: the tests (tests.yml; skip_tests applies to a deploy by hand only); the preflight (.github/scripts/fly-preflight.py) compares fly.toml
 # with the live Machines and stops when the deploy would add or remove a Machine or change its size, memory or region
-# (allow_machine_change = YES lets a deliberate change through); then the deploy (--ha=false: the one Machine is
+# (allow_machine_change = YES, by hand only, lets a deliberate change through); then the deploy (--ha=false: the one Machine is
 # replaced in place, CAD MCP is offline for about 15-90 s) and a check that https://cados.fly.dev/healthz reports the
 # new version within 3 minutes.
 #
@@ -26,6 +32,12 @@
 name: Deploy to Fly.io (cados)
 
 on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "*.md"
+      - "backups/**"
   workflow_dispatch:
     inputs:
       confirm:
@@ -47,20 +59,23 @@ permissions:
 env:
   APP: cados
 
+# One deploy at a time. A deploy that is running always finishes; when several merges wait, only the newest runs.
 concurrency:
   group: deploy-cados
   cancel-in-progress: false
 
 jobs:
   test:
-    if: inputs.confirm == 'DEPLOY' && !inputs.skip_tests
+    if: github.event_name == 'push' || (inputs.confirm == 'DEPLOY' && !inputs.skip_tests)
     uses: ./.github/workflows/tests.yml
 
   deploy:
     needs: test
     if: >-
-      !cancelled() && inputs.confirm == 'DEPLOY' && github.ref == 'refs/heads/main' &&
-      (needs.test.result == 'success' || (needs.test.result == 'skipped' && inputs.skip_tests))
+      !cancelled() && github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || inputs.confirm == 'DEPLOY') &&
+      (needs.test.result == 'success' ||
+       (needs.test.result == 'skipped' && github.event_name == 'workflow_dispatch' && inputs.skip_tests))
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -86,7 +101,8 @@ jobs:
       - name: Preflight (the deploy keeps the live Machines as they are)
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_CADOS_TOKEN }}
-          ALLOW_MACHINE_CHANGE: ${{ inputs.allow_machine_change }}
+          # only a deploy by hand can allow a change to the Machines; an automatic deploy never does
+          ALLOW_MACHINE_CHANGE: ${{ github.event_name == 'workflow_dispatch' && inputs.allow_machine_change || '' }}
         run: python3 .github/scripts/fly-preflight.py --app "$APP" --config fly.toml
 
       - name: Pass optional secrets to Fly
