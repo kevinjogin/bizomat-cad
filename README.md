@@ -3,7 +3,7 @@
 BIZOMAT CAD Automation: the SOLIDWORKS MCP server, the CAD automation engine, the BIZOMAT CAD add-in for SOLIDWORKS,
 the Companion and the Windows installer. AI apps (Claude, ChatGPT and other MCP clients) call its `sw_` tools; the
 server checks each sketch and feature with its own CAD kernel and sends the work to SOLIDWORKS on the person's own
-computer, where the add-in builds native SOLIDWORKS features. It runs on the Fly.io app **`cados`** in Sydney.
+computer, where the add-in builds native SOLIDWORKS features. It runs on the Fly.io app **`cados`** in Amsterdam (`ams`).
 
 Formerly CADOS by KEVOS; the code keeps OpenSketch as its internal name (the `opensketch` package, `OPENSKETCH_*`
 settings, the add-in's COM ids and file names). The BIZOMAT website and Project Management are in a separate
@@ -11,7 +11,7 @@ repository, [`kevinjogin/bizomat-site`](https://github.com/kevinjogin/bizomat-si
 two work together: [docs/SITE-CAD-INTEGRATION.md](docs/SITE-CAD-INTEGRATION.md).
 
 - Repository: `kevinjogin/bizomat-cad` (private). Default branch `main`.
-- Production: Fly app `cados`, region `syd`, one Machine, deployed by hand from `main` with `fly.toml`.
+- Production: Fly app `cados`, region `ams` (Amsterdam), one Machine, deployed by hand from `main` with `fly.toml`.
 - Public address: <https://bizomat.ai/cad> (through the `bizomat` router). Origin: <https://cados.fly.dev> (every CAD
   path; connectors and paired computers use it). Old hosts kept for programs: `cados.kevos.com`, `cad.bizomat.ai`.
 - Versions on `main` (9 Nov 2026): server 0.8.0 (`pyproject.toml`), add-in and installer 0.13.0
@@ -59,7 +59,7 @@ two work together: [docs/SITE-CAD-INTEGRATION.md](docs/SITE-CAD-INTEGRATION.md).
 ```
 AI app (Claude, ChatGPT, ...) --MCP over https--> /mcp  (bizomat.ai/cad, cados.fly.dev)
                                                     |
-  Fly app cados (syd), one Machine ---------------------------------------------------------------
+  Fly app cados (ams), one Machine ---------------------------------------------------------------
   |  python -m opensketch --supervise   :8080 (listens on ::, public through Fly and private as cados.internal)
   |    MCP tools -> feature checks (kernel, solver) -> command queue (swbridge / devicebridge)
   |    volume opensketch_data at /data: accounts, OAuth grants, keys, bridge.sqlite, uploads
@@ -78,11 +78,14 @@ AI app (Claude, ChatGPT, ...) --MCP over https--> /mcp  (bizomat.ai/cad, cados.f
   changed.
 - **Contracts:** the feature format (`docs/DOCUMENT.md`) between the AI, the kernel and the add-in; the bridge
   protocol (`docs/BRIDGE-PROTOCOL.md`) between the server, the Companion and the add-in. Change the document first.
-- **`fly.toml`:** app `cados`, `primary_region = 'syd'`, `[[vm]] size = 'performance-1x'`, `memory = '2gb'`, volume
-  `opensketch_data` at `/data`, `auto_stop_machines = 'suspend'`, `min_machines_running = 0`.
-- **Owner's record of production (9 Nov 2026): 1 Machine in Sydney, 1 GB.** That differs from `fly.toml` (2 GB): the
-  next deploy would resize the Machine to 2 GB, so the deploy workflow's preflight stops it until the two agree
-  (section 9). The live values were not read from Fly during the move.
+- **Production, read from Fly on 9 Nov 2026 (`fly scale show`, `fly volumes list`):** one Machine in **Amsterdam
+  (`ams`)**, shared CPU, 2 vCPUs, 2048 MB, and the volume `opensketch_data` (1 GB) in `ams`. `fly.toml` matches it:
+  `primary_region = 'ams'`, `[[vm]] size = 'shared-cpu-2x'`, `memory = '2gb'`, the volume at `/data`,
+  `auto_stop_machines = 'suspend'`, `min_machines_running = 0`. (Until 9 Nov 2026 the file said `syd` and
+  performance-1x; the app was never in Sydney.)
+- **The app is far from Sydney.** The `bizomat` router (in `syd`) reaches it in Amsterdam, which adds roughly a quarter
+  of a second to each `bizomat.ai/cad` request. Moving it to `syd` means a new volume made from a snapshot: a planned
+  production change of its own, never part of a deploy ([docs/SITE-CAD-INTEGRATION.md](docs/SITE-CAD-INTEGRATION.md)).
 - **Not deployed:** `cloudflare/mcp` (a Cloudflare Worker and Container to host CAD on Cloudflare; rehearsed locally on
   7 Nov 2026, never deployed) and `windows/` (running the server on one Windows PC).
 
@@ -242,10 +245,10 @@ automatically from this repository: no push, merge or schedule.
    place; CAD MCP is offline for about 15-90 s; add-ins and Companions reconnect by themselves);
 5. checks that `https://cados.fly.dev/healthz` reports the new version within 3 minutes.
 
-**Decision needed before the first deploy:** `fly.toml` asks for performance-1x with 2 GB, and the owner's record is a
-1 GB Machine. If the live Machine is 1 GB, the preflight stops the deploy. Either change `[[vm]]` in `fly.toml` to the
-live size in a pull request, or deploy with `allow_machine_change` = `YES` to move to 2 GB on purpose. (Each CAD
-worker process uses about 400 MB; at 1 GB set `OPENSKETCH_CAD_WORKERS = "0"`.)
+**`fly.toml` matches production** (9 Nov 2026): the preflight passes for it, so a deploy ships new code onto the same
+Machine in `ams`. A change to the Machine (size, memory or region) is a decision of its own: change `fly.toml` in a
+pull request, then deploy with `allow_machine_change` = `YES`. (Each CAD worker process uses about 400 MB; with less
+than 2 GB set `OPENSKETCH_CAD_WORKERS = "0"`.)
 
 `fly-status.yml` (by hand) prints the Machines, volumes, secret names, releases, logs and `/healthz` and changes
 nothing. `domain.yml` (by hand) gives the app an extra host on a Cloudflare domain. Neither touches `bizomat`.

@@ -289,21 +289,23 @@ released; development-signed), never overwritten.
   `tests/test_canonical.py`, the official MCP client and a paired computer under /cad.
   Favicons (`static/favicon.svg|ico`, `ui/icon-32.png`, `ui/icon-180.png`) are the KEVOS K (drawn from the KEVOS logo;
   kevos.com could not be fetched from the build session). Origin https://cados.fly.dev (Fly
-  app `cados`, Sydney, first made with Fly Launch from GitHub on 4 Nov 2026); the deploy health checks use it.
+  app `cados`, in ams (Amsterdam), first made with Fly Launch from GitHub on 4 Nov 2026); the deploy health checks use it.
   Deploys (since 9 Nov 2026): by hand only, `deploy.yml` (Actions > Deploy to Fly.io (cados), `confirm` = `DEPLOY`,
   repository secret FLY_CADOS_TOKEN, a deploy token for cados only): the tests, then the preflight
   (`.github/scripts/fly-preflight.py`, which stops a deploy that would add, remove or resize the Machine), then
   `flyctl deploy --app cados`. It never creates an app or volume. Until the owner unlinks it in Fly, the app is still
   linked to jogkev-creator/CADOS (Fly built every push to that repository's main); nothing is pushed there any more.
-  The owner's record of production is one Machine of 1 GB while fly.toml asks for performance-1x, 2 GB: the preflight
-  stops a deploy until they agree (README.md, section 9). Never add a Machine or memory without the owner's approval.
+  Production, read from Fly on 9 Nov 2026: one Machine in ams (Amsterdam, not Sydney), shared CPU, 2 vCPUs, 2048 MB,
+  and the 1 GB volume opensketch_data in ams; fly.toml matches it. Never add a Machine, change its size or memory, or
+  move its region without the owner's approval (a move to syd means moving the volume: a planned change of its own).
   `fly-status.yml` (run by hand, changes nothing) prints the app's machines, volumes, secret
   names, releases, logs and /healthz: both need the repository secret FLY_CADOS_TOKEN (a deploy token for cados).
   How this app and the BIZOMAT website (kevinjogin/bizomat-site, Fly app `bizomat`) work together:
   `docs/SITE-CAD-INTEGRATION.md`.
   No password secret is needed on Fly (fly.toml sets OPENSKETCH_PUBLIC_URL, so a fresh server waits in setup mode);
   an old OPENSKETCH_PASSWORD secret can be unset. The Windows PC server (`windows/`) is the other way to run it.
-- fly.toml: app `cados`, performance-1x (one dedicated core, 2 GB), `auto_stop_machines = "suspend"`, kill_timeout 15, volume
+- fly.toml: app `cados`, `primary_region = 'ams'`, shared-cpu-2x with 2 GB (the live Machine; it said syd and performance-1x
+  until 9 Nov 2026), `auto_stop_machines = "suspend"`, kill_timeout 15, volume
   `opensketch_data` at /data. The add-in's long poll keeps the machine awake while SOLIDWORKS is linked.
 - `supervisor.py` (`python -m opensketch --supervise`, the image's CMD): asks /healthz every 5 s, restarts the server
   after 120 s without an answer (stacks to the log first), tells a suspended machine from a hang. With
