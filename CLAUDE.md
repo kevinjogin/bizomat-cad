@@ -61,11 +61,11 @@ released; development-signed), never overwritten.
   and raw files answer 404 to everyone else. Downloads are published on bizomat.ai (`/downloads/cad/`, R2).
 - CI: `.github/workflows/tests.yml` (pytest in two jobs: main and `-m slow`; npm test; the Cloudflare Worker's
   `npm run check` in `cloudflare/mcp` on Node 22) on pull requests and
-  non-main pushes; `deploy.yml` deploys main to Fly after the same tests, skipping pushes that only touch notes,
-  docs or tests, and fails if the live /healthz does not show the new version within 3 minutes; `solidworks.yml`
+  non-main pushes; `deploy.yml` deploys main to Fly by hand only (`confirm` = `DEPLOY`) after the same tests and a
+  preflight of the Machine, and fails if the live /healthz does not show the new version within 3 minutes; `solidworks.yml`
   builds and tests the add-in and keeps the zip as an artifact. `domain.yml` (run by hand, `.github/scripts/kevos-domain.sh`) gives the Fly app
   its own address on a Cloudflare domain: DNS record, Fly certificate and validation record, OPENSKETCH_PUBLIC_URL
-  (secrets CLOUDFLARE_API_TOKEN, FLY_API_TOKEN). Python pins live in requirements.txt (image) and
+  (secrets CLOUDFLARE_API_TOKEN, FLY_CADOS_TOKEN; app fixed to cados). Python pins live in requirements.txt (image) and
   requirements-dev.txt (CI), with hashes.
 
 ## Current state (v0.8 server, CADOS for SOLIDWORKS 0.12.3)
@@ -256,12 +256,14 @@ released; development-signed), never overwritten.
 
 ## Hosting
 
-- Code: https://github.com/jogkev-creator/CADOS (moved from jogkev-creator/opensketchyz in Nov 2026; release
+- Code: https://github.com/kevinjogin/bizomat-cad (since 9 Nov 2026; before that jogkev-creator/CADOS, and before that
+  jogkev-creator/opensketchyz, with the same commits: those are archives, never push there; release
   downloads are on bizomat.ai now, as the repository is private since 7 Nov 2026: see the Rules). The laptop works from
   its own signed-in clones (`bizomat.ps1 setup`, then `git pull`); raw GitHub links do not work for a private
   repository. GitHub Actions minutes for private repositories are limited: when they run out, every job fails at once
   with no log (seen 7 Nov 2026), and `cloudflare.ps1` runs the repository's own checks before each deploy. The Fly app
-  below was linked to the old repository: relink it in Fly (or deploy by hand) after the move.
+  below is still linked in Fly to jogkev-creator/CADOS: the owner unlinks it there (no repository is linked again;
+  deploys go through `deploy.yml` and its preflight).
 - Listens on `::` (`--host ::`, `__main__.listen_sockets`: one dual-stack socket, IPv4 alone where there is no IPv6), so
   the BIZOMAT router (Fly app `bizomat`) reaches it over Fly's private network at cados.internal:8080.
 - Public address https://bizomat.ai/cad: CAD Automation lives under the BIZOMAT website's own address (the owner's
@@ -288,11 +290,17 @@ released; development-signed), never overwritten.
   Favicons (`static/favicon.svg|ico`, `ui/icon-32.png`, `ui/icon-180.png`) are the KEVOS K (drawn from the KEVOS logo;
   kevos.com could not be fetched from the build session). Origin https://cados.fly.dev (Fly
   app `cados`, Sydney, first made with Fly Launch from GitHub on 4 Nov 2026); the deploy health checks use it.
-  One deploy source: the app is linked to this repository in Fly (Fly builds and deploys every push to main itself;
-  /healthz then reports version "dev", as no commit is passed in). On a push `deploy.yml` only runs the tests (unless
-  the repository variable DEPLOY_ON_PUSH is "true"); run by hand it deploys from Actions and makes a missing volume.
+  Deploys (since 9 Nov 2026): by hand only, `deploy.yml` (Actions > Deploy to Fly.io (cados), `confirm` = `DEPLOY`,
+  repository secret FLY_CADOS_TOKEN, a deploy token for cados only): the tests, then the preflight
+  (`.github/scripts/fly-preflight.py`, which stops a deploy that would add, remove or resize the Machine), then
+  `flyctl deploy --app cados`. It never creates an app or volume. Until the owner unlinks it in Fly, the app is still
+  linked to jogkev-creator/CADOS (Fly built every push to that repository's main); nothing is pushed there any more.
+  The owner's record of production is one Machine of 1 GB while fly.toml asks for performance-1x, 2 GB: the preflight
+  stops a deploy until they agree (README.md, section 9). Never add a Machine or memory without the owner's approval.
   `fly-status.yml` (run by hand, changes nothing) prints the app's machines, volumes, secret
-  names, releases, logs and /healthz: both need the repository secret FLY_API_TOKEN (a deploy token for cados).
+  names, releases, logs and /healthz: both need the repository secret FLY_CADOS_TOKEN (a deploy token for cados).
+  How this app and the BIZOMAT website (kevinjogin/bizomat-site, Fly app `bizomat`) work together:
+  `docs/SITE-CAD-INTEGRATION.md`.
   No password secret is needed on Fly (fly.toml sets OPENSKETCH_PUBLIC_URL, so a fresh server waits in setup mode);
   an old OPENSKETCH_PASSWORD secret can be unset. The Windows PC server (`windows/`) is the other way to run it.
 - fly.toml: app `cados`, performance-1x (one dedicated core, 2 GB), `auto_stop_machines = "suspend"`, kill_timeout 15, volume
