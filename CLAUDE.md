@@ -281,6 +281,9 @@ released; development-signed), never overwritten.
   it again from disk. On a computer with the MSI, the per-user development install is removed by the Companion at
   each start, and `BIZOMAT-CAD.exe --uninstall` must not be used there (it also removes the add-in's start-up entry
   and tries to remove the MSI's machine-wide entry): the report's section 13 has the backup and rollback.
+  Connect in the task pane and the toolbar both call `Host.ConnectNow` (`Core/ConnectPlan.cs`; the pane's button once
+  only restarted the direct link): a Companion link that is not connected is restarted, a connected one never cut.
+  Ships with 0.15 after the live verification (owner, 9 Nov 2026).
 - `sw_selftest.py`: stages plate / shapes / assembly in `Documents\OpenSketch\selftest` (the plate stage ends with its drawing and a PDF of it), each step ok / check /
   failed with the reason; the first thing to run on a new PC. Tests run it against SimSW, a stand-in add-in built
   on the kernel and mate solver.
