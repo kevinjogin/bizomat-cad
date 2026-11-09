@@ -61,8 +61,9 @@ released; development-signed), never overwritten.
   and raw files answer 404 to everyone else. Downloads are published on bizomat.ai (`/downloads/cad/`, R2).
 - CI: `.github/workflows/tests.yml` (pytest in two jobs: main and `-m slow`; npm test; the Cloudflare Worker's
   `npm run check` in `cloudflare/mcp` on Node 22) on pull requests and
-  non-main pushes; `deploy.yml` deploys main to Fly by hand only (`confirm` = `DEPLOY`) after the same tests and a
-  preflight of the Machine, and fails if the live /healthz does not show the new version within 3 minutes; `solidworks.yml`
+  non-main pushes; `deploy.yml` deploys main to Fly automatically on every push to main that changes more than docs/,
+  root *.md or backups/ (owner, 9 Nov 2026), and by hand (`confirm` = `DEPLOY`), after the same tests and a preflight
+  of the Machine, and fails if the live /healthz does not show the new version within 3 minutes; `solidworks.yml`
   builds and tests the add-in and keeps the zip as an artifact. `domain.yml` (run by hand, `.github/scripts/kevos-domain.sh`) gives the Fly app
   its own address on a Cloudflare domain: DNS record, Fly certificate and validation record, OPENSKETCH_PUBLIC_URL
   (secrets CLOUDFLARE_API_TOKEN, FLY_CADOS_TOKEN; app fixed to cados). Python pins live in requirements.txt (image) and
@@ -290,8 +291,10 @@ released; development-signed), never overwritten.
   Favicons (`static/favicon.svg|ico`, `ui/icon-32.png`, `ui/icon-180.png`) are the KEVOS K (drawn from the KEVOS logo;
   kevos.com could not be fetched from the build session). Origin https://cados.fly.dev (Fly
   app `cados`, in ams (Amsterdam), first made with Fly Launch from GitHub on 4 Nov 2026); the deploy health checks use it.
-  Deploys (since 9 Nov 2026): by hand only, `deploy.yml` (Actions > Deploy to Fly.io (cados), `confirm` = `DEPLOY`,
-  repository secret FLY_CADOS_TOKEN, a deploy token for cados only): the tests, then the preflight
+  Deploys (since 9 Nov 2026): `deploy.yml`, automatically on every merge to main that changes deployable files (the
+  owner's choice), and by hand (Actions > Deploy to Fly.io (cados), `confirm` = `DEPLOY`); repository secret
+  FLY_CADOS_TOKEN, a deploy token for cados only. Every merge to main therefore goes to production: keep main
+  releasable, and use [skip ci] in a merge commit's message to merge without deploying. Steps: the tests, then the preflight
   (`.github/scripts/fly-preflight.py`, which stops a deploy that would add, remove or resize the Machine), then
   `flyctl deploy --app cados`. It never creates an app or volume. No repository is attached to the app in Fly (checked
   9 Nov 2026; it used to build every push to jogkev-creator/CADOS main), so this workflow is the one deploy source.
