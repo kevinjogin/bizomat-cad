@@ -319,6 +319,11 @@ def _material_and_mass(kind, read, numbers, details, tb_material, body, vol, mas
             problems.append({"kind": "mass", "severity": "major",
                              "why": f"SOLIDWORKS' mass and density disagree (density {dens} g/cm3, mass/volume {implied} kg/m3): check "
                                     "Evaluate > Mass Properties for an override."})
+        doc_dens = ((details.get("material") or {}).get("document_density") or {}).get("value")   # kg/m3
+        if mat is not None and not mat.get("assigned") and doc_dens and dens and abs(doc_dens / 1000.0 - dens) <= 1e-6 * max(1.0, dens):
+            problems.append({"kind": "mass", "severity": "info",
+                             "why": f"No material is assigned, so SOLIDWORKS computes the mass with the document density of {doc_dens:g} "
+                                    "kg/m3 (Document Properties > Material Properties). The mass is not the part's real mass."})
         if expect and dens and not (0.6 * expect <= dens <= 1.5 * expect):
             problems.append({"kind": "mass", "severity": "major",
                              "why": f"SOLIDWORKS uses a density of {dens} g/cm3 for this part; {stated} is about {expect} g/cm3. The "

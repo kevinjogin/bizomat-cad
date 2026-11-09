@@ -267,9 +267,11 @@ def test_material_is_claimed_missing_only_when_solidworks_says_so():
 def test_the_mass_chain_explains_a_mass_that_does_not_fit_the_material():
     # density and volume agree with the mass, but the density is far from steel: the document density is wrong
     read = _plate_read() | {"details": _details(material="", density=0.001)}
+    read["details"]["material"]["document_density"] = {"value": 1.0, "unit": "kg/m^3"}
     m = understanding.build("part", "P", read, {}, _pcd_rec(), {"Material": "S355 steel"})
     why = " ".join(p["why"] for p in m["problems"] if p["kind"] == "mass")
     assert "density of 0.001 g/cm3" in why
+    assert "document density of 1 kg/m3" in why, "the cause is named: no material, so the document density is used"
     # a mass override: reported as such, and the mass is not trusted as computed
     read = _plate_read() | {"details": _details(material="AISI 1020", mass_kg=0.00032, override=True)}
     m = understanding.build("part", "P", read, {}, _pcd_rec())
