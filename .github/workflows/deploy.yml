@@ -1,5 +1,5 @@
 # Deploy BIZOMAT CAD (the CAD MCP server in opensketch/: MCP, OAuth, the device bridge, installer and update
-# endpoints) to its Fly.io app `cados` (Sydney). Run by hand only:
+# endpoints) to its Fly.io app `cados` (Amsterdam, ams). Run by hand only:
 #   Actions > Deploy to Fly.io (cados) > Run workflow on main, confirm = DEPLOY.
 # No push, merge, tag or schedule starts it, so nothing reaches production by accident.
 #
