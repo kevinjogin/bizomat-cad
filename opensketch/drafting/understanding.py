@@ -188,32 +188,12 @@ def build(kind: str, title: str | None, read: dict | None, numbers: dict | None,
     if kind == "part":
         _holes_named(rec, read, dims)
     body = numbers.get("body") or read.get("body") or {}
-    material = numbers.get("material") or (read.get("material") if isinstance(read.get("material"), str) else None)
+    details = read.get("details") or numbers.get("details") or {}
     tb_material = (drawing_props or {}).get("Material")
-    if material:
-        confirmed.append({"what": "material", "value": material, "source": "SOLIDWORKS material of the part"})
-    elif tb_material:
-        confirmed.append({"what": "material", "value": tb_material, "source": "drawing title block (not assigned in the part)"})
-        problems.append({"kind": "material", "severity": "major",
-                         "why": f"The title block says {tb_material}, but no material is assigned in the part: mass properties "
-                                "and the bill of materials do not know it. Assign it in SOLIDWORKS (Edit Material)."})
-    else:
-        unknown.append({"what": "material", "question": "What is the material (and its standard or grade)?",
-                        "blocking": True, "why": "a manufacturing drawing must state the material"})
     vol = body.get("volume_mm3") or rec.get("volume")
     mass_g = body.get("mass_g")
-    if vol and mass_g is not None and vol > 0:
-        dens = mass_g / (vol / 1000.0)
-        cls = _material_class(material or tb_material)
-        expect = DENSITY_G_CM3.get(cls) if cls else None
-        row = {"what": "density from mass and volume", "value": round(dens, 4), "unit": "g/cm3",
-               "source": "SOLIDWORKS mass properties", "basis": f"{mass_g:g} g / {vol / 1000:.1f} cm3"}
-        if expect and not (0.6 * expect <= dens <= 1.5 * expect):
-            problems.append({"kind": "mass", "severity": "major",
-                             "why": f"SOLIDWORKS gives {mass_g:g} g for {vol / 1000:.1f} cm3 ({dens:.4g} g/cm3), but {material or tb_material} "
-                                    f"is about {expect} g/cm3: the material is not assigned in the part, or the mass is reported "
-                                    "in the wrong unit. Check Evaluate > Mass Properties."})
-        inferred.append(dict(row, confidence="high"))
+    material, material_read = _material_and_mass(kind, read, numbers, details, tb_material, body, vol, mass_g,
+                                                 confirmed, inferred, unknown, problems)
     size = (rec.get("bbox") or {}).get("size") or body.get("bbox", {}).get("size")
     if size:
         confirmed.append({"what": "overall size", "value": size, "unit": "mm", "source": "geometry (bounding box)"})
@@ -235,7 +215,9 @@ def build(kind: str, title: str | None, read: dict | None, numbers: dict | None,
     for row in grouped.values():
         row["what"] = f"hole(s) {', '.join(row['features'])} " + row["what"]
         inferred.append(row)
-    threads_unconfirmed = [h["id"] for b in rec.get("bodies", []) for h in b.get("holes", []) if h.get("possible_thread")]
+    defined = _thread_definitions(details, rec, confirmed)
+    threads_unconfirmed = [h["id"] for b in rec.get("bodies", []) for h in b.get("holes", []) if h.get("possible_thread")
+                           and h["id"] not in defined]
     if threads_unconfirmed and not cats.get("thread"):
         why = "the geometry holds plain holes at tapping-drill size; a workshop cannot guess a thread"
         if cats.get("hole_wizard"):
@@ -250,14 +232,26 @@ def build(kind: str, title: str | None, read: dict | None, numbers: dict | None,
     unknown.append({"what": "general tolerance", "blocking": True,
                     "question": "Which general tolerance applies to dimensions without their own tolerance?",
                     "why": "every manufacturing drawing needs one; it is not stored in the model"})
-    configs = "not reported by the add-in"
+    units = details.get("units") or {}
+    if units and units.get("length") not in (None, "mm"):
+        problems.append({"kind": "units", "severity": "major",
+                         "why": f"The document's length unit is {units.get('length')}: the drawing's dimensions show in it. Confirm that is intended."})
+    tolerances = {d["name"]: d["tolerance"] for d in details.get("dimensions") or [] if d.get("tolerance")}
+    if tolerances:
+        confirmed.append({"what": "dimension tolerances in the model", "value": len(tolerances), "source": "SOLIDWORKS dimensions",
+                          "dimensions": tolerances})
     out = {
         "kind": kind, "title": title, "units": "mm",
         "overall": {"size": size, "volume_mm3": vol, "mass_g": mass_g, "material": material or tb_material,
+                    "material_read_from_part": material_read,
                     "body_count": rec.get("body_count", 1) if kind == "part" else None},
         "design": {"features": feats, "feature_categories": dict(cats), "sketches": {"total": len(sketches), **dict(sk_states)},
                    "dimensions": dims, "dimension_count": len(dims), "equations": read.get("equations") or [],
-                   "configurations": configs, "custom_properties": "not reported by the add-in for parts"},
+                   "configurations": details.get("configurations", "not read (add-in 0.15 reads them with details=true)"),
+                   "custom_properties": details.get("custom_properties", "not read (add-in 0.15 reads them with details=true)"),
+                   "units": units or "not read", "tolerances": tolerances, "hole_wizard": details.get("holes") or [],
+                   "cosmetic_threads": details.get("threads") or [], "cut_list": details.get("cut_list") or [],
+                   "details_read": bool(details)},
         "recognised": rec,
         "confirmed": confirmed, "inferred": inferred, "unknown": unknown, "problems": problems,
     }
@@ -267,4 +261,103 @@ def build(kind: str, title: str | None, read: dict | None, numbers: dict | None,
         out["assembly"] = {"components": len(comps), "fasteners": fasteners,
                            "unique_parts": len(rec.get("parts") or {}),
                            "mates": (read.get("mates") if isinstance(read.get("mates"), list) else None)}
+    return out
+
+
+def _material_and_mass(kind, read, numbers, details, tb_material, body, vol, mass_g, confirmed, inferred, unknown, problems):
+    """Material and mass from what SOLIDWORKS reported, and only that. Returns (material, read_from_part).
+
+    With details (add-in 0.15): the material per configuration with an explicit `assigned`, and the mass chain in
+    stated units (mass, volume, density, overrides). Without them (older add-ins), an empty material is simply
+    left out of the read, so a missing material is NOT evidence that none is assigned, and nothing is claimed."""
+    if kind != "part":
+        return None, False
+    mat = (details.get("material") or {}).get("active") if details else None
+    material = None
+    read_from_part = False
+    if mat is not None:
+        read_from_part = True
+        if mat.get("assigned"):
+            material = mat.get("name")
+            confirmed.append({"what": "material", "value": material, "source": "SOLIDWORKS part material (read with details)",
+                              "database": mat.get("database")})
+        elif tb_material:
+            confirmed.append({"what": "material", "value": tb_material, "source": "drawing title block"})
+            problems.append({"kind": "material", "severity": "major",
+                             "why": f"SOLIDWORKS reports no material assigned in the part, while the title block says {tb_material}: "
+                                    "mass properties and the bill of materials do not know it (Edit Material in SOLIDWORKS)."})
+        else:
+            unknown.append({"what": "material", "question": "What is the material (and its standard or grade)?", "blocking": True,
+                            "why": "SOLIDWORKS reports no material assigned, and a manufacturing drawing must state it"})
+    else:
+        material = numbers.get("material") or (read.get("material") if isinstance(read.get("material"), str) else None)
+        if material:
+            read_from_part = True
+            confirmed.append({"what": "material", "value": material, "source": "SOLIDWORKS part material"})
+        elif tb_material:
+            confirmed.append({"what": "material", "value": tb_material, "source": "drawing title block"})
+            problems.append({"kind": "material_unverified", "severity": "info",
+                             "why": "The part's own material was not read: add-ins before 0.15 leave an empty material out of the read, so "
+                                    "whether one is assigned is not known. Read with details (add-in 0.15) to check."})
+        else:
+            unknown.append({"what": "material", "question": "What is the material (and its standard or grade)?", "blocking": True,
+                            "why": "no material was read from the part or the title block"})
+    stated = material or tb_material
+    cls = _material_class(stated)
+    expect = DENSITY_G_CM3.get(cls) if cls else None
+    mp = details.get("mass_properties") if details else None
+    if mp and not mp.get("error"):
+        dens = (mp.get("density") or {}).get("value")              # g/cm3, as SOLIDWORKS uses it
+        implied = (mp.get("density_from_mass_and_volume") or {}).get("value")   # kg/m3
+        inferred.append({"what": "mass properties", "source": "SOLIDWORKS IMassProperty, system units, converted by the add-in",
+                         "mass": mp.get("mass"), "volume": mp.get("volume"), "density": mp.get("density"),
+                         "override_mass": mp.get("override_mass"), "confidence": "high"})
+        if mp.get("override_mass") or mp.get("user_assigned"):
+            problems.append({"kind": "mass", "severity": "info",
+                             "why": "The mass is overridden or assigned by hand in SOLIDWORKS: it is not computed from the geometry and material."})
+        elif mp.get("consistent") is False:
+            problems.append({"kind": "mass", "severity": "major",
+                             "why": f"SOLIDWORKS' mass and density disagree (density {dens} g/cm3, mass/volume {implied} kg/m3): check "
+                                    "Evaluate > Mass Properties for an override."})
+        if expect and dens and not (0.6 * expect <= dens <= 1.5 * expect):
+            problems.append({"kind": "mass", "severity": "major",
+                             "why": f"SOLIDWORKS uses a density of {dens} g/cm3 for this part; {stated} is about {expect} g/cm3. The "
+                                    "assigned material (or the document density used when none is assigned) does not match the stated material."})
+    elif vol and mass_g is not None and vol > 0:
+        dens = mass_g / (vol / 1000.0)
+        inferred.append({"what": "density from mass and volume", "value": round(dens, 6), "unit": "g/cm3", "confidence": "medium",
+                         "source": "SOLIDWORKS mass and volume as an add-in before 0.15 reports them",
+                         "basis": f"{mass_g:g} g / {vol / 1000:.1f} cm3"})
+        if expect and not (0.6 * expect <= dens <= 1.5 * expect):
+            problems.append({"kind": "mass_unverified", "severity": "info",
+                             "why": f"SOLIDWORKS reports {mass_g:g} g for {vol / 1000:.1f} cm3 ({dens:.4g} g/cm3); {stated} is about {expect} g/cm3. "
+                                    "The cause is not known from this read (material, document density or a mass override): read with "
+                                    "details (add-in 0.15), which reports the material, the density and any override."})
+    return material, read_from_part
+
+
+def _thread_definitions(details: dict, rec: dict, confirmed: list) -> set[str]:
+    """Holes whose threads SOLIDWORKS defines (Hole Wizard tapped holes, cosmetic threads), matched to recognised
+    holes by tap-drill diameter. Returns the ids of the holes that are confirmed."""
+    out: set[str] = set()
+    specs = []
+    for h in (details or {}).get("holes") or []:
+        if h.get("threaded"):
+            specs.append({"size": h.get("size"), "class": h.get("thread_class"), "depth": h.get("thread_depth"),
+                          "drill": h.get("tap_drill_diameter") or h.get("hole_diameter"), "source": f"Hole Wizard {h.get('feature')}",
+                          "standard": h.get("standard")})
+    for c in (details or {}).get("threads") or []:
+        specs.append({"size": c.get("size"), "callout": c.get("callout"), "depth": (c.get("depth") or {}).get("value"),
+                      "drill": None, "source": f"cosmetic thread {c.get('feature')}"})
+    if not specs:
+        return out
+    for sp in specs:
+        confirmed.append({"what": "thread", "value": sp.get("callout") or " ".join(str(x) for x in (sp.get("size"), sp.get("class")) if x),
+                          "depth_mm": sp.get("depth"), "source": sp["source"]})
+    for b in rec.get("bodies", []):
+        for h in b.get("holes", []):
+            for sp in specs:
+                if sp.get("drill") and abs(h["diameter"] - float(sp["drill"])) <= 0.05:
+                    h["thread_spec"] = sp
+                    out.add(h["id"])
     return out

@@ -13,7 +13,7 @@ GROUPS: list[tuple[str, list[tuple[str, str, str]]]] = [
         ("sw_create_document", "New part or assembly", "Creates a part or assembly from your default template and saves it."),
         ("sw_open_document", "Open a file", "Opens a SOLIDWORKS file, or brings it to the front."),
         ("sw_save", "Save", "Saves the document, or saves it under a new name."),
-        ("sw_get_document", "Read a document", "Reads the feature tree, sketches, dimensions and rebuild errors as they are now."),
+        ("sw_get_document", "Read a document", "Reads the feature tree, sketches, dimensions and rebuild errors as they are now; with details, also units, material, mass, Hole Wizard holes and tolerances."),
     ]),
     ("Building and changing parts", [
         ("sw_add_features", "Add features", "Makes sketches and features: extrude, revolve, sweep, loft, hole, fillet, chamfer, shell, draft, mirror, patterns, planes. Every sketch is solved and checked first."),
@@ -38,8 +38,8 @@ GROUPS: list[tuple[str, list[tuple[str, str, str]]]] = [
     ]),
     ("Drawings", [
         ("sw_create_drawing", "Create a drawing", "Makes a native drawing with standard views, a preferred scale, model dimensions and title block fields."),
-        ("sw_get_drawing", "Read a drawing", "Reads the sheet, every view and the title block."),
-        ("sw_edit_drawing", "Edit a drawing", "Adds section, detail and projected views, notes and a bill of materials, and moves or rescales views."),
+        ("sw_get_drawing", "Read a drawing", "Reads the sheet, every view and the title block; with annotations, also every dimension, note and symbol and where it sits."),
+        ("sw_edit_drawing", "Edit a drawing", "Adds views, dimensions, hole callouts, centre marks, notes, tables and the tolerances and symbols you give, and moves or rescales views."),
     ]),
     ("Drafting intelligence", [
         ("sw_drafting_analyse", "Understand the model", "Recognises the features, the drafting disciplines and how the part is made, and lists what is confirmed, inferred and still unknown."),
@@ -47,7 +47,7 @@ GROUPS: list[tuple[str, list[tuple[str, str, str]]]] = [
         ("sw_drafting_build", "Make the planned drawing", "Makes the planned drawing in SOLIDWORKS, fixes its layout and checks it."),
         ("sw_drafting_check", "Check a drawing", "Gives a drawing a quality score and lists what stops it being released."),
         ("sw_drafting_knowledge", "Drafting knowledge", "Looks up drafting practice with its source, to explain a recommendation."),
-        ("sw_drafting_feedback", "Feedback and guidelines", "Records what was accepted, changed or approved, and your company's own drafting rules."),
+        ("sw_drafting_feedback", "Feedback and guidelines", "Records what was accepted, changed or approved, your company's own drafting rules, and drawings sent for an expert's review."),
     ]),
     ("Files", [
         ("sw_import", "Import a file", "Opens a STEP, IGES or Parasolid file and saves it as SOLIDWORKS files."),

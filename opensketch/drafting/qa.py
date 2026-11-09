@@ -54,8 +54,8 @@ def check(drawing: dict, model: dict | None = None, plan: dict | None = None, ex
                 add("model", p["severity"], "rebuild", f"Feature {p['feature']} has a rebuild {p['state']}: {p.get('reason')}.")
             elif p["kind"] == "sketch":
                 add("model", "minor", "sketch_definition", f"Sketch {p['sketch']} is {p['state']}: {p['why']}.")
-            elif p["kind"] in ("mass", "material"):
-                add("engineering", "major", p["kind"], p["why"])
+            elif p["kind"] in ("mass", "material", "material_unverified", "mass_unverified", "units"):
+                add("engineering", p["severity"], p["kind"], p["why"])
     # ---------------------------------------------------------------- views
     orients = [_orient(v) for v in views]
     types = [str(v.get("type")) for v in views]
@@ -138,11 +138,9 @@ def check(drawing: dict, model: dict | None = None, plan: dict | None = None, ex
     for f in ("DrawnBy", "Date", "Finish"):
         if not str(props.get(f, "")).strip():
             add("annotations", "minor", "title_block", f"Title block: {f} is empty.")
-    if plan:
-        for t in plan.get("notes_status", {}).get("to_be_confirmed", []):
-            pass  # reported under engineering below
-    else:
-        add("annotations", "info", "notes_unread", "General notes are not read back by the add-in: check them on a screenshot.")
+    if not plan and not drawing.get("annotations"):
+        add("annotations", "info", "notes_unread", "General notes were not read back (add-in 0.15 reads them with annotations=true): "
+            "check them on a screenshot.")
     # ---------------------------------------------------------------- engineering (release blockers)
     material = props.get("Material") or (model or {}).get("overall", {}).get("material") or confirmed.get("material")
     if is_part and not material:
@@ -150,6 +148,14 @@ def check(drawing: dict, model: dict | None = None, plan: dict | None = None, ex
     gt = confirmed.get("general_tolerance")
     if not gt and plan:
         gt = next((n for n in plan.get("notes_status", {}).get("confirmed", []) if "GENERAL TOLERANCE" in n), None)
+    ann = layout.evaluate_annotations(drawing) if drawing.get("annotations") else None
+    if not gt and ann:
+        # a general tolerance the drawing itself states (a person wrote or approved that note); a TO BE CONFIRMED
+        # placeholder is not one
+        stated = next((t for t in ann["notes"] if "TOLERANCE" in t.upper() and "TO BE CONFIRMED" not in t.upper()), None)
+        if stated:
+            gt = stated
+            add("engineering", "info", "general_tolerance_on_drawing", f"General tolerance stated on the drawing: {stated.strip()[:120]}")
     if is_part and not gt:
         add("engineering", "blocker", "general_tolerance", "The general tolerance is not confirmed.", knowledge="K12-002")
     if model:
@@ -161,8 +167,21 @@ def check(drawing: dict, model: dict | None = None, plan: dict | None = None, ex
         for u in model.get("unknown", []):
             if u["what"] == "welds" and not confirmed.get("welds"):
                 add("engineering", "blocker", "welds", "Weld type, size and quality are not specified.", knowledge="K05-001")
+    toleranced = set()
+    for g in drawing.get("annotations") or []:
+        for a in g.get("annotations") or []:
+            if a.get("type") == "dimension" and a.get("tolerance") and isinstance(a.get("value"), (int, float)):
+                toleranced.add(round(a["value"], 3))
+    if model:
+        for d in (model.get("design") or {}).get("dimensions") or []:
+            if d.get("name") in ((model.get("design") or {}).get("tolerances") or {}) and isinstance(d.get("value"), (int, float)):
+                toleranced.add(round(d["value"], 3))
     if plan:
+        import re as _re
         for t in plan.get("dimensioning", {}).get("tolerance_candidates", [])[:6]:
+            m = _re.search(r"Ø?(\d+(?:\.\d+)?)", t.get("what", ""))
+            if m and round(float(m.group(1)), 3) in toleranced:
+                continue   # SOLIDWORKS holds a tolerance on that size
             if not (confirmed.get("fits") or {}).get(t["feature"]):
                 add("engineering", "major", "fit_unconfirmed", f"{t['feature']} ({t['what']}): {t['why']}; no fit or tolerance confirmed.",
                     knowledge="K12-001")
@@ -170,6 +189,13 @@ def check(drawing: dict, model: dict | None = None, plan: dict | None = None, ex
     # ---------------------------------------------------------------- presentation
     lay = layout.evaluate(drawing, (plan or {}).get("projection"))
     findings += lay["findings"]
+    if ann:
+        findings += ann["findings"]
+        if "revision" not in ann["tables"]:
+            add("annotations", "info", "revision_table", "No revision table on the sheet (company practice decides whether one is needed).")
+    elif drawing.get("views"):
+        add("presentation", "info", "annotations_unread", "Annotation positions were not read (add-in 0.15, annotations=true): overlaps between "
+            "dimensions and notes are not checked.")
     # ---------------------------------------------------------------- document
     doc = str(drawing.get("doc") or "")
     if doc and not doc.lower().endswith(".slddrw"):
@@ -195,7 +221,8 @@ def check(drawing: dict, model: dict | None = None, plan: dict | None = None, ex
             "by_category": {c: round(WEIGHTS[c] - lost.get(c, 0), 1) for c in WEIGHTS},
             "release_blocked": bool(blockers), "release_blockers": blockers,
             "counts": {s: sum(1 for f in findings if f["severity"] == s) for s in sev_order},
-            "findings": findings, "layout": {"fill": lay["fill"], "corrections": lay["corrections"]},
+            "findings": findings, "layout": {"fill": lay["fill"], "corrections": lay["corrections"] + (ann["corrections"] if ann else [])},
+            "annotations": ({"counts": ann["counts"], "tables": ann["tables"]} if ann else None),
             "auto_correctable": [f for f in findings if f.get("fix")],
             "manufacturing_ready": False,
             "release": "A person checks and approves the drawing before it is issued; this report never releases it."}

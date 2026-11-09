@@ -114,6 +114,13 @@ Drafting practice (AS 1100.101 and 201, ISO 128, ISO 129-1), for drawings a work
   confirmed, inferred and unknown), sw_drafting_plan (views with the reason for each, sections, details, scale,
   dimensions, notes, the questions that matter), sw_drafting_build, sw_drafting_check (quality index and release
   blockers), sw_drafting_knowledge (cited practice). Prefer them for manufacturing, fabrication and assembly drawings.
+- Add-in 0.15 and later: sw_get_document details=true reads units, the material as SOLIDWORKS has it (assigned or
+  not), the mass properties with their units, Hole Wizard holes and tolerances; never infer a material from the mass.
+  sw_get_drawing annotations=true reads every dimension, note and symbol with its box. sw_edit_drawing then adds
+  dimensions, hole callouts, centre marks and lines, tables, and native tolerance, surface texture, datum, GD&T and
+  weld symbols (never typed as text). Tolerances, fits, roughness, datums, GD&T and welds only as the designer gave
+  them (confirmed_by); a tolerance on a model dimension changes the part, so only with model_change=true when the
+  designer agrees.
 - Check every drawing: take a screenshot, read the result's notes, and fix what a checker would reject (views off
   the sheet or crowded, dimensions crossing or missing, a needed view absent) by changing the views, scale, sheet
   or the model's sketch dimensions, then make it again with overwrite=true. Tell the user what still needs a
@@ -260,13 +267,22 @@ async def sw_save(doc: _DOC = None, path: Annotated[str | None, Field(descriptio
 @mcp.tool(annotations=ToolAnnotations(read_only_hint=True, destructive_hint=False, open_world_hint=False))
 @_routed
 async def sw_get_document(doc: _DOC = None, sketches: Annotated[bool, Field(description="Include every sketch's entities, relations and dimensions")] = False,
-                          component: _COMP = None, device: _DEV = None) -> CallToolResult:
+                          component: _COMP = None,
+                          details: Annotated[bool, Field(description="Also read units, mass properties with explicit units, material per configuration, configurations, "
+                                                                     "custom properties, Hole Wizard and cosmetic-thread definitions, feature parameters, every "
+                                                                     "dimension with its tolerance, reference geometry and weldment cut-list items (add-in 0.15)")] = False,
+                          device: _DEV = None) -> CallToolResult:
     """Read a SOLIDWORKS document as it is now: the feature tree (name, type, suppressed, rebuild errors and
     warnings with SOLIDWORKS' reason), sketch states (fully / under / over defined), dimensions, global
     variables and equations, the body's volume and bounding box; for an assembly its components (file, fixed,
     position) and mates with their state. sketches=true adds each sketch's entities (in sketch coordinates, with
-    ids you can use), relations and dimensions. Read before editing: the user may have changed it by hand."""
-    return await _simple("read", {"doc": doc, "sketches": sketches, "component": component}, timeout=120)
+    ids you can use), relations and dimensions. details=true adds the drafting data (units, mass chain, material,
+    configurations, properties, holes, threads, tolerances). Read before editing: the user may have changed it by hand."""
+    if details:
+        old = swbridge.addin_too_old(_who(), DETAILS_FROM, "Reading model details", device=_device())
+        if old:
+            return _text({"error": old}, True)
+    return await _simple("read", {"doc": doc, "sketches": sketches, "component": component, "details": details or None}, timeout=180)
 
 
 # ----------------------------------------------------------------------------- writing features
@@ -817,6 +833,7 @@ async def sw_create_drawing(
 
 
 DRAWING_API_FROM = "0.10.0"   # read_drawing and edit_drawing
+DETAILS_FROM = "0.15.0"       # read details, read_drawing annotations, the dimensioning and annotation actions
 _POINT = Annotated[list[float], Field(min_length=2, max_length=2)]
 
 # What each sw_edit_drawing action takes: required keys, optional keys. Checked here so a mistake never reaches SOLIDWORKS.
@@ -837,10 +854,109 @@ DRAWING_ACTIONS: dict[str, tuple[set[str], set[str]]] = {
     "properties": ({"set"}, set()),
     "sheet": (set(), {"scale", "projection"}),
     "bom": ({"view", "at"}, {"type", "balloons"}),
+    # add-in 0.15: model-associated dimensions and engineering annotations (model points [x, y, z] in model mm)
+    "dimension": ({"view", "kind", "edges"}, {"at", "offset"}),
+    "ordinate": ({"view", "edges", "at"}, {"direction"}),
+    "hole_callout": ({"view", "edge"}, {"at", "offset"}),
+    "chamfer_dimension": ({"view", "edges", "at"}, set()),
+    "centre_line": ({"view"}, {"face", "edges"}),
+    "centre_mark": ({"view", "edge"}, {"style", "propagate"}),
+    "move_annotation": ({"name", "to"}, set()),
+    "tolerance": ({"dimension", "type", "confirmed_by"}, {"lower", "upper", "hole_fit", "shaft_fit", "model_change"}),
+    "surface_finish": ({"view", "edge", "confirmed_by"}, {"at", "offset", "symbol", "roughness_max", "roughness_min", "method", "allowance", "sampling", "other"}),
+    "datum": ({"view", "edge", "label", "confirmed_by"}, {"at"}),
+    "gtol": ({"view", "frames", "confirmed_by"}, {"edge", "at"}),
+    "weld_symbol": ({"view", "edge", "symbol", "confirmed_by"}, {"at", "side", "size", "length", "field", "all_around", "process", "standard"}),
+    "revision_table": ({"at"}, set()),
+    "hole_table": ({"view", "origin", "face", "at"}, {"start"}),
+    "cut_list": ({"view", "at"}, set()),
 }
+NEW_ACTIONS = {"dimension", "ordinate", "hole_callout", "chamfer_dimension", "centre_line", "centre_mark", "move_annotation", "tolerance",
+               "surface_finish", "datum", "gtol", "weld_symbol", "revision_table", "hole_table", "cut_list"}
+# engineering-critical content: sent only with the name of the person who confirmed it (never chosen by the AI)
+CONFIRMED_ACTIONS = {"tolerance", "surface_finish", "datum", "gtol", "weld_symbol"}
+DIM_KINDS = {"smart", "linear", "horizontal", "vertical", "diameter", "radius", "angular"}
+GTOL_SYMBOLS = {"straightness", "flatness", "circularity", "cylindricity", "profile_of_a_line", "profile_of_a_surface", "angularity",
+                "perpendicularity", "parallelism", "position", "concentricity", "symmetry", "circular_runout", "total_runout"}
+TOL_TYPES = {"none", "basic", "bilateral", "limit", "symmetric", "min", "max", "fit", "fit_with_tolerance", "fit_tolerance_only", "general"}
 _CHOICES = {"orientation": {"front", "top", "right", "left", "bottom", "back", "isometric"}, "direction": {"horizontal", "vertical"},
+            "kind": DIM_KINDS, "side": {"arrow", "other", "both"}, "standard": {"iso", "ansi"},
+            "symbol_sf": {"basic", "machining_required", "no_machining"}, "style_cm": {"single", "linear", "circular"},
             "style": {"hidden_removed", "hidden_visible", "wireframe", "shaded", "shaded_edges"},
             "projection": {"third", "first"}, "type": {"top", "parts", "indented"}}
+
+
+def _point3(v: Any) -> bool:
+    return isinstance(v, list) and len(v) == 3 and all(isinstance(x, (int, float)) and not isinstance(x, bool) for x in v)
+
+
+def _annotation_action(i: int, what: str, out: dict) -> str | None:
+    """Checks for the 0.15 actions, normalising single model points to the lists the add-in reads."""
+    pre = f"action {i + 1} ({what})"
+    for k in ("edge", "origin", "face"):
+        if k in out:
+            v = out[k]
+            if _point3(v):
+                out[k] = [v]
+            elif not (isinstance(v, list) and len(v) == 1 and _point3(v[0])):
+                return f"{pre}: {k} is a model point [x, y, z] in model mm"
+    if "edges" in out:
+        v = out["edges"]
+        if not (isinstance(v, list) and v and all(_point3(p) for p in v)):
+            return f"{pre}: edges is a list of model points [x, y, z] in model mm"
+        n = len(v)
+        need = {"diameter": (1, 1), "radius": (1, 1), "angular": (2, 2)}.get(out.get("kind"), (1, 2)) if what == "dimension" else \
+            (2, 2) if what in ("chamfer_dimension", "centre_line") else (2, 30) if what == "ordinate" else (1, 2)
+        if not need[0] <= n <= need[1]:
+            return f"{pre}: edges takes {need[0]}" + (f" to {need[1]}" if need[1] != need[0] else "") + " model point(s)"
+    if what == "centre_line" and ("face" in out) == ("edges" in out):
+        return f"{pre}: give either face (a cylindrical face) or edges (two edges)"
+    if what == "centre_mark" and "style" in out and out["style"] not in _CHOICES["style_cm"]:
+        return f"{pre}: style is one of {', '.join(sorted(_CHOICES['style_cm']))}"
+    if what == "surface_finish" and "symbol" in out and out["symbol"] not in _CHOICES["symbol_sf"]:
+        return f"{pre}: symbol is one of {', '.join(sorted(_CHOICES['symbol_sf']))}"
+    if what in CONFIRMED_ACTIONS:
+        who = out.get("confirmed_by")
+        if not isinstance(who, str) or not who.strip() or len(who) > 80:
+            return f"{pre}: confirmed_by names who gave these engineering values (the designer, or the answers they gave); never the assistant's own choice"
+    if what == "tolerance":
+        if out["type"] not in TOL_TYPES:
+            return f"{pre}: type is one of {', '.join(sorted(TOL_TYPES))}"
+        if out["type"] in ("bilateral", "limit", "symmetric", "min", "max") and not ("lower" in out or "upper" in out):
+            return f"{pre}: a {out['type']} tolerance needs lower and/or upper (mm, as given by the designer)"
+        if out["type"].startswith("fit") and not (out.get("hole_fit") or out.get("shaft_fit")):
+            return f"{pre}: a fit needs hole_fit and/or shaft_fit (e.g. H7, g6)"
+        for k in ("lower", "upper"):
+            if k in out and not (isinstance(out[k], (int, float)) and abs(out[k]) < 100):
+                return f"{pre}: {k} is a number in mm"
+        for k in ("hole_fit", "shaft_fit"):
+            if k in out and not re.fullmatch(r"[A-Za-z]{1,2}\d{1,2}", str(out[k])):
+                return f"{pre}: {k} is an ISO 286 code such as H7 or g6"
+        if not isinstance(out["dimension"], str) or not out["dimension"].strip() or len(out["dimension"]) > 200:
+            return f"{pre}: dimension is the dimension's full name (sw_get_drawing annotations=true)"
+        if "model_change" in out and not isinstance(out["model_change"], bool):
+            return f"{pre}: model_change is true or false"
+    if what == "datum" and not re.fullmatch(r"[A-Z]{1,2}", str(out.get("label", ""))):
+        return f"{pre}: label is one or two capital letters"
+    if what == "gtol":
+        fr = out["frames"]
+        if not (isinstance(fr, list) and 1 <= len(fr) <= 3 and all(isinstance(f, dict) for f in fr)):
+            return f"{pre}: frames is 1 to 3 objects"
+        for j, f in enumerate(fr):
+            if f.get("symbol") not in GTOL_SYMBOLS:
+                return f"{pre}: frame {j + 1} symbol is one of {', '.join(sorted(GTOL_SYMBOLS))}"
+            if not isinstance(f.get("tolerance"), str) or not f["tolerance"].strip():
+                return f"{pre}: frame {j + 1} needs its tolerance value as given by the designer"
+            if f.get("material_condition", "") not in ("", "M", "L", "S"):
+                return f"{pre}: frame {j + 1} material_condition is M, L or S"
+            if not (isinstance(f.get("datums", []), list) and len(f.get("datums", [])) <= 3):
+                return f"{pre}: frame {j + 1} datums is up to three labels"
+    if what == "weld_symbol":
+        if not isinstance(out["symbol"], str) or not out["symbol"].strip():
+            return f"{pre}: symbol is fillet, square, v, bevel, u, j, flare_v, flare_bevel, plug, spot, seam or a SOLIDWORKS symbol code"
+    if what == "move_annotation" and (not isinstance(out["name"], str) or not out["name"].strip()):
+        return f"{pre}: name is the annotation's name (sw_get_drawing annotations=true)"
+    return None
 
 
 def _drawing_action(i: int, a: Any) -> tuple[dict | None, str | None]:
@@ -854,14 +970,22 @@ def _drawing_action(i: int, a: Any) -> tuple[dict | None, str | None]:
     if keys - need - may:
         return None, f"action {i + 1} ({a['do']}): unknown {', '.join(sorted(keys - need - may))}"
     out = dict(a)
-    for k in ("at", "to", "place", "sheet_point", "fraction"):
+    for k in ("at", "to", "place", "sheet_point", "fraction", "offset"):
         if k in out and not (isinstance(out[k], list) and len(out[k]) == 2 and all(isinstance(x, (int, float)) for x in out[k])):
             return None, f"action {i + 1} ({a['do']}): {k} is [x, y]" + (" (fractions of the view's outline, 0..1)" if k == "fraction" else " in sheet mm from the lower left corner")
     if "through" in out and not (isinstance(out["through"], list) and len(out["through"]) == 3 and all(isinstance(x, (int, float)) for x in out["through"])):
         return None, f"action {i + 1} ({a['do']}): through is a model point [x, y, z] in mm"
     for k, allowed in _CHOICES.items():
+        if k in ("style", "symbol_sf", "style_cm") or (k == "type" and a["do"] == "tolerance") or (k == "symbol" and a["do"] in ("surface_finish", "weld_symbol")):
+            continue
         if k in out and out[k] not in allowed:
             return None, f"action {i + 1} ({a['do']}): {k} is one of {', '.join(sorted(allowed))}"
+    if a["do"] == "display" and out.get("style") not in _CHOICES["style"]:
+        return None, f"action {i + 1} (display): style is one of {', '.join(sorted(_CHOICES['style']))}"
+    if a["do"] in NEW_ACTIONS:
+        problem = _annotation_action(i, a["do"], out)
+        if problem:
+            return None, problem
     if "scale" in out:
         if a["do"] == "scale" and out["scale"] == "sheet":
             out["scale"] = None   # back to the sheet's scale
@@ -887,14 +1011,20 @@ def _drawing_action(i: int, a: Any) -> tuple[dict | None, str | None]:
 
 @mcp.tool(annotations=ToolAnnotations(read_only_hint=True, destructive_hint=False, open_world_hint=False))
 @_routed
-async def sw_get_drawing(doc: Annotated[str | None, Field(description="The drawing (path or window title); omit for the active document")] = None, device: _DEV = None) -> CallToolResult:
+async def sw_get_drawing(doc: Annotated[str | None, Field(description="The drawing (path or window title); omit for the active document")] = None,
+                         annotations: Annotated[bool, Field(description="Also read every annotation (dimensions with values and tolerances, notes with text, "
+                                                                         "GD&T frames, datums, surface and weld symbols, tables) with its position and box in "
+                                                                         "sheet mm (add-in 0.15)")] = False,
+                         device: _DEV = None) -> CallToolResult:
     """Read a SOLIDWORKS drawing: the sheet (size, scale, projection), every view (name, type, orientation, scale,
     outline on the sheet in mm, display style, how many dimensions it shows, the model it shows) and the title
-    block fields. Read it before sw_edit_drawing, and after, to check the layout."""
-    old = swbridge.addin_too_old(_who(), DRAWING_API_FROM, "Reading drawings", device=_device())
+    block fields; annotations=true adds every annotation with its text, tolerance and box. Read it before
+    sw_edit_drawing, and after, to check the layout."""
+    old = swbridge.addin_too_old(_who(), DETAILS_FROM if annotations else DRAWING_API_FROM, "Reading drawing annotations" if annotations else "Reading drawings",
+                                 device=_device())
     if old:
         return _text({"error": old}, True)
-    return await _simple("read_drawing", {"doc": doc}, timeout=180)
+    return await _simple("read_drawing", {"doc": doc, "annotations": annotations or None}, timeout=180)
 
 
 @mcp.tool()
@@ -917,7 +1047,22 @@ async def sw_edit_drawing(
             '{"do":"note","text":"...","at":[x,y],"height":3.5}; {"do":"properties","set":{"Title":"..."}}; '
             '{"do":"sheet","scale":"1:2","projection":"third|first"}; '
             '{"do":"bom","view":"...","at":[x,y] (its top right corner),"type":"top|parts|indented","balloons":true} '
-            'a parts list for an assembly drawing'))],
+            'a parts list for an assembly drawing. '
+            'Add-in 0.15, attached to model geometry (model points [x,y,z] mm on the view\'s part; the nearest edge or face is used): '
+            '{"do":"dimension","view":"...","kind":"smart|linear|horizontal|vertical|diameter|radius|angular","edges":[[x,y,z],...],"at":[x,y]}; '
+            '{"do":"ordinate","view":"...","edges":[zero first, then the others],"direction":"horizontal|vertical","at":[x,y]}; '
+            '{"do":"hole_callout","view":"...","edge":[x,y,z] (on the hole\'s circle),"at":[x,y]}; '
+            '{"do":"chamfer_dimension","view":"...","edges":[chamfer edge, adjacent edge],"at":[x,y]}; '
+            '{"do":"centre_line","view":"...","face":[x,y,z] or "edges":[two]}; {"do":"centre_mark","view":"...","edge":[x,y,z],"style":"single|linear|circular"}; '
+            '{"do":"move_annotation","name":"...","to":[x,y]} (presentation only); '
+            '{"do":"revision_table","at":[x,y]}; {"do":"hole_table","view":"...","origin":[x,y,z],"face":[x,y,z],"at":[x,y]}; '
+            '{"do":"cut_list","view":"...","at":[x,y]} (weldments). '
+            'Engineering values, only as the designer gave them, with "confirmed_by" naming that person: '
+            '{"do":"tolerance","dimension":"<full name>","type":"bilateral|symmetric|limit|fit|fit_with_tolerance|basic|...","lower":-0.01,"upper":0.02,"hole_fit":"H7","shaft_fit":"g6","model_change":false} (a model dimension keeps its tolerance in the part: SOLIDWORKS refuses unless model_change is true, which changes the part, only with the designer\'s agreement); '
+            '{"do":"surface_finish","view":"...","edge":[x,y,z],"at":[x,y],"symbol":"machining_required|basic|no_machining","roughness_max":"Ra 1.6"}; '
+            '{"do":"datum","view":"...","edge":[x,y,z],"label":"A","at":[x,y]}; '
+            '{"do":"gtol","view":"...","frames":[{"symbol":"position","tolerance":"0.05","diameter":true,"material_condition":"M","datums":["A","B"]}],"edge":[x,y,z],"at":[x,y]}; '
+            '{"do":"weld_symbol","view":"...","edge":[x,y,z],"symbol":"fillet","size":"6","length":"50","side":"arrow|other|both","all_around":false,"field":false,"at":[x,y]}'))],
         doc: Annotated[str | None, Field(description="The drawing (path or window title); omit for the active document")] = None, device: _DEV = None) -> CallToolResult:
     """Change a SOLIDWORKS drawing step by step, the way a drafter does: add model, projected, section and detail
     views, move and scale views, set their display, bring in the model's dimensions, add centre marks, notes, title
@@ -936,6 +1081,8 @@ async def sw_edit_drawing(
     if problems:
         return _text({"error": "Nothing was sent to SOLIDWORKS.", "input_problems": problems}, True)
     old = swbridge.addin_too_old(_who(), DRAWING_API_FROM, "Editing drawings", device=_device())
+    if not old and any(c["do"] in NEW_ACTIONS for c in checked):
+        old = swbridge.addin_too_old(_who(), DETAILS_FROM, "Dimensions, callouts, tables and engineering annotations", device=_device())
     if old:
         return _text({"error": old}, True)
     return await _simple("edit_drawing", {"doc": doc, "actions": checked}, timeout=600)

@@ -3,7 +3,9 @@ look up drafting knowledge and record feedback.
 
 They extend the existing sw_ tools and reuse them for every SOLIDWORKS operation: the model is read with the add-in's
 `read` and `geometry` commands, the drawing is made with sw_create_drawing and sw_edit_drawing, read with
-`read_drawing`, exported with sw_export. No new SOLIDWORKS API call, no new add-in version needed. The reasoning
+`read_drawing`, exported with sw_export. With an add-in of 0.15 or later they also read the model details and the
+drawing's annotations, and the build adds the planned hole callouts and the tolerances and symbols the designer gave;
+with an older add-in those steps are reported as deferred and the rest works as before. The reasoning
 (opensketch/drafting) is plain data in and out, so it is the same for every AI model that connects.
 
 Engineering-critical content (tolerances, fits, threads, welds, materials, finishes) is never chosen here: the plan
@@ -14,29 +16,40 @@ layout correction only ever moves views.
 from __future__ import annotations
 
 import json
+import time
 from typing import Annotated, Any, Literal
 
 from mcp.types import CallToolResult, ToolAnnotations
 from pydantic import Field
 
-from . import store
+from . import store, swbridge
 from .drafting import disciplines as dmod
 from .drafting import engine, knowledge, layout, learning, qa
 from .mcp_server import _who, mcp
-from .sw_tools import _COMP, _DEV, _DOC, _SCALE, GEOM_ERRORS, _cad, _device, _geometry, _routed, _run, _text
+from .sw_tools import _COMP, _DEV, _DOC, _SCALE, DETAILS_FROM, GEOM_ERRORS, _cad, _device, _geometry, _routed, _run, _text
 
 _ANSWERS = Annotated[dict | None, Field(description=(
     'Answers to the plan\'s questions, only what the designer has confirmed: {"material": "...", "general_tolerance": '
     '"ISO 2768-m", "threads": {"H1": "M6x1-6H, full thread 12"}, "fits": {"H11": "Ø40 H7"}, "surface_finish": "Ra 3.2", '
-    '"edge_break": "Break sharp edges 0.3", "welds": "...", "finish": "...", "title_block": {"DrawingNo": "...", '
-    '"Revision": "A", "DrawnBy": "..."}, "notes": ["..."], "approve_proposed_notes": true}'))]
+    '"surface_symbols": {"H2": "Ra 1.6"}, "edge_break": "Break sharp edges 0.3", "welds": "...", "finish": "...", '
+    '"title_block": {"DrawingNo": "...", "Revision": "A", "DrawnBy": "..."}, "notes": ["..."], "approve_proposed_notes": true, '
+    '"apply_fits_to_model": false}. A fit goes on the model\'s own dimension, so it changes the part: only with '
+    'apply_fits_to_model=true, when the designer agrees.'))]
 _PLAN_ID = Annotated[str, Field(description="The plan_id from sw_drafting_plan")]
-ANSWER_KEYS = {"material": str, "general_tolerance": str, "threads": dict, "fits": dict, "surface_finish": str, "edge_break": str,
-               "welds": str, "finish": str, "title_block": dict, "notes": list, "approve_proposed_notes": bool}
+ANSWER_KEYS = {"material": str, "general_tolerance": str, "threads": dict, "fits": dict, "surface_finish": str, "surface_symbols": dict,
+               "edge_break": str, "welds": str, "finish": str, "title_block": dict, "notes": list, "approve_proposed_notes": bool,
+               "apply_fits_to_model": bool}
 
 
 def _account() -> str | None:
     return store.owner_of(_who())
+
+
+def _new_addin() -> bool:
+    """True when the connected add-in has the 0.15 reads and actions (model details, drawing annotations, callouts,
+    tolerances, symbols). An add-in that has not said its version (a stand-in) counts as new; the add-in itself
+    refuses what it does not know."""
+    return swbridge.addin_too_old(_who(), DETAILS_FROM, "Drafting details", device=_device()) is None
 
 
 def _check_answers(answers: dict | None) -> tuple[dict, list[str]]:
@@ -60,8 +73,11 @@ def _check_answers(answers: dict | None) -> tuple[dict, list[str]]:
 
 async def _analyse(doc: str | None, component: str | None, drawing: str | None = None,
                    override: list[str] | None = None) -> tuple[dict | None, dict, str | None]:
-    """(analysis, meta, error): the model read from SOLIDWORKS (feature tree, numbers, geometry) and analysed."""
-    read, _, err = await _run("read", {"doc": doc, "component": component}, timeout=180)
+    """(analysis, meta, error): the model read from SOLIDWORKS (feature tree, numbers, geometry) and analysed. With
+    an add-in of 0.15 or later the read includes the model details (units, configurations, custom properties, the
+    material as assigned, the mass properties with their units, Hole Wizard data, cosmetic threads, tolerances)."""
+    new = _new_addin()
+    read, _, err = await _run("read", {"doc": doc, "component": component, "details": True if new else None}, timeout=180)
     if err:
         return None, {}, err
     numbers, _, err2 = await _run("read", {"doc": doc, "component": component, "numbers": True}, timeout=180)
@@ -80,7 +96,9 @@ async def _analyse(doc: str | None, component: str | None, drawing: str | None =
     title = (read or {}).get("title") or g.get("title")
     analysis = engine.analyse(kind, title, read, numbers, rec, props, override=override,
                               extra_knowledge=learning.guidelines(_account()))
-    meta = {"doc": (read or {}).get("doc") or doc, "title": title, "kind": kind, "update_stamp": (read or {}).get("update_stamp")}
+    meta = {"doc": (read or {}).get("doc") or doc, "title": title, "kind": kind, "update_stamp": (read or {}).get("update_stamp"),
+            "details_read": bool((read or {}).get("details")),
+            "addin": None if new else f"older than {DETAILS_FROM}: material, mass, units, threads and tolerances were not read from the model"}
     return analysis, meta, None
 
 
@@ -213,12 +231,14 @@ def _scale_value(sc: Any) -> float:
 
 
 async def _read_drawing(drawing: str | None) -> tuple[dict | None, str | None]:
-    res, _, err = await _run("read_drawing", {"doc": drawing}, timeout=180)
+    """The drawing as SOLIDWORKS has it; with a 0.15 add-in also every annotation (type, name, position, box)."""
+    res, _, err = await _run("read_drawing", {"doc": drawing, "annotations": True if _new_addin() else None}, timeout=180)
     return res, err
 
 
 async def _correct(drawing_doc: str | None, plan: dict | None, rounds: int) -> tuple[dict | None, list[dict], str | None]:
-    """Up to `rounds` passes of non-critical layout corrections (view moves only)."""
+    """Up to `rounds` passes of non-critical layout corrections: view moves first; when the views are in place, moves
+    of annotation text that overlaps (never a value, a tolerance or what an annotation is attached to)."""
     from .sw_tools import sw_edit_drawing
     applied: list[dict] = []
     drw, err = await _read_drawing(drawing_doc)
@@ -227,6 +247,8 @@ async def _correct(drawing_doc: str | None, plan: dict | None, rounds: int) -> t
             break
         fixes = layout.evaluate(drw, (plan or {}).get("projection"))["corrections"]
         fixes = [f for f in fixes if f.get("do") == "move"][:20]
+        if not fixes and drw.get("annotations"):
+            fixes = [f for f in layout.evaluate_annotations(drw)["corrections"] if f.get("do") == "move_annotation"][:20]
         if not fixes:
             break
         res = await sw_edit_drawing(actions=fixes, doc=drawing_doc, device=_device())
@@ -286,6 +308,7 @@ async def sw_drafting_build(plan_id: _PLAN_ID,
         body = json.loads(res.content[0].text)
         steps.append({"step": "edit_drawing", "ok": not res.is_error, "actions": [a["do"] for a in acts],
                       "error": body.get("error") if res.is_error else None})
+    steps.append(await _planned_annotations(ddoc, plan, drw))
     if correct_layout:
         drw, more, err = await _correct(ddoc, plan, 2)
         applied += more
@@ -304,9 +327,51 @@ async def sw_drafting_build(plan_id: _PLAN_ID,
     if aerr:
         steps.append({"step": "model analysis for the check", "error": aerr})
     report = qa.check(drw or {}, ana["model"] if ana else None, plan=plan, exports=exports, confirmed=plan.get("answers") or {})
+    _keep_check(plan, ddoc, report)
     return _text({"drawing": ddoc, "plan_id": plan_id, "steps": steps, "exports": exports, "quality": _brief(report),
                   "next": "Look at it (sw_preview doc=the drawing, screenshot=true). Answer the release blockers, then plan and build again "
                           "with the answers; a person checks and approves before release."})
+
+
+async def _planned_annotations(ddoc: str | None, plan: dict, drw: dict | None) -> dict:
+    """The plan's callouts, tolerances and symbols (execution.annotations), each with its own result: one that
+    SOLIDWORKS refuses is reported and the rest still go. Tolerances and symbols are in the plan only when the
+    designer gave them (confirmed_by names the answers); nothing here chooses one."""
+    from .sw_tools import sw_edit_drawing
+    planned = (plan.get("execution") or {}).get("annotations") or []
+    if not planned:
+        return {"step": "annotations", "actions": []}
+    if not _new_addin():
+        return {"step": "annotations", "deferred": [a["do"] for a in planned],
+                "note": f"These need the add-in {DETAILS_FROM} or later; the drawing has the model's own dimensions only."}
+    main = _main_view(drw or {}, plan)
+    done, failed = [], []
+    for a in planned:
+        act = {k: v for k, v in a.items() if k not in ("for", "why")}
+        if act.get("view") == "@main":
+            if main is None:
+                failed.append({"do": a["do"], "for": a.get("for"), "error": "no main view on the drawing"})
+                continue
+            act["view"] = main["name"]
+        if act.get("at") == "@top_right":
+            sheet = (drw or {}).get("sheet") or {}
+            act["at"] = [float(sheet.get("width_mm") or 420) - 10, float(sheet.get("height_mm") or 297) - 10]
+        res = await sw_edit_drawing(actions=[act], doc=ddoc, device=_device())
+        body = json.loads(res.content[0].text)
+        if res.is_error:
+            failed.append({"do": a["do"], "for": a.get("for"), "error": body.get("error"), "problems": body.get("input_problems")})
+        else:
+            done.append({"do": a["do"], "for": a.get("for")})
+    return {"step": "annotations", "ok": not failed, "done": done, "failed": failed}
+
+
+def _keep_check(plan: dict, drawing: str | None, report: dict) -> None:
+    """The engine's latest check of the plan's drawing, kept with the plan (what an expert review is compared with)."""
+    plan["last_check"] = {"drawing": drawing, "at": round(time.time(), 3), **_brief(report)}
+    try:
+        learning.save_plan(_account(), plan, plan["model"].get("update_stamp"))
+    except store.StorageError:
+        pass
 
 
 def _brief(report: dict) -> dict:
@@ -356,6 +421,8 @@ async def sw_drafting_check(doc: Annotated[str | None, Field(description="The dr
     confirmed = dict((plan or {}).get("answers") or {})
     confirmed.update(ans)
     report = qa.check(drw or {}, ana["model"] if ana else None, plan=plan, confirmed=confirmed)
+    if plan:
+        _keep_check(plan, (drw or {}).get("doc") or doc, report)
     out = {"drawing": (drw or {}).get("doc"), **report}
     if applied:
         out["layout_moves_applied"] = applied
@@ -385,8 +452,9 @@ async def sw_drafting_knowledge(query: Annotated[str, Field(description="What yo
 
 @mcp.tool(annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False, open_world_hint=False))
 async def sw_drafting_feedback(kind: Annotated[Literal["accept", "reject", "edit_dimensions", "change_views", "move_annotation", "change_notes",
-                                                       "expert_approve", "expert_reject", "guideline", "answers"],
-                                               Field(description="What happened")],
+                                                       "expert_approve", "expert_reject", "guideline", "answers", "submit_for_review"],
+                                               Field(description="What happened. submit_for_review puts the plan's drawing forward for an "
+                                                                 "expert, with the engine's latest check of it")],
                                plan_id: Annotated[str | None, Field(description="The plan the feedback is about")] = None,
                                drawing: Annotated[str | None, Field(description="The drawing it is about")] = None,
                                target: Annotated[str | None, Field(description="The view, dimension, note or feature concerned")] = None,
@@ -394,16 +462,30 @@ async def sw_drafting_feedback(kind: Annotated[Literal["accept", "reject", "edit
                                after: Annotated[Any, Field(description="What the person changed it to")] = None,
                                comment: Annotated[str | None, Field(description="Why (in the person's words)")] = None,
                                reviewer: Annotated[Literal["user", "expert"], Field(description="expert only when a qualified reviewer gave it")] = "user",
+                               reviewer_name: Annotated[str | None, Field(description="expert_approve / expert_reject: the reviewer's name, as they give it")] = None,
+                               expert_score: Annotated[int | None, Field(ge=0, le=100, description="The expert's own score of the drawing, 0 to 100, if they give one")] = None,
                                retain: Annotated[bool, Field(description="Keep the plan with it as a training example (the person's choice; default no)")] = False,
                                guideline: Annotated[dict | None, Field(description='kind=guideline: {"topic": "...", "practice": "...", "concept": "...", '
                                                                                    '"disciplines": ["..."], "category": "15", "explanation": "...", "mistake": "..."}')] = None
                                ) -> CallToolResult:
     """Record what the person or a reviewer did with a drafting recommendation (accepted, rejected, edited dimensions,
-    changed views, moved annotations, changed notes, expert approval or rejection), or add a company drafting
-    guideline. Kept on this server in the account's own store, never sent elsewhere and never used to train an
-    external model. Expert-approved examples are kept apart from unverified user edits; a guideline from an expert is
-    company practice, from a user a suggestion awaiting verification."""
+    changed views, moved annotations, changed notes, expert approval or rejection), add a company drafting
+    guideline, or submit a drawing for an expert's review. Kept on this server in the account's own store, never sent
+    elsewhere and never used to train an external model. Expert-approved examples are kept apart from unverified user
+    edits; a guideline from an expert is company practice, from a user a suggestion awaiting verification. A drawing is
+    expert-reviewed only after an expert's verdict with the reviewer's name; the review records the person's
+    corrections before it and whether the engine's check agreed. Reviewers' qualifications are not verified here."""
     try:
+        if kind == "submit_for_review":
+            plan = learning.get_plan(_account(), plan_id) if plan_id else None
+            if plan is None:
+                return _text({"error": "submit_for_review needs the plan_id of a built drawing."}, True)
+            chk = plan.get("last_check")
+            if not chk:
+                return _text({"error": "The plan's drawing has not been checked yet: run sw_drafting_check(doc, plan_id) first."}, True)
+            rv = learning.submit_review(_account(), plan_id, drawing or chk.get("drawing"), chk)
+            return _text({"review": rv, "stats": learning.stats(_account()),
+                          "next": "An expert records the verdict with kind=expert_approve or expert_reject, reviewer=expert and reviewer_name."})
         if kind == "guideline":
             if not guideline or not guideline.get("topic") or not guideline.get("practice"):
                 return _text({"error": "guideline needs at least topic and practice."}, True)
@@ -414,7 +496,8 @@ async def sw_drafting_feedback(kind: Annotated[Literal["accept", "reject", "edit
         if comment and len(comment) > 2000:
             return _text({"error": "comment: up to 2000 characters."}, True)
         rec = learning.record_feedback(_account(), kind, plan_id=plan_id, drawing=drawing, target=target, before=before, after=after,
-                                       comment=comment, reviewer=reviewer, retain=retain)
+                                       comment=comment, reviewer=reviewer, retain=retain, reviewer_name=reviewer_name,
+                                       expert_score=expert_score)
     except (ValueError, store.StorageError) as exc:
         return _text({"error": str(exc)}, True)
     rec["stats"] = learning.stats(_account())

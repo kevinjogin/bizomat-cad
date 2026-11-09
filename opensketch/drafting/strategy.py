@@ -366,6 +366,88 @@ def compose_notes(model: dict, reasoning: dict, answers: dict, profile: dict) ->
     return out, status
 
 
+FIT_CODE = __import__("re").compile(r"\b([A-Z]{1,2}\d{1,2})(?:\s*/\s*([a-z]{1,2}\d{1,2}))?\b|\b([a-z]{1,2}\d{1,2})\b")
+
+
+def _entry_point(h: dict) -> list[float]:
+    """A model point on the hole's outermost circle at its entry face (where a callout attaches)."""
+    seg = h["segments"][0]
+    r = seg["diameter"] / 2
+    d = h["dir"]
+    k = max(range(3), key=lambda i: abs(d[i]))
+    u = [0.0, 0.0, 0.0]
+    u[(k + 1) % 3] = 1.0
+    return [round(h["position"][i] + r * u[i], 4) for i in range(3)]
+
+
+def annotation_actions(model: dict, views: list[dict], dims: dict, answers: dict, plan_id: str) -> tuple[list[dict], list[str]]:
+    """The dimensioning and annotation actions a machining drawing needs, for the add-in's 0.15 actions:
+    one hole callout per group of identical holes (in the main view, where the holes are circles), and the
+    tolerances and surface texture symbols the designer gave in the answers. "@main" is the main view, resolved
+    at build time. Returns (actions, notes on what was left out and why)."""
+    acts: list[dict] = []
+    skipped: list[str] = []
+    if model.get("kind") != "part" or not views:
+        return acts, skipped
+    design = model.get("design") or {}
+    cats = design.get("feature_categories") or {}
+    if cats.get("weld_member") or cats.get("weldment") or design.get("cut_list"):
+        # the weldment's own cut list (SOLIDWORKS' table of its cut-list items); never weld sizes, which only the designer gives
+        acts.append({"do": "cut_list", "view": "@main", "at": "@top_right", "for": ["cut list"],
+                     "why": "a fabricator cuts the members from the cut list: item, quantity, description and length from SOLIDWORKS"})
+        skipped.append("weld symbols: placed joint by joint (sw_edit_drawing weld_symbol, confirmed_by) once the designer gives each "
+                       "joint's weld; never chosen here")
+    main = views[0]["orientation"]
+    along = {"front": "z", "top": "y", "right": "x"}.get(main)
+    holes = {h["id"]: h for b in _bodies(model) for h in b["holes"]}
+    for c in dims.get("callouts", []):
+        h = holes.get(c["holes"][0])
+        if h is None:
+            continue
+        if h.get("axis") != along:
+            skipped.append(f"callout for {', '.join(c['holes'])}: the holes are not seen as circles in the main view")
+            continue
+        acts.append({"do": "hole_callout", "view": "@main", "edge": _entry_point(h), "offset": [14, 10], "for": c["holes"],
+                     "why": "the hole group's size, depth and counterbore or countersink in one associative callout"})
+    who = f"answers given for plan {plan_id}"
+    named = (model.get("design") or {}).get("dimensions") or []
+    for feat, fit in (answers.get("fits") or {}).items():
+        m = FIT_CODE.search(str(fit))
+        if not m:
+            skipped.append(f"fit for {feat}: no ISO 286 code found in {fit!r}")
+            continue
+        hole_fit, shaft_fit = (m.group(1), m.group(2)) if m.group(1) else (None, m.group(3))
+        size = None
+        num = __import__("re").search(r"(\d+(?:\.\d+)?)", str(fit).replace(hole_fit or "", "").replace(shaft_fit or "", ""))
+        if num:
+            size = float(num.group(1))
+        elif feat in holes:
+            size = holes[feat]["diameter"]
+        dim = next((d for d in named if isinstance(d.get("value"), (int, float)) and size is not None and abs(d["value"] - size) <= 0.001), None)
+        if dim is None:
+            skipped.append(f"fit for {feat}: no model dimension of {size} to put it on (add it in the model's sketch)")
+            continue
+        if answers.get("apply_fits_to_model") is not True:
+            # a model dimension keeps its tolerance in the part: setting it from the drawing changes the part
+            skipped.append(f"fit {fit} for {feat}: it goes on the model dimension {dim['name']}, so it changes the part; answer "
+                           "apply_fits_to_model=true to allow that, or set the tolerance in the part")
+            continue
+        act = {"do": "tolerance", "dimension": dim["name"], "type": "fit", "confirmed_by": who, "for": [feat], "model_change": True}
+        if hole_fit:
+            act["hole_fit"] = hole_fit
+        if shaft_fit:
+            act["shaft_fit"] = shaft_fit
+        acts.append(act)
+    for feat, value in (answers.get("surface_symbols") or {}).items():
+        h = holes.get(feat)
+        if h is None:
+            skipped.append(f"surface symbol for {feat}: only hole features can be referenced for now")
+            continue
+        acts.append({"do": "surface_finish", "view": "@main", "edge": _entry_point(h), "offset": [-18, 12], "symbol": "machining_required",
+                     "roughness_max": str(value), "confirmed_by": who, "for": [feat]})
+    return acts, skipped
+
+
 def _group_specs(threads: dict) -> dict[str, list[str]]:
     by: dict[str, list[str]] = {}
     for hid, spec in threads.items():
@@ -452,18 +534,27 @@ def make_plan(model: dict, classification: dict, reasoning: dict, dims: dict, *,
                 "maintenance": "service technician", "general_arrangement": "planner and installer"}.get(purpose, "workshop")
     package = [dict(p, status="this plan" if i == 0 else "planned") for i, p in enumerate(classification["package"])]
     for p in package:
-        if any(w in p["drawing"].lower() for w in ("flat pattern", "cut list", "exploded", "weld symbols", "joint details")):
-            p["status"] = "needs an add-in capability not yet available" if p["status"] != "this plan" else p["status"]
+        low = p["drawing"].lower()
+        if p["status"] == "this plan":
+            continue
+        if any(w in low for w in ("flat pattern", "exploded", "joint details")):
+            p["status"] = "needs an add-in capability not yet available"
+        elif "cut list" in low:
+            p["status"] = "planned: the cut-list table needs the add-in 0.15"
+        elif "weld symbols" in low:
+            p["status"] = "needs each joint's weld from the designer (weld symbols with the add-in 0.15)"
     blocking = [q for q in qs if q["blocking"]]
     orth = [v["orientation"] for v in views]
     create = {"doc": doc, "sheet": sh, "projection": prof["projection"], "views": orth, "scale": sc, "dimensions": True,
               "properties": tb or None, "notes": notes, "centre_marks": True}
     deferred = []
     if any(c.get("needs_confirmation") for c in dims.get("callouts", [])):
-        deferred.append("tapped-hole callouts: after the threads are confirmed and modelled (cosmetic thread or Hole Wizard)")
-    deferred.append("hole callouts as associative annotations: the add-in has no hole-callout action yet (callouts are listed in the plan)")
+        deferred.append("thread callouts: a hole callout shows the thread only when the model defines it (Hole Wizard or a cosmetic thread)")
+    plan_id = "pl_" + uuid.uuid4().hex[:12]
+    ann_acts, ann_skipped = annotation_actions(model, views, dims, answers, plan_id)
+    deferred += ann_skipped
     plan = {
-        "plan_id": "pl_" + uuid.uuid4().hex[:12], "created": round(time.time(), 3), "engine": "drafting 0.1.0",
+        "plan_id": plan_id, "created": round(time.time(), 3), "engine": "drafting 0.1.0",
         "model": {"doc": doc, "title": model.get("title"), "kind": kind},
         "purpose": purpose, "audience": audience,
         "disciplines": {"applies": applies, "primary": classification["primary"], "overridden": classification["overridden"]},
@@ -479,7 +570,7 @@ def make_plan(model: dict, classification: dict, reasoning: dict, dims: dict, *,
         "title_block": tb, "title_block_missing": tb_missing,
         "questions": qs, "ready_to_build": True, "release_blocked": bool(blocking),
         "release_blocked_by": [q["id"] for q in blocking],
-        "execution": {"create_drawing": create, "then": [
+        "execution": {"create_drawing": create, "annotations": ann_acts, "annotations_need": "add-in 0.15", "then": [
             *[f"section {x['label']}-{x['label']}: {x['direction']} through {x['through']} in the {views[0]['orientation']} view" for x in sections],
             *[f"detail {x['label']} at {x['scale']} through {x['through']}" for x in details],
             "insert the model's dimensions into the new views, centre marks, arrange dimensions",

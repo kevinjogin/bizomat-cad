@@ -226,9 +226,79 @@ def test_names_dimensions_and_mass_are_read_with_their_status():
     h = rec["bodies"][0]["holes"][0]
     assert "M6 Tapping" in h["named_by"] and h["possible_thread"]["confidence"] == "medium"
     kinds = {p["kind"] for p in m["problems"]}
-    assert {"material", "mass", "sketch"} <= kinds, kinds
+    # an add-in before 0.15 leaves an empty material out of its read: nothing is claimed about the part's material,
+    # and the mass that does not fit the stated material is reported as unexplained, not as a missing material
+    assert {"material_unverified", "mass_unverified", "sketch"} <= kinds, kinds
+    assert not {"material", "mass"} & kinds
+    assert all(p["severity"] == "info" for p in m["problems"] if p["kind"].endswith("_unverified"))
     assert any(u["what"] == "threads" and u["blocking"] for u in m["unknown"])
     assert any(c["what"] == "material" and "title block" in c["source"] for c in m["confirmed"])
+    assert m["design"]["details_read"] is False and m["overall"]["material_read_from_part"] is False
+
+
+def _details(material="", density=7.85, mass_kg=None, volume_m3=3.2e-4, override=False, holes=(), threads=(), units="mm"):
+    """The model details an add-in of 0.15 reports (ModelData.cs), in its own shape and units."""
+    mass_kg = volume_m3 * density * 1000 if mass_kg is None else mass_kg
+    implied = mass_kg / volume_m3
+    return {"units": {"length": units, "angle": "deg"}, "configurations": [{"name": "Default", "active": True}],
+            "custom_properties": {"Description": "Plate"},
+            "material": {"active": {"name": material, "database": "SOLIDWORKS Materials" if material else None, "assigned": bool(material)}},
+            "mass_properties": {"mass": {"value": mass_kg * 1000, "unit": "g"}, "volume": {"value": volume_m3 * 1e9, "unit": "mm^3"},
+                                "density": {"value": density, "unit": "g/cm^3"},
+                                "density_from_mass_and_volume": {"value": round(implied, 6), "unit": "kg/m^3"},
+                                "consistent": abs(implied - density * 1000) <= 1e-6 * max(1.0, density * 1000),
+                                "override_mass": override, "user_assigned": False},
+            "holes": list(holes), "threads": list(threads), "dimensions": []}
+
+
+def test_material_is_claimed_missing_only_when_solidworks_says_so():
+    read = _plate_read() | {"details": _details(material="")}
+    m = understanding.build("part", "P", read, {}, _pcd_rec(), {"Material": "S355 steel"})
+    p = [p for p in m["problems"] if p["kind"] == "material"]
+    assert p and p[0]["severity"] == "major" and "no material assigned" in p[0]["why"]
+    assert m["overall"]["material_read_from_part"] is True and m["design"]["details_read"] is True
+    read = _plate_read() | {"details": _details(material="AISI 1020")}
+    m = understanding.build("part", "P", read, {}, _pcd_rec())
+    assert m["overall"]["material"] == "AISI 1020"
+    assert any(c["what"] == "material" and c["value"] == "AISI 1020" and "details" in c["source"] for c in m["confirmed"])
+    assert not [p for p in m["problems"] if p["kind"] in ("material", "material_unverified")]
+
+
+def test_the_mass_chain_explains_a_mass_that_does_not_fit_the_material():
+    # density and volume agree with the mass, but the density is far from steel: the document density is wrong
+    read = _plate_read() | {"details": _details(material="", density=0.001)}
+    m = understanding.build("part", "P", read, {}, _pcd_rec(), {"Material": "S355 steel"})
+    why = " ".join(p["why"] for p in m["problems"] if p["kind"] == "mass")
+    assert "density of 0.001 g/cm3" in why
+    # a mass override: reported as such, and the mass is not trusted as computed
+    read = _plate_read() | {"details": _details(material="AISI 1020", mass_kg=0.00032, override=True)}
+    m = understanding.build("part", "P", read, {}, _pcd_rec())
+    assert any(p["kind"] == "mass" and "overridden" in p["why"] for p in m["problems"])
+    # mass and density disagree with no override flag: SOLIDWORKS' own numbers are inconsistent
+    read = _plate_read() | {"details": _details(material="AISI 1020", mass_kg=0.00032)}
+    m = understanding.build("part", "P", read, {}, _pcd_rec())
+    assert any(p["kind"] == "mass" and p["severity"] == "major" and "disagree" in p["why"] for p in m["problems"])
+
+
+def test_hole_wizard_threads_are_confirmed_and_matched_to_holes():
+    hw = {"feature": "M6 Tapped Hole1", "hole_type": "Tapped", "standard": "ISO", "size": "M6x1.0", "thread_class": "6H",
+          "tap_drill_diameter": 5.0, "thread_depth": 12.0, "threaded": True, "threaded_basis": "hole type"}
+    rec = _pcd_rec()
+    read = _plate_read() | {"details": _details(material="AISI 1020", holes=[hw])}
+    m = understanding.build("part", "P", read, {}, rec)
+    assert not any(u["what"] == "threads" for u in m["unknown"]), "SOLIDWORKS defines the thread: nothing to ask"
+    assert all(h["thread_spec"]["size"] == "M6x1.0" for h in rec["bodies"][0]["holes"])
+    assert any(c["what"] == "thread" and "M6x1.0" in c["value"] and c["depth_mm"] == 12.0 for c in m["confirmed"])
+    # a plain Hole Wizard hole is not a thread
+    rec = _pcd_rec()
+    plain = dict(hw, hole_type="Simple", threaded=False, threaded_basis=None, thread_class=None)
+    m = understanding.build("part", "P", _plate_read() | {"details": _details(material="AISI 1020", holes=[plain])}, {}, rec)
+    assert any(u["what"] == "threads" for u in m["unknown"])
+
+
+def test_a_document_in_inches_is_reported():
+    m = understanding.build("part", "P", _plate_read() | {"details": _details(material="AISI 1020", units="in")}, {}, _pcd_rec())
+    assert any(p["kind"] == "units" for p in m["problems"])
 
 
 def test_pitch_circle_given_as_offsets_and_repeated_locations_are_found():
@@ -304,6 +374,28 @@ def test_section_placement_finds_free_space():
         assert box[2] <= o[0] or box[0] >= o[2] or box[3] <= o[1] or box[1] >= o[3]
 
 
+def test_a_weldment_plan_puts_solidworks_cut_list_on_the_drawing_and_never_a_weld():
+    case = next(c for c in benchmarks.CASES if c["name"] == "welded_frame")
+    rec = features.recognise(benchmarks.build_facts(case))
+    read = {"features": [{"name": "Structural Member1", "type": "WeldMemberFeat"}, {"name": "Cut list", "type": "SolidBodyFolder"}]}
+    ana = engine.analyse("part", "frame", read, {}, rec)
+    pl = engine.plan(ana, doc="C:\\x\\frame.SLDPRT")
+    cut = [a for a in pl["execution"]["annotations"] if a["do"] == "cut_list"]
+    assert cut and cut[0]["at"] == "@top_right" and cut[0]["view"] == "@main"
+    assert not any(a["do"] == "weld_symbol" for a in pl["execution"]["annotations"]), "a weld is never chosen by the plan"
+    assert any("weld symbols" in d and "designer" in d for d in pl["execution"]["deferred"])
+    assert any(u["what"] == "welds" and u["blocking"] for u in ana["model"]["unknown"])
+    assert all(a["do"] != "hole_callout" or a["view"] == "@main" for a in pl["execution"]["annotations"])
+
+
+def test_a_table_over_a_view_or_off_the_sheet_is_reported():
+    d = {"sheet": {"width_mm": 420, "height_mm": 297}, "views": [{"name": "V1", "outline_mm": [300, 200, 400, 280]}],
+         "annotations": [{"view": "Sheet", "annotations": [], "tables": [{"type": "weldment cut list", "box_mm": [320, 250, 410, 287]},
+                                                                          {"type": "revision", "box_mm": [380, 280, 440, 300]}]}]}
+    checks = [f["check"] for f in layout.evaluate_annotations(d)["findings"]]
+    assert "table_overlaps_view" in checks and "table_off_sheet" in checks
+
+
 # ----------------------------------------------------------------------------- learning store
 
 def test_feedback_keeps_decisions_and_only_retained_expert_approvals_become_examples(tmp_path, monkeypatch):
@@ -313,9 +405,9 @@ def test_feedback_keeps_decisions_and_only_retained_expert_approvals_become_exam
     assert learning.get_plan("acct-1", pl["plan_id"])["plan_id"] == pl["plan_id"]
     assert learning.get_plan("acct-2", pl["plan_id"]) is None, "plans are per account"
     learning.record_feedback("acct-1", "change_views", plan_id=pl["plan_id"], before=["top", "front"], after=["top"], reviewer="user")
-    r = learning.record_feedback("acct-1", "expert_approve", plan_id=pl["plan_id"], reviewer="expert", retain=False)
+    r = learning.record_feedback("acct-1", "expert_approve", plan_id=pl["plan_id"], reviewer="expert", retain=False, reviewer_name="A. Reviewer")
     assert not r["retained_as_example"]
-    r = learning.record_feedback("acct-1", "expert_approve", plan_id=pl["plan_id"], reviewer="expert", retain=True)
+    r = learning.record_feedback("acct-1", "expert_approve", plan_id=pl["plan_id"], reviewer="expert", retain=True, reviewer_name="A. Reviewer")
     assert r["retained_as_example"] and r["status"] == "approved expert example"
     assert len(learning.examples("acct-1")) == 1
     g_user = learning.add_guideline("acct-1", {"topic": "our datum", "concept": "datum", "practice": "A is always the base"}, "user")
@@ -325,6 +417,48 @@ def test_feedback_keeps_decisions_and_only_retained_expert_approvals_become_exam
     assert st["plans"] == 1 and st["approved_examples"] == 1 and st["guidelines"] == 2
     with pytest.raises(ValueError):
         learning.record_feedback("acct-1", "teach_everything")
+    with pytest.raises(ValueError, match="reviewer must be expert"):
+        learning.record_feedback("acct-1", "expert_approve", plan_id=pl["plan_id"], reviewer="user", reviewer_name="Me")
+    with pytest.raises(ValueError, match="reviewer_name"):
+        learning.record_feedback("acct-1", "expert_reject", plan_id=pl["plan_id"], reviewer="expert")
+
+
+def test_expert_reviews_are_a_benchmark_of_their_own_with_corrections_and_agreement(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENSKETCH_DATA", str(tmp_path))
+    pls = []
+    for name in ("bracket", "machined_block", "stepped_shaft"):
+        pl = engine.plan(_analysis(name), doc=name)
+        learning.save_plan("acct", pl)
+        pls.append(pl["plan_id"])
+    with pytest.raises(ValueError, match="No plan"):
+        learning.submit_review("acct", "pl_nope", None, {})
+    learning.submit_review("acct", pls[0], "a.SLDDRW", {"quality_index": 80, "release_blocked": True,
+                                                      "release_blockers": [{"message": "general tolerance"}]})
+    learning.submit_review("acct", pls[1], "b.SLDDRW", {"quality_index": 92, "release_blocked": False, "release_blockers": []})
+    learning.submit_review("acct", pls[2], "c.SLDDRW", {"quality_index": 70, "release_blocked": True, "release_blockers": []})
+    rv = learning.review("acct", pls[0])
+    assert rv["status"] == "awaiting_expert" and "not expert-reviewed" in rv["label"] and rv["agreement"] is None
+    assert learning.review_summary("acct")["expert_reviewed"] == 0, "nothing is expert-reviewed until an expert says so"
+    # two corrections by the person, then the expert's verdicts
+    learning.record_feedback("acct", "edit_dimensions", plan_id=pls[0])
+    learning.record_feedback("acct", "move_annotation", plan_id=pls[0])
+    learning.record_feedback("acct", "accept", plan_id=pls[0])          # an acceptance is not a correction
+    r = learning.record_feedback("acct", "expert_reject", plan_id=pls[0], reviewer="expert", reviewer_name="A. Reviewer",
+                                 expert_score=55, comment="datum scheme")
+    assert r["review"]["status"] == "expert_reviewed" and r["review"]["corrections_before_verdict"] == 2
+    assert r["review"]["agreement"] == "agree"                          # the engine blocked it too
+    learning.record_feedback("acct", "expert_reject", plan_id=pls[1], reviewer="expert", reviewer_name="A. Reviewer", expert_score=60)
+    learning.record_feedback("acct", "expert_approve", plan_id=pls[2], reviewer="expert", reviewer_name="B. Reviewer")
+    s = learning.review_summary("acct")
+    assert s["expert_reviewed"] == 3 and s["approved"] == 1 and s["rejected"] == 2 and s["awaiting_expert"] == 0
+    assert s["agreement_with_engine"] == {"agree": 1, "engine missed problems": 1, "engine stricter": 1}
+    assert s["mean_corrections_before_verdict"] == round(2 / 3, 2)
+    assert s["mean_score_gap"] == round(((80 - 55) + (92 - 60)) / 2, 1)
+    assert "does not verify" in s["label"] and "synthetic" in s["label"]
+    with pytest.raises(ValueError, match="already reviewed"):
+        learning.submit_review("acct", pls[0], "a.SLDDRW", {"quality_index": 90})
+    assert learning.stats("acct")["reviews"]["expert_reviewed"] == 3
+    assert learning.review_summary("other")["expert_reviewed"] == 0, "reviews are per account"
 
 
 def test_the_drafting_modules_import_first_in_a_fresh_process():

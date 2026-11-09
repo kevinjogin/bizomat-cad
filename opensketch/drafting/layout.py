@@ -200,3 +200,90 @@ def free_spot(drawing: dict, w: float, h: float, near: str | None = None) -> lis
         return [round(W - MARGIN - w / 2, 1), round(H - MARGIN - h / 2, 1)]
     _, x, y = min(cands)
     return [round(x, 1), round(y, 1)]
+
+
+MIN_TEXT = 2.5          # mm: a commonly used minimum lettering height on drawings (company standards may differ)
+
+
+def _abox(a: dict):
+    b = a.get("box_mm")
+    if not b or len(b) != 4:
+        return None
+    return (min(b[0], b[2]), min(b[1], b[3]), max(b[0], b[2]), max(b[1], b[3]))
+
+
+def evaluate_annotations(drawing: dict) -> dict[str, Any]:
+    """Checks on the annotations themselves (sw_get_drawing annotations=true): overlaps between annotations, text
+    off the sheet or in the title block, text below the minimum height, dimensions on a pictorial view. Fixes move
+    an annotation's text only ({"do": "move_annotation"}), never its value or what it is attached to."""
+    sheet = drawing.get("sheet") or {}
+    W, H = float(sheet.get("width_mm") or 420), float(sheet.get("height_mm") or 297)
+    title = (W - TITLE_W, 0.0, W, TITLE_H)
+    findings: list[dict] = []
+    rows = []
+    iso_views = {str(v.get("name")) for v in drawing.get("views") or [] if _orient(v) == "isometric"}
+    for grp in drawing.get("annotations") or []:
+        for a in grp.get("annotations") or []:
+            if a.get("error"):
+                continue
+            rows.append((grp.get("view"), a))
+            if grp.get("view") in iso_views and a.get("type") == "dimension":
+                findings.append({"severity": "minor", "category": "presentation", "check": "pictorial_dimensions",
+                                 "message": f"{a.get('name')} is a dimension on the isometric {grp.get('view')}: pictorial views carry none.",
+                                 "view": grp.get("view")})
+    taken = []
+    for view, a in rows:
+        b = _abox(a)
+        if b is None:
+            continue
+        name = a.get("name") or a.get("type")
+        if b[0] < 0 or b[1] < 0 or b[2] > W or b[3] > H:
+            findings.append({"severity": "major", "category": "presentation", "check": "annotation_off_sheet",
+                             "message": f"{name} ({a.get('type')}) runs off the sheet.", "view": view})
+        elif _overlap_area(b, title) > 1.0 and view != "Sheet":
+            findings.append({"severity": "minor", "category": "presentation", "check": "annotation_title_block",
+                             "message": f"{name} ({a.get('type')}) sits in the title block area.", "view": view})
+        h = a.get("height_mm")
+        if isinstance(h, (int, float)) and 0 < h < MIN_TEXT - 0.05:
+            findings.append({"severity": "minor", "category": "presentation", "check": "text_height",
+                             "message": f"{name}: text {h:g} mm high, under the {MIN_TEXT:g} mm minimum commonly used on drawings.", "view": view})
+        for vb, other in taken:
+            ov = _overlap_area(b, vb)
+            if ov > 0.5:
+                fix = None
+                at = a.get("at")
+                if at and a.get("name") and a.get("type") in ("dimension", "note", "gtol", "datum", "surface_finish"):
+                    # the shortest move that clears the other box, plus a 1.5 mm gap
+                    dx_r, dx_l = vb[2] - b[0] + 1.5, b[2] - vb[0] + 1.5
+                    dy_u, dy_d = vb[3] - b[1] + 1.5, b[3] - vb[1] + 1.5
+                    shift = min(((dx_r, 0), (-dx_l, 0), (0, dy_u), (0, -dy_d)), key=lambda d: abs(d[0]) + abs(d[1]))
+                    nb = (b[0] + shift[0], b[1] + shift[1], b[2] + shift[0], b[3] + shift[1])
+                    if nb[0] >= 0 and nb[1] >= 0 and nb[2] <= W and nb[3] <= H and not any(_overlap_area(nb, t) > 0.5 for t, _ in taken):
+                        fix = {"do": "move_annotation", "name": a["name"], "to": [round(at[0] + shift[0], 2), round(at[1] + shift[1], 2)]}
+                        b = nb
+                findings.append({"severity": "minor", "category": "presentation", "check": "annotation_overlap",
+                                 "message": f"{name} overlaps {other.get('name') or other.get('type')}.", "view": view,
+                                 **({"fix": fix} if fix else {})})
+                if fix:
+                    break
+        taken.append((b, a))
+    counts = {}
+    for _, a in rows:
+        counts[a.get("type")] = counts.get(a.get("type"), 0) + 1
+    tables = [t for g in drawing.get("annotations") or [] for t in g.get("tables") or []]
+    for t in tables:
+        tb = _abox(t)
+        if tb is None:
+            continue
+        if tb[0] < 0 or tb[1] < 0 or tb[2] > W or tb[3] > H:
+            findings.append({"severity": "major", "category": "presentation", "check": "table_off_sheet",
+                             "message": f"The {t.get('type')} table runs off the sheet."})
+        for v in drawing.get("views") or []:
+            o = v.get("outline_mm")
+            if o and _overlap_area(tb, (min(o[0], o[2]), min(o[1], o[3]), max(o[0], o[2]), max(o[1], o[3]))) > 1.0:
+                findings.append({"severity": "major", "category": "presentation", "check": "table_overlaps_view",
+                                 "message": f"The {t.get('type')} table covers part of {v.get('name')}: move the view or the table.",
+                                 "view": v.get("name")})
+    return {"findings": findings, "corrections": [f["fix"] for f in findings if f.get("fix")], "counts": counts,
+            "tables": [t.get("type") for t in tables],
+            "notes": [a.get("text") for _, a in rows if a.get("type") == "note" and a.get("text")]}
