@@ -262,8 +262,8 @@ released; development-signed), never overwritten.
   its own signed-in clones (`bizomat.ps1 setup`, then `git pull`); raw GitHub links do not work for a private
   repository. GitHub Actions minutes for private repositories are limited: when they run out, every job fails at once
   with no log (seen 7 Nov 2026), and `cloudflare.ps1` runs the repository's own checks before each deploy. The Fly app
-  below is still linked in Fly to jogkev-creator/CADOS: the owner unlinks it there (no repository is linked again;
-  deploys go through `deploy.yml` and its preflight).
+  below has no GitHub repository attached (Fly dashboard > cados > Settings shows "Attach existing repository", checked
+  9 Nov 2026): never attach one; deploys go through `deploy.yml` and its preflight.
 - Listens on `::` (`--host ::`, `__main__.listen_sockets`: one dual-stack socket, IPv4 alone where there is no IPv6), so
   the BIZOMAT router (Fly app `bizomat`) reaches it over Fly's private network at cados.internal:8080.
 - Public address https://bizomat.ai/cad: CAD Automation lives under the BIZOMAT website's own address (the owner's
@@ -293,8 +293,8 @@ released; development-signed), never overwritten.
   Deploys (since 9 Nov 2026): by hand only, `deploy.yml` (Actions > Deploy to Fly.io (cados), `confirm` = `DEPLOY`,
   repository secret FLY_CADOS_TOKEN, a deploy token for cados only): the tests, then the preflight
   (`.github/scripts/fly-preflight.py`, which stops a deploy that would add, remove or resize the Machine), then
-  `flyctl deploy --app cados`. It never creates an app or volume. Until the owner unlinks it in Fly, the app is still
-  linked to jogkev-creator/CADOS (Fly built every push to that repository's main); nothing is pushed there any more.
+  `flyctl deploy --app cados`. It never creates an app or volume. No repository is attached to the app in Fly (checked
+  9 Nov 2026; it used to build every push to jogkev-creator/CADOS main), so this workflow is the one deploy source.
   Production, read from Fly on 9 Nov 2026: one Machine in ams (Amsterdam, not Sydney), shared CPU, 2 vCPUs, 2048 MB,
   and the 1 GB volume opensketch_data in ams; fly.toml matches it. Never add a Machine, change its size or memory, or
   move its region without the owner's approval (a move to syd means moving the volume: a planned change of its own).

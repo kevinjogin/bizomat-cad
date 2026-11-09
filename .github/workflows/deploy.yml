@@ -18,8 +18,8 @@
 # replaced in place, CAD MCP is offline for about 15-90 s) and a check that https://cados.fly.dev/healthz reports the
 # new version within 3 minutes.
 #
-# One deploy source: until 9 Nov 2026 the cados app was linked in Fly to jogkev-creator/CADOS, and Fly built every push
-# to that repository's main. Before the first deploy from here, unlink it (Fly dashboard > cados > Settings > GitHub).
+# One deploy source: no GitHub repository is attached to the cados app in Fly (checked 9 Nov 2026; it used to build every
+# push to jogkev-creator/CADOS main). Never attach one: this workflow, with its preflight, is how cados is deployed.
 #
 # Rollback: `flyctl releases -a cados --image`, then `flyctl deploy -a cados --image <the previous image> --ha=false`
 # (README.md, "Recovery and maintenance"). Volume snapshots: Fly dashboard > cados > Volumes.

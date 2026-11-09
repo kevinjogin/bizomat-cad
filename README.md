@@ -228,10 +228,10 @@ automatically from this repository: no push, merge or schedule.
    repository secret `FLY_CADOS_TOKEN`.
 2. Settings > Actions > General: allow Actions (they were turned off for the move, so that copying the branches
    started no workflow).
-3. **One deploy source.** Until 9 Nov 2026 the `cados` app was linked in Fly to `jogkev-creator/CADOS`, and Fly
-   built and deployed every push to that repository's `main` by itself. Before deploying from here, unlink it: Fly
-   dashboard > `cados` > Settings > GitHub > Disconnect. (Do not link this repository there instead: deploys go
-   through the workflow below, with its preflight.)
+3. **One deploy source.** The `cados` app has no GitHub repository attached in Fly (Fly dashboard > `cados` >
+   Settings shows "Attach existing repository", checked 9 Nov 2026; it used to build every push to
+   `jogkev-creator/CADOS` `main`). Keep it that way: never attach a repository there, because deploys go through the
+   workflow below, with its preflight.
 
 **Deploy**: Actions > **Deploy to Fly.io (cados)** > Run workflow on `main`, `confirm` = `DEPLOY`. It:
 
