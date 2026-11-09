@@ -252,9 +252,18 @@ async def sw_create_document(name: str, kind: Literal["part", "assembly"] = "par
 
 @mcp.tool()
 @_routed
-async def sw_open_document(path: Annotated[str, Field(description="Full Windows path of a .SLDPRT or .SLDASM")], device: _DEV = None) -> CallToolResult:
+async def sw_open_document(path: Annotated[str, Field(description="Full Windows path of a .SLDPRT, .SLDASM or .SLDDRW")],
+                           reopen: Annotated[bool, Field(description="Drawings, add-in 0.15: close it and open it again from disk, to "
+                                                                     "check what was saved (refused while it has unsaved changes)")] = False,
+                           device: _DEV = None) -> CallToolResult:
     """Open a SOLIDWORKS file (or bring it to the front if it is open)."""
-    return await _simple("open_document", {"path": path}, timeout=180)
+    if reopen:
+        if not path.lower().endswith(".slddrw"):
+            return _text({"error": "reopen is for drawings (.SLDDRW)."}, True)
+        old = swbridge.addin_too_old(_who(), DETAILS_FROM, "Reopening a drawing", device=_device())
+        if old:
+            return _text({"error": old}, True)
+    return await _simple("open_document", {"path": path, "reopen": True if reopen else None}, timeout=180)
 
 
 @mcp.tool()

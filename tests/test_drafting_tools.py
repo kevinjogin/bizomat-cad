@@ -24,8 +24,11 @@ class SimDrafting(SimSW):
     density = 2.7
     mass_override = None
 
+    addin_version = "0.15.0"
+
     def __init__(self):
         super().__init__()
+        self.part_changed = False
         self.detail_reads = 0
         self.annotation_reads = 0
         self.tolerances = {}
@@ -173,6 +176,11 @@ class SimDrafting(SimSW):
                 for v in d["views"]:
                     if v["type"] == "section":
                         v["dimensions"] = 2
+                main = next((v for v in d["views"] if v["name"] == act.get("view")), d["views"][0])
+                if not any(x.get("dimension", "").endswith(".Part") for x in d.get("annotations", [])):
+                    o = main["outline_mm"]
+                    self._annotate(d, main["name"], "dimension", [o[0], o[3] + 4], 16, 5, dimension="L@Outline@Clamp.Part", value=160.0,
+                                   unit="mm", reference=False)
             elif act["do"] in ("hole_callout", "surface_finish"):
                 self.annotation_actions.append(act)
                 v = next((v for v in d["views"] if v["name"] == act["view"]), None)
@@ -189,10 +197,25 @@ class SimDrafting(SimSW):
                 continue
             elif act["do"] == "tolerance":
                 self.annotation_actions.append(act)
-                if not act.get("model_change"):
+                views = {v["name"].lower() for v in d["views"]}
+                owned = any(act["dimension"].lower().endswith("@" + v) for v in views)      # as DrawingAnnotations.cs decides
+                if not owned and not act.get("model_change"):
                     raise SimRefusal(f"{act['dimension']} is a model dimension: its tolerance is stored in the part, so setting it here "
                                      "changes the part. Set it in the part, or pass model_change=true once the designer agrees.")
-                self.tolerances[act["dimension"]] = {"type": act["type"], "hole_fit": act.get("hole_fit"), "shaft_fit": act.get("shaft_fit")}
+                tol = {"type": act["type"], **{k: act[k] for k in ("lower", "upper", "hole_fit", "shaft_fit") if k in act}}
+                if owned:
+                    row = next((x for x in d.get("annotations", []) if x.get("dimension") == act["dimension"]), None)
+                    if row is None:
+                        raise SimRefusal(f"No dimension {act['dimension']} on this drawing.")
+                    row["tolerance"] = tol
+                else:
+                    self.tolerances[act["dimension"]] = tol
+                    self.part_changed = True
+                out.append({"do": "tolerance", "ok": True, "dimension": act["dimension"], "tolerance": act["type"], "applies_to_model": not owned})
+                continue
+            elif act["do"] in self.MORE:
+                out.append({"do": act["do"], "ok": True, **self._more(d, act)})
+                continue
             elif act["do"] == "move_annotation":
                 row = next((x for x in d.get("annotations", []) if x["name"] == act["name"]), None)
                 if row is None:
@@ -200,8 +223,97 @@ class SimDrafting(SimSW):
                 dx, dy = act["to"][0] - row["at"][0], act["to"][1] - row["at"][1]
                 row["at"] = list(act["to"])
                 row["box_mm"] = [row["box_mm"][0] + dx, row["box_mm"][1] + dy, row["box_mm"][2] + dx, row["box_mm"][3] + dy]
+                out.append({"do": act["do"], "ok": True, **{k: v for k, v in row.items() if k != "view"}})   # AnnotationInfo, as the add-in
+                continue
             out.append({"do": act["do"], "ok": True})
-        return {"doc": a["doc"], "actions": out, "views": copy.deepcopy(d["views"])}, {}
+        return {"doc": a["doc"], "results": out, "views": copy.deepcopy(d["views"])}, {}   # as DrawingEdits.cs answers
+
+    MORE = ("note", "dimension", "ordinate", "centre_mark", "centre_line", "datum", "gtol", "weld_symbol", "revision_table",
+            "hole_table", "cut_list")
+
+    def _on_edge(self, view, points, kind):
+        """The stand-in's version of the add-in's pick: each model point within 2 mm of an edge of that kind."""
+        from build123d import Vector
+        model = self.docs[view["model"]]
+        _, st = self._regen(model)
+        for p in points:
+            ok = False
+            for e in st.part.edges():
+                t = str(e.geom_type).upper()
+                if kind != "any" and not t.endswith(kind.upper()):
+                    continue
+                if e.distance_to(Vector(*p)) <= 2.0:
+                    ok = True
+                    break
+            if not ok:
+                raise SimRefusal(f"No {kind} edge within 2 mm of {p} in {view['name']}'s part.")
+
+    def _more(self, d, act):
+        what = act["do"]
+        if what == "note":
+            return self._annotate(d, "Sheet", "note", act["at"], 2.2 * len(act["text"]), 3.5, text=act["text"], height_mm=3.5)
+        if what in ("revision_table", "hole_table"):
+            if what == "hole_table":
+                v = next(v for v in d["views"] if v["name"] == act["view"])
+                self._on_edge(v, act["origin"], "line")
+            t = {"type": "revision" if what == "revision_table" else "hole", "rows": 2, "columns": 4,
+                 "box_mm": [act["at"][0] - (80 if what == "revision_table" else 0), act["at"][1] - 20, act["at"][0] + (0 if what == "revision_table" else 80), act["at"][1]]}
+            d.setdefault("tables", []).append(t)
+            return {"added": what.replace("_", " ")}
+        v = next((v for v in d["views"] if v["name"] == act["view"]), None)
+        if v is None:
+            raise SimRefusal(f"No view {act['view']}")
+        if what == "cut_list":
+            raise SimRefusal("SOLIDWORKS did not insert the cut list (is the part a weldment?)")
+        o = v["outline_mm"]
+        near = act.get("at") or [o[2] + 10, o[3] - 10]
+        if what == "dimension":
+            kind = {"diameter": "circle", "radius": "circle"}.get(act["kind"], "line")
+            self._on_edge(v, act["edges"], kind)
+            n = sum(1 for x in d.get("annotations", []) if str(x.get("dimension", "")).startswith("RD")) + 1
+            return self._annotate(d, v["name"], "dimension", near, 18, 5, dimension=f"RD{n}@{v['name']}", value=round(10.0 * n, 3),
+                                  unit="mm", reference=True, kind=act["kind"])
+        if what == "ordinate":
+            self._on_edge(v, act["edges"][:1], "line")
+            self._on_edge(v, act["edges"][1:], "circle")
+            return self._annotate(d, v["name"], "dimension", near, 30, 5, kind="ordinate")
+        if what == "centre_mark":
+            self._on_edge(v, act["edge"], "circle")
+            return self._annotate(d, v["name"], "centre_mark", near, 4, 4)
+        if what == "centre_line":
+            return self._annotate(d, v["name"], "centre_line", near, 2, 20)
+        if act.get("edge"):
+            self._on_edge(v, act["edge"], "any")
+        if what == "datum":
+            return self._annotate(d, v["name"], "datum", near, 6, 6, label=act["label"])
+        if what == "gtol":
+            return self._annotate(d, v["name"], "gtol", near, 30, 6, frames=[{"values": [f["tolerance"] for f in act["frames"]]}])
+        return self._annotate(d, v["name"], "weld_symbol", near, 20, 10, texts=[act.get("size")], symbol_code_sent="<ISOWELD-FILLET>")
+
+    def op_status(self, a):
+        docs = [{"doc": p, "title": d["title"], "kind": d["kind"], "active": False, "unsaved": bool(d.get("unsaved")),
+                 "saved_as": p} for p, d in self.docs.items()]
+        if self.part_changed:
+            for x in docs:
+                if x["kind"] == "part":
+                    x["unsaved"] = True
+        return {"sw_version": "30.5.0.0049 (stand-in)", "addin_version": self.addin_version, "docs": docs}, {}
+
+    def op_open_document(self, a):
+        d = self._doc({"doc": a["path"]})
+        out = {"doc": a["path"], "title": d["title"], "kind": d["kind"]}
+        if a.get("reopen"):
+            if d["kind"] != "drawing":
+                raise SimRefusal("reopen is for drawings.")
+            if d.get("unsaved"):
+                raise SimRefusal(f"{d['title']} has unsaved changes: save it first (sw_save). Nothing was closed.")
+            out["reopened"] = {"from_disk": True, "file_saved_utc": "stand-in"}
+        return out, {}
+
+    def op_screenshot(self, a):
+        png = bytes.fromhex("89504e470d0a1a0a0000000d4948445200000001000000010806000000"
+                            "1f15c4890000000d49444154789c6360000002000154a24f5d0000000049454e44ae426082")
+        return {"file": "shot.png", "title": "stand-in"}, {"shot.png": png}
 
     def op_export(self, a):
         d = self._doc(a)
@@ -411,7 +523,8 @@ def test_the_build_adds_the_planned_hole_callouts_and_reads_the_annotations_back
     assert sim.annotation_reads >= 1
     assert built["quality"]["findings"] is not None
     chk, err = _call("sw_drafting_check", {"doc": built["drawing"], "plan_id": pl["plan_id"]})
-    assert not err and chk["annotations"]["counts"].get("dimension") == len(planned), chk["annotations"]
+    callouts = [x for x in sim.docs[built["drawing"]]["annotations"] if x.get("kind") == "hole callout"]
+    assert not err and len(callouts) == len(planned) and chk["annotations"]["counts"].get("dimension") >= len(planned), chk["annotations"]
     assert not any(f["check"] == "annotations_unread" for f in chk["findings"])
 
 
@@ -498,4 +611,23 @@ def test_overlapping_annotations_are_moved_apart_by_the_check_and_nothing_else_c
     moves = [m for m in chk.get("layout_moves_applied", []) if m["do"] == "move_annotation"]
     assert moves, chk.get("layout_moves_applied")
     assert {a["name"]: a.get("value") for a in d["annotations"]} == before, "values are never changed"
-    assert not any(f["check"] == "annotation_overlap" for f in chk["findings"])
+    assert not any(f["check"] == "annotation_overlap" for f in chk["findings"]), [f["message"] for f in chk["findings"] if f["check"] == "annotation_overlap"] + [(a["name"], a["box_mm"]) for a in d["annotations"]]
+
+
+def test_a_drawing_is_reopened_from_disk_only_when_saved(sim, monkeypatch):
+    doc = _plate(sim)
+    res, _ = sim.op_create_drawing({"doc": doc, "views": ["front"], "scale": [1, 2]})
+    drw = res["doc"]
+    out, err = _call("sw_open_document", {"path": drw, "reopen": True})
+    assert not err and out["reopened"]["from_disk"] is True
+    sim.docs[drw]["unsaved"] = True
+    out, err = _call("sw_open_document", {"path": drw, "reopen": True})
+    assert err and "unsaved changes" in out["error"] and "Nothing was closed" in out["error"]
+    n = len(sim.ops)
+    out, err = _call("sw_open_document", {"path": doc, "reopen": True})
+    assert err and "drawings" in out["error"] and len(sim.ops) == n
+    _old_addin(monkeypatch)
+    out, err = _call("sw_open_document", {"path": drw, "reopen": True})
+    assert err and "0.15.0" in out["error"] and len(sim.ops) == n
+    out, err = _call("sw_open_document", {"path": drw})
+    assert not err, "a plain open works with any add-in"

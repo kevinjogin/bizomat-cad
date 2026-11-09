@@ -139,6 +139,14 @@ Ask the AI: "Run the SOLIDWORKS self test, all three stages." It builds test fil
 If something fails, you can find the add-in log at `Documents\BIZOMAT CAD\Logs\log.txt`. The server
 prints its log in the PowerShell window.
 
+## 9. Live verification of a branch (developers)
+
+`windows\live_verify.py` runs the Phase 2.1 checks against this PC's own server and SOLIDWORKS, on Pack and Go copies
+of a part and its drawing, and records what SOLIDWORKS answered (screenshots, PDFs, `results.md`). It refuses any
+server that is not on this PC, copies next to the originals, and a copied drawing that still shows the original part,
+and it hashes the originals before and after. The whole procedure, with the backup and rollback of the installed add-in,
+is in the bizomat repository's `docs/drafting-intelligence/PHASE2_1_LIVE_VERIFICATION.md`, section 14.
+
 ## Good to know
 
 - **Accounts**: the server keeps its accounts and keys in `%USERPROFILE%\opensketch-data` (the folder's earlier

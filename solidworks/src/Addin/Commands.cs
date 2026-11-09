@@ -330,13 +330,25 @@ namespace OpenSketch.Sw
             var path = J.Str(a, "path");
             if (string.IsNullOrEmpty(path)) throw new UserError("Give the file's path.");
             var m = app.GetOpenDocumentByName(path) as IModelDoc2;
+            var reopened = false;
+            if (J.Bool(a, "reopen") && m != null)
+            {
+                // close and open again from disk, to see what was saved; never with unsaved changes (nothing is lost)
+                if (Kind(m) != "drawing") throw new UserError("reopen is for drawings.");
+                if (m.GetSaveFlag()) throw new UserError($"{m.GetTitle()} has unsaved changes: save it first (sw_save). Nothing was closed.");
+                app.CloseDoc(m.GetTitle());
+                m = null;
+                reopened = true;
+            }
             if (m == null || !m.Visible)
             {
                 if (!File.Exists(path)) throw new UserError("No such file: " + path);
                 m = OpenFile(path);
             }
             Activate(m);
-            return J.O("doc", Ref(m), "title", m.GetTitle(), "kind", Kind(m));
+            var o = J.O("doc", Ref(m), "title", m.GetTitle(), "kind", Kind(m));
+            if (reopened) o["reopened"] = J.O("from_disk", true, "file_saved_utc", File.GetLastWriteTimeUtc(path).ToString("o"));
+            return o;
         }
 
         Dictionary<string, object> Save(Dictionary<string, object> a)

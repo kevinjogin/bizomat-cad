@@ -475,3 +475,18 @@ def test_the_drafting_modules_import_first_in_a_fresh_process():
             "    except Exception as e:\n        bad.append(f'{n}: {e!r}')\nprint('\\n'.join(bad))\nsys.exit(1 if bad else 0)\n")
     r = subprocess.run([sys.executable, "-c", code, *mods], cwd=root, capture_output=True, text=True, timeout=300)
     assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_an_overlap_fix_takes_the_next_direction_when_the_shortest_is_blocked():
+    # C overlaps A; the shortest way out (up) lands on B, so the fix must go another way and clear everything
+    ann = [{"type": "dimension", "name": "A", "at": [20, 175], "box_mm": [20, 175, 36, 180]},
+           {"type": "dimension", "name": "B", "at": [25, 181.5], "box_mm": [25, 181.5, 45, 186.5]},
+           {"type": "dimension", "name": "C", "at": [27, 176], "box_mm": [27, 176, 47, 181]}]
+    d = {"sheet": {"width_mm": 420, "height_mm": 297}, "views": [], "annotations": [{"view": "V1", "annotations": ann, "tables": []}]}
+    fixes = layout.evaluate_annotations(d)["corrections"]
+    assert len(fixes) == 1 and fixes[0]["name"] == "C"
+    dx, dy = fixes[0]["to"][0] - 27, fixes[0]["to"][1] - 176
+    moved = (27 + dx, 176 + dy, 47 + dx, 181 + dy)
+    for other in ann[:2]:
+        b = other["box_mm"]
+        assert moved[2] <= b[0] or moved[0] >= b[2] or moved[3] <= b[1] or moved[1] >= b[3], (moved, other["name"])

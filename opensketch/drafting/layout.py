@@ -256,11 +256,13 @@ def evaluate_annotations(drawing: dict) -> dict[str, Any]:
                     # the shortest move that clears the other box, plus a 1.5 mm gap
                     dx_r, dx_l = vb[2] - b[0] + 1.5, b[2] - vb[0] + 1.5
                     dy_u, dy_d = vb[3] - b[1] + 1.5, b[3] - vb[1] + 1.5
-                    shift = min(((dx_r, 0), (-dx_l, 0), (0, dy_u), (0, -dy_d)), key=lambda d: abs(d[0]) + abs(d[1]))
-                    nb = (b[0] + shift[0], b[1] + shift[1], b[2] + shift[0], b[3] + shift[1])
-                    if nb[0] >= 0 and nb[1] >= 0 and nb[2] <= W and nb[3] <= H and not any(_overlap_area(nb, t) > 0.5 for t, _ in taken):
-                        fix = {"do": "move_annotation", "name": a["name"], "to": [round(at[0] + shift[0], 2), round(at[1] + shift[1], 2)]}
-                        b = nb
+                    # the four directions, shortest first; the first that lands clear of everything already placed
+                    for shift in sorted(((dx_r, 0), (-dx_l, 0), (0, dy_u), (0, -dy_d)), key=lambda d: abs(d[0]) + abs(d[1])):
+                        nb = (b[0] + shift[0], b[1] + shift[1], b[2] + shift[0], b[3] + shift[1])
+                        if nb[0] >= 0 and nb[1] >= 0 and nb[2] <= W and nb[3] <= H and not any(_overlap_area(nb, t) > 0.5 for t, _ in taken):
+                            fix = {"do": "move_annotation", "name": a["name"], "to": [round(at[0] + shift[0], 2), round(at[1] + shift[1], 2)]}
+                            b = nb
+                            break
                 findings.append({"severity": "minor", "category": "presentation", "check": "annotation_overlap",
                                  "message": f"{name} overlaps {other.get('name') or other.get('type')}.", "view": view,
                                  **({"fix": fix} if fix else {})})
