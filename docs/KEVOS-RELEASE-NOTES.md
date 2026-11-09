@@ -12,6 +12,10 @@
   SOLIDWORKS symbols), revision, hole and cut-list tables. Engineering values only as the designer gave them; a
   tolerance on a model dimension is refused unless the change to the part is confirmed.
 - Takes the same commands as 0.14 from a server that does not use these.
+- Connect in the BIZOMAT task pane now works like the toolbar's Connect. Before, the pane's button only restarted the
+  direct link: a Companion link that was stuck, refused or waiting stayed as it was, and the Companion was not
+  started, so people had to use the toolbar button. Both now drop a link that is not connected, start it again at
+  once, start the Companion if needed, and never cut a connected link.
 
 ## 0.14.0 (BIZOMAT CAD for SOLIDWORKS)
 

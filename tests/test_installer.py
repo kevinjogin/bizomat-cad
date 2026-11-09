@@ -309,3 +309,19 @@ def test_no_code_makes_an_opensketch_folder():
     assert 'RootName = "BIZOMAT CAD"' in folders and "FDD39AD0-238F-46AF-ADB4-6C85480369C7" in folders  # FOLDERID_Documents
     assert "File.Delete(" not in folders.replace('File.Delete(temp)', '').replace('File.Delete(path)', ''), "the migration deletes nothing of the user's"
     assert "Directory.Delete" not in folders
+
+
+def test_the_task_pane_and_the_toolbar_connect_the_same_way():
+    """Connect in the task pane once only restarted the direct link, while the toolbar's worked: both now go through
+    Host.ConnectNow (Core/ConnectPlan.cs, unit-tested in ConnectPlanTests.cs), on the add-in's current link."""
+    addin = ROOT / "solidworks" / "src" / "Addin"
+    pane = (addin / "CadosPane.cs").read_text(encoding="utf-8")
+    entry = (addin / "Entry.cs").read_text(encoding="utf-8")
+    host = (addin / "Host.cs").read_text(encoding="utf-8")
+    do_connect = pane[pane.index("void DoConnect()"):].split("}", 1)[0]
+    os_connect = entry[entry.index("public void OsConnect()"):].split("}", 1)[0]
+    assert "H.ConnectNow()" in do_connect and "Host H => Host.Current ?? host" in pane
+    assert "ConnectNow()" in os_connect
+    for path in (do_connect, os_connect):
+        assert "StartPipe" not in path and ".Connect()" not in path, "no second, diverging connect path"
+    assert "ConnectPlan.For(" in host

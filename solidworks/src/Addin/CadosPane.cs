@@ -100,6 +100,9 @@ namespace OpenSketch.Sw
         static readonly Color Idle = Color.FromArgb(135, 148, 166);
 
         readonly Host host;
+        /// <summary>The add-in's link as it is now: the one this panel was made with, unless it has been replaced since
+        /// (the toolbar and the menu use Host.Current; the panel must act on the same one).</summary>
+        Host H => Host.Current ?? host;
         readonly Label stateTitle = new Label();
         readonly Label stateDetail = new Label();
         readonly Dot dot = new Dot();
@@ -150,7 +153,7 @@ namespace OpenSketch.Sw
             connect.Margin = new Padding(0, 0, 4, 0);
             disconnect.Margin = new Padding(4, 0, 0, 0);
             connect.Click += (s, e) => Safe(DoConnect);
-            disconnect.Click += (s, e) => Safe(() => { host.Disconnect(); host.StopPipe(); Refresh2(); });
+            disconnect.Click += (s, e) => Safe(() => { H.Disconnect(); H.StopPipe(); Refresh2(); });
             buttons.Controls.Add(connect, 0, 0);
             buttons.Controls.Add(disconnect, 1, 0);
             Add(buttons, 0, 14);
@@ -185,7 +188,7 @@ namespace OpenSketch.Sw
             Add(Link("Open your CAD Automation dashboard", () => Open(Gateway() + "/dashboard")));
             Add(Link("Documentation", () => Open(Gateway() + "/docs")));
             Add(Link("Troubleshooting", () => Open(Gateway() + "/docs#troubleshooting")));
-            Add(Link("Connection details and direct link", () => host.ShowWindow()));
+            Add(Link("Connection details and direct link", () => H.ShowWindow()));
             Add(Link("Open the BIZOMAT Companion", () =>
             {
                 if (!CompanionPipe.StartCompanion())
@@ -219,16 +222,14 @@ namespace OpenSketch.Sw
 
         void DoConnect()
         {
-            Settings.UseCompanion = true;
-            host.StartPipe();
-            if (Settings.Key.StartsWith("oss_")) host.Connect();
+            H.ConnectNow();   // the same as the toolbar's Connect
             Refresh2();
         }
 
         /// <summary>The service address this computer uses: the Companion's (from pairing), the direct link's, or the default.</summary>
         string Gateway()
         {
-            var g = J.Str(host.CompanionState, "gateway");
+            var g = J.Str(H.CompanionState, "gateway");
             if (string.IsNullOrEmpty(g) && Settings.Server.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) g = Settings.Server;
             return (string.IsNullOrEmpty(g) ? DefaultGateway : g).TrimEnd('/');
         }
@@ -236,6 +237,7 @@ namespace OpenSketch.Sw
         void Refresh2()
         {
             if (IsDisposed) return;
+            var host = H;
             var c = host.CompanionState;
             var device = J.Str(c, "device_name");
             string title, detail;

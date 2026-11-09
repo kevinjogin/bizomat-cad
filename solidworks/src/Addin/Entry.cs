@@ -131,9 +131,7 @@ namespace OpenSketch.Sw
         public void OsConnect()
         {
             var h = Host.Current ?? Host.Start(app, "add-in");
-            Settings.UseCompanion = true;
-            h.StartPipe();
-            if (Settings.Key.StartsWith("oss_")) h.Connect();
+            h.ConnectNow();   // the same as the task pane's Connect
             h.ShowWindow();
         }
 

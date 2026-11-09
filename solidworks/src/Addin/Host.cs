@@ -152,6 +152,31 @@ namespace OpenSketch.Sw
             Changed();
         }
 
+        /// <summary>Connect / Reconnect, the same from the task pane, the toolbar and the menu (Core/ConnectPlan.cs): a
+        /// Companion link that is not connected is dropped and started again at once, the Companion is started when it is
+        /// installed and the link is not connected, and the direct link connects when a key is saved. A connected
+        /// Companion link is never cut, so a running command is not lost. UI thread.</summary>
+        public void ConnectNow()
+        {
+            Settings.UseCompanion = true;
+            var plan = ConnectPlan.For(pipe != null, PipeConnected, Settings.Key.StartsWith("oss_"), CompanionPipe.CompanionPath != null);
+            Log.Write("connect: " + plan);
+            if (plan.StopPipe) StopPipe();
+            if (plan.StartPipe) StartPipe();
+            if (plan.StartCompanion)
+            {
+                try
+                {
+                    CompanionPipe.StartCompanion();
+                }
+                catch (Exception ex)
+                {
+                    Log.Write("could not start the BIZOMAT Companion: " + ex.Message);
+                }
+            }
+            if (plan.ConnectDirect) Connect();
+        }
+
         public void StopPipe()
         {
             pipeCts?.Cancel();
