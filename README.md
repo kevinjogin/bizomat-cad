@@ -219,8 +219,11 @@ On Windows: `installer-test.yml` builds the MSI, signs it with a throwaway certi
 
 ## 9. Fly.io deployment
 
-**Production is the Fly app `cados`, one Machine, deployed from `main` with `fly.toml`.** Nothing deploys
-automatically from this repository: no push, merge or schedule.
+**Production is the Fly app `cados`, one Machine, deployed from `main` with `fly.toml`.** Since 9 Nov 2026 (the
+owner's choice) **every merge to `main` deploys automatically**, after the tests and the preflight pass, unless the
+change only touches `docs/`, root `*.md` files or `backups/`. Keep `main` releasable. To merge without deploying, put
+`[skip ci]` in the merge commit's message (for example `gh pr merge <n> --merge --subject "... [skip ci]"`). No other
+branch, tag or schedule deploys.
 
 **One-time setup**
 
@@ -228,17 +231,18 @@ automatically from this repository: no push, merge or schedule.
    repository secret `FLY_CADOS_TOKEN`.
 2. Settings > Actions > General: allow Actions (they were turned off for the move, so that copying the branches
    started no workflow).
-3. **One deploy source.** Until 9 Nov 2026 the `cados` app was linked in Fly to `jogkev-creator/CADOS`, and Fly
-   built and deployed every push to that repository's `main` by itself. Before deploying from here, unlink it: Fly
-   dashboard > `cados` > Settings > GitHub > Disconnect. (Do not link this repository there instead: deploys go
-   through the workflow below, with its preflight.)
+3. **One deploy source.** The `cados` app has no GitHub repository attached in Fly (Fly dashboard > `cados` >
+   Settings shows "Attach existing repository", checked 9 Nov 2026; it used to build every push to
+   `jogkev-creator/CADOS` `main`). Keep it that way: never attach a repository there, because deploys go through the
+   workflow below, with its preflight.
 
-**Deploy**: Actions > **Deploy to Fly.io (cados)** > Run workflow on `main`, `confirm` = `DEPLOY`. It:
+**Deploy**: automatically on a merge to `main`, or by hand: Actions > **Deploy to Fly.io (cados)** > Run workflow on
+`main`, `confirm` = `DEPLOY` (to redeploy, or to deploy a docs-only change). Either way it:
 
-1. runs the tests (`tests.yml`) unless `skip_tests` is ticked;
+1. runs the tests (`tests.yml`); only a deploy by hand can skip them (`skip_tests`);
 2. runs the **preflight** (`.github/scripts/fly-preflight.py`): reads the live Machine and compares it with
    `fly.toml`. It stops, deploying nothing, when the deploy would add or remove a Machine or change its size, memory or
-   region. `allow_machine_change` = `YES` lets a deliberate change through;
+   region. Only a deploy by hand can let a deliberate change through (`allow_machine_change` = `YES`);
 3. passes the optional secrets to Fly;
 4. deploys: `flyctl deploy --app cados --config fly.toml --remote-only --ha=false --build-arg
    OPENSKETCH_VERSION=<commit> --env OPENSKETCH_PUBLIC_URL=https://bizomat.ai/cad` (the one Machine is replaced in
@@ -284,7 +288,7 @@ nothing. `domain.yml` (by hand) gives the app an extra host on a Cloudflare doma
 | `tests.yml` Tests | pull request, push to a branch other than `main`, by hand, called by the deploy | `pytest` (main and slow), `npm test`, the Cloudflare Worker's check |
 | `solidworks.yml` SOLIDWORKS add-in | push of `solidworks/`, `installer/` or itself (any branch), tags, pull request, by hand | Add-in build and tests; the MSI on Windows; releases on `main` and on tags |
 | `installer-test.yml` Installer test | pull request and push (not `main`) touching the installer, by hand | Builds, test-signs, installs and removes the MSI on Windows |
-| `deploy.yml` Deploy to Fly.io (cados) | by hand only (`DEPLOY`) | Section 9 |
+| `deploy.yml` Deploy to Fly.io (cados) | push to `main` (not docs-only), by hand (`DEPLOY`) | Tests, preflight, deploy to `cados` (section 9) |
 | `fly-status.yml` | by hand | Read-only status of `cados` |
 | `domain.yml` | by hand | An extra host for `cados` on a Cloudflare domain |
 | `live-tls.yml` Live TLS | daily 07:41 Sydney, by hand | Checks the certificates of the public addresses (read-only) |
