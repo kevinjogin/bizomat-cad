@@ -281,9 +281,9 @@ def api_account(request: Request):
     from . import accounts
     u = _user(request)
     m = auth.mode(request.scope)
-    from . import oauth
+    from . import bizomat_id, oauth
     out = {"mode": m, "user": u, "can_setup": m in ("open", "setup"),
-           "google": oauth.enabled(), **accounts.settings()}
+           "google": oauth.enabled(), "bizomat": bizomat_id.enabled(), **accounts.settings()}
     if u and u.get("role") == "owner" and m == "accounts":
         out["users"] = accounts.list_users()
         out["invites"] = accounts.list_invites()

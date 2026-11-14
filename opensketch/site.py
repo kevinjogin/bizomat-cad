@@ -326,7 +326,7 @@ the connector address. If a client cannot sign in, use the private address in <a
 
 <section id="auth"><h2>Authentication</h2>
 <div class="table-wrap"><table><thead><tr><th>Who</th><th>How it signs in</th><th>How to revoke</th></tr></thead><tbody>
-<tr><td>You</td><td>Email and password, or Google where your administrator turned it on.</td><td>Sign out. An administrator can suspend or remove an account.</td></tr>
+<tr><td>You</td><td>Email and password, or your BIZOMAT account or Google where they are turned on.</td><td>Sign out. An administrator can suspend or remove an account.</td></tr>
 <tr><td>AI assistants</td><td>OAuth 2.1 with PKCE. You approve each assistant on a consent page.</td><td>Disconnect it on the CAD Assistant page.</td></tr>
 <tr><td>Private address</td><td>A secret key in the address itself, for clients without sign-in.</td><td>Make a new address in Settings. The old one stops at once.</td></tr>
 <tr><td>Your computers</td><td>A pairing code you confirm, then a key held in the Windows key store. Every request is signed.</td><td>Remove the computer on the SOLIDWORKS page.</td></tr>

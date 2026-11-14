@@ -242,7 +242,7 @@
   // who chose each password (the server keeps only a one-way hash, so nobody can read a password back)
   function pwCell(u) {
     const by = u.password_by;
-    const text = !u.has_password ? (u.google ? 'Google sign-in only' : 'None yet')
+    const text = !u.has_password ? (u.bizomat && u.google ? 'BIZOMAT or Google sign-in only' : u.bizomat ? 'BIZOMAT sign-in only' : u.google ? 'Google sign-in only' : 'None yet')
       : by === 'owner' ? 'Set by you' : by === 'suggested' ? 'Kept the suggested one'
       : by === 'self' ? (u.role === 'owner' ? 'Yours' : 'Chosen by them') : 'Not recorded';
     const td = el('td'); td.append(el('span', '', text));
