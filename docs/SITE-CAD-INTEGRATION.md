@@ -79,6 +79,13 @@ these paths (the site's `tests/worker.test.ts`).
   Pages there answer 301 to `https://bizomat.ai/cad`; MCP, OAuth, `/v2/` (computers) and `/api/` keep answering at
   their root with that host's own address.
 - Google sign-in for CAD returns to `https://bizomat.ai/cad/auth/google/callback` (registered in the Google client).
+- Sign in with BIZOMAT (`opensketch/bizomat_id.py`): CAD is the client `cad` of the BIZOMAT sign-in provider in the
+  website repository (`apps/work/src/worker/company/id-provider.ts`, `docs/company/README.md`). The browser goes to
+  `https://bizomat.ai/company/authorize` and comes back to `https://bizomat.ai/cad/auth/bizomat/callback`; the CAD
+  server swaps the code at `https://bizomat.ai/company/api/id/token` with the client secret and reads
+  `/company/api/id/userinfo`. One secret, two settings: `BIZOMAT_ID_CLIENT_SECRET` on `cados` (Fly secret, or the
+  repository secret of the same name, which `deploy.yml` passes on), and its SHA-256 in `WORK_BIZOMAT_ID_CLIENTS` on
+  `bizomat`. Until both are set, CAD shows no BIZOMAT button. Accounts link by a confirmed email.
 
 ## 4. Brand and shared files
 

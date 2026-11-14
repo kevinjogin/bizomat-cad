@@ -98,8 +98,15 @@ released; development-signed), never overwritten.
 - OAuth (`mcpauth.py`): `RESOURCES` maps both paths to "CADOS" with their own protected-resource metadata; a
   token from either works on both; one connection per person and app. DCR, client metadata documents (fetched with
   `safefetch.py`: public https only, pinned address), PKCE S256, refresh rotation, revoke.
-- Sign-in (`auth.py`, `accounts.py`, `oauth.py`): accounts with scrypt passwords, invites, Google sign-in (secret
-  encrypted with `secretbox.py`), an optional early access code (`OPENSKETCH_ACCESS_CODE` or the owner's setting) that
+- Sign-in (`auth.py`, `accounts.py`, `oauth.py`, `bizomat_id.py`): accounts with scrypt passwords, invites, Google sign-in (secret
+  encrypted with `secretbox.py`), Sign in with BIZOMAT (14 Nov 2026: CAD is the client `cad` of the BIZOMAT sign-in
+  provider in kevinjogin/bizomat-site, `apps/work/src/worker/company/id-provider.ts`; OAuth code with PKCE S256, the
+  verifier derived from the state with a server key, the code swapped server to server with HTTP Basic; on only with
+  BIZOMAT_ID_CLIENT_SECRET, whose SHA-256 the BIZOMAT side lists in WORK_BIZOMAT_ID_CLIENTS; BIZOMAT_ID_CLIENT_ID and
+  BIZOMAT_ID_URL for a test server; return address https://bizomat.ai/cad/auth/bizomat/callback; the same account rules
+  as Google (`accounts.bizomat_user`: linked id, else a confirmed email, else invite or open sign-up; an unconfirmed
+  BIZOMAT email never links or creates); the account keeps the BIZOMAT id only, not the companies;
+  `tests/test_bizomat_id.py`, `tests/test_canonical.py`), an optional early access code (`OPENSKETCH_ACCESS_CODE` or the owner's setting) that
   makes "Internal tester" accounts. The setup page shows only until the first account exists; after that `/login` is
   Sign in ("Welcome back"), and a person already signed in on that browser (90-day session) goes straight to `next`.
   Sign-in pages and messages never name the OPENSKETCH_* settings. New-account forms (setup, join, sign-up) come with
