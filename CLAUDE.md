@@ -317,9 +317,11 @@ byte for byte the CI build's apart from the signatures, and its text files apart
   way. Until the owner detaches it (Fly dashboard > cados > Settings), a merge to main deploys at once, whatever the
   commit message says. It was still attached at the merge of #9 (15 Nov 2026 20:27 UTC: Fly's own build was v31, the
   workflow's v32). Until it is detached nothing is merged to main (two branches wait: `installer-0.13.1-dev` and
-  `claude/installer-volume`). Detached, the next merge proves it: a merge of backups only makes no release at all
-  (deploy.yml ignores `backups/`), any other merge exactly one, deploy.yml's (its version the commit); a release with a
-  `deployment-<hex>` image means Fly still builds (`fly-status.yml` lists them).
+  `claude/installer-volume`). Detached, the next merge proves it: a merge that changes only `docs/`, root `*.md` or
+  `backups/` makes no release at all (deploy.yml ignores them), any other merge exactly one, deploy.yml's (its version
+  the commit); a release with a `deployment-<hex>` image means Fly still builds (`fly-status.yml` lists them). Both
+  waiting branches change more than that (`installer/signing/`, `.github/`), so each merge runs deploy.yml: one deploy
+  each, queued one after the other (concurrency `deploy-cados`), each a restart of the one Machine of a few seconds.
 - Listens on `::` (`--host ::`, `__main__.listen_sockets`: one dual-stack socket, IPv4 alone where there is no IPv6), so
   the BIZOMAT router (Fly app `bizomat`) reaches it over Fly's private network at cados.internal:8080.
 - Public address https://bizomat.ai/cad: CAD Automation lives under the BIZOMAT website's own address (the owner's
