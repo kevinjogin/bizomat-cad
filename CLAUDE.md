@@ -11,7 +11,7 @@ calls the `sw_` MCP tools; the server checks each sketch and feature with OpenSk
 kernel, queues the work, and the OpenSketch add-in in SOLIDWORKS (`solidworks/`, C#) fetches it over outgoing HTTPS
 and makes native SOLIDWORKS features. A home page sets it up. License: AGPL-3.0-only.
 
-CADOS for SOLIDWORKS (0.12.3; called KEVOS Bridge up to 0.11) builds on it: the server is the CADOS gateway; each
+BIZOMAT CAD Automation for SOLIDWORKS (0.13.1; CADOS for SOLIDWORKS in 0.12, KEVOS Bridge up to 0.11) builds on it: the server is the CADOS gateway; each
 Windows computer runs the native CADOS add-in (COM `ISwAddin`, Tools > Add-Ins > CADOS, CADOS tab, menu and task pane)
 and the KEVOS Companion (tray app, starts with Windows, registered by pairing) which holds a signed outbound link to the
 gateway and hands commands to the add-in over a local named pipe; one MSI ("CADOS for SOLIDWORKS") installs both.
@@ -21,7 +21,10 @@ COM add-in) and the release process. Docs: `docs/BRIDGE-PROTOCOL.md` (the contra
 notes). The MSI builds unsigned on Windows in CI (`installer` job); release signing waits for a signing service.
 Development signing (`installer/sign-development.ps1`, `docs/BIZOMAT-DEV-SIGNING.md`) runs on the Windows development
 computer with a self-signed `CN=BIZOMAT Development` certificate from its certificate store (not trusted elsewhere);
-`installer-test.yml` runs it with a throwaway certificate. Installer backups: `backups/installer/` (original, as
+`installer-test.yml` runs it with a throwaway certificate, and (job `upgrade`, `.github/scripts/test-upgrade.ps1`) installs
+0.13.0 built from ce0c810, upgrades it to the current version and checks the upgrade in place: one product, the new
+version in the install record and the list of apps, the Companion and add-in replaced, the registrations, and each
+person's settings and data kept. Installer backups: `backups/installer/` (original, as
 released; development-signed), never overwritten.
 
 ## Rules
@@ -70,7 +73,7 @@ released; development-signed), never overwritten.
   (secrets CLOUDFLARE_API_TOKEN, FLY_CADOS_TOKEN; app fixed to cados). Python pins live in requirements.txt (image) and
   requirements-dev.txt (CI), with hashes.
 
-## Current state (v0.8 server, CADOS for SOLIDWORKS 0.12.3)
+## Current state (v0.8 server, BIZOMAT CAD Automation for SOLIDWORKS 0.13.1)
 
 - KEVOS registered computers (`devicebridge.py`, router included in `server.py`): pairing (`/v2/devices/pair/*`, the
   signed-in page `/devices/pair`), device proofs (`Authorization: KEVOS-Device <JWS>`, ES256 by the computer's
@@ -243,7 +246,7 @@ released; development-signed), never overwritten.
   failed with the reason; the first thing to run on a new PC. Tests run it against SimSW, a stand-in add-in built
   on the kernel and mate solver.
 - Add-in (`solidworks/`, .NET Framework 4.8 x64, SOLIDWORKS 2022 interop embedded; version in
-  `Directory.Build.props`, 0.12.3): Core (Json, Geom, SketchPlan, BridgeClient; Bridge2: Crypto (ES256 JWS, JWK),
+  `Directory.Build.props`, 0.13.1: the Companion's pause and resume fix): Core (Json, Geom, SketchPlan, BridgeClient; Bridge2: Crypto (ES256 JWS, JWK),
   Wire (ids, times, 4-byte-length frames), ReplayGuard, PipeLink (the add-in's pipe client: reader thread for pings and
   cancels, one worker for commands, outbox across reconnects, at-most-once by command id), CloudLink and
   CompanionEngine (the Companion's core: signed long poll, verification, routing to a SOLIDWORKS session, spool,
