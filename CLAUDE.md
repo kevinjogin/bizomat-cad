@@ -25,7 +25,11 @@ computer with a self-signed `CN=BIZOMAT Development` certificate from its certif
 0.13.0 built from ce0c810, upgrades it to the current version and checks the upgrade in place: one product, the new
 version in the install record and the list of apps, the Companion and add-in replaced, the registrations, and each
 person's settings and data kept. Installer backups: `backups/installer/` (original, as
-released; development-signed), never overwritten.
+released; development-signed), never overwritten. The development certificate in use since 16 Nov 2026 (AEDT) is
+`CB6DBE7431F93403751B1BFE72B6C514D5E23F69` (`installer/signing/`), made on the owner's current PC; the 8 Nov one
+(`DBEB45D1...`, which signed 0.13.0) is on no computer any more. The development-signed 0.13.1 is backed up in
+`backups/installer/development-signed/0.13.1-20261116-0918` (branch `installer-0.13.1-dev`): its program files are
+byte for byte the CI build's apart from the signatures, and its text files apart from line endings.
 
 ## Rules
 
@@ -279,6 +283,13 @@ released; development-signed), never overwritten.
   `https://bizomat.ai/downloads/cad/BIZOMAT-CAD-Automation-x64.msi`. `/download/solidworks.sha256` (the pages'
   checksum link) answers for the file on the volume, else redirects to `brand.checksum_url()`. Pages link the
   checksum (`/download/solidworks.sha256`) and support (`brand.support_url()`: the website's contact page), never GitHub.
+  Since 15 Nov 2026 (22:45 UTC) the volume holds the development-signed 0.13.1 (1,323,008 bytes, SHA-256
+  `cc8f04ecb1ee20fdcc96261ea100ef48fa03850db454f29908b032aa10c7d1a2`, signer `CB6DBE74...`), put there by
+  `.github/workflows/installer-volume.yml` (by hand, `confirm` = PLACE; inputs: the branch holding the backup, its path
+  under `backups/installer/`, SHA-256, version and signer thumbprint or `unsigned`; checked on the runner with msitools
+  and `.github/scripts/msi-signer.sh`, fetched by the Machine from that commit and checked again, swapped in with one
+  rename, the file before kept as `previous-<time>-<sha>.msi`; no restart). The development-signed 0.13.0 it replaced is
+  `/data/downloads/previous-20261115T224521Z-51b6de4152e6.msi`. `fly-status.yml` prints each installer's SHA-256.
   `tests/test_installer.py` keeps the MSI, the add-in code and the download link in step. `build.ps1` signs with a
   store certificate by thumbprint (`-CertThumbprint`/KEVOS_SIGN_THUMBPRINT, never falls back to unsigned when one is
   asked for) or a `.pfx` (CI); `-Timestamp ''` signs without a timestamp, `-NameSuffix` (sign-development passes
@@ -304,7 +315,11 @@ released; development-signed), never overwritten.
   `deployment-<hex>`, healthz version `dev`), then again by `deploy.yml` (v23, v25, v27, version = the commit). Fly's
   build ignores `[skip ci]` and skips the tests and the preflight: the merge of #7 (`[skip ci]`) went live as v28 that
   way. Until the owner detaches it (Fly dashboard > cados > Settings), a merge to main deploys at once, whatever the
-  commit message says.
+  commit message says. It was still attached at the merge of #9 (15 Nov 2026 20:27 UTC: Fly's own build was v31, the
+  workflow's v32). Until it is detached nothing is merged to main (two branches wait: `installer-0.13.1-dev` and
+  `claude/installer-volume`). Detached, the next merge proves it: a merge of backups only makes no release at all
+  (deploy.yml ignores `backups/`), any other merge exactly one, deploy.yml's (its version the commit); a release with a
+  `deployment-<hex>` image means Fly still builds (`fly-status.yml` lists them).
 - Listens on `::` (`--host ::`, `__main__.listen_sockets`: one dual-stack socket, IPv4 alone where there is no IPv6), so
   the BIZOMAT router (Fly app `bizomat`) reaches it over Fly's private network at cados.internal:8080.
 - Public address https://bizomat.ai/cad: CAD Automation lives under the BIZOMAT website's own address (the owner's
@@ -423,7 +438,9 @@ released; development-signed), never overwritten.
   `CompanionEngine.SetPaused`), so the gateway sees a resume within about 0.5 s. Before, it waited for the poll (up to
   25 s), the AI's commands were refused as PAUSED meanwhile, and `tests/test_bridge_e2e.py` failed about one run in
   three; the test now requires pause and resume to be seen within 5 s.
-- KEVOS: not yet run on Windows or in a real SOLIDWORKS; the MSI is built only by CI; no MCP progress notifications
+- On the owner's PC (15 Nov 2026): 0.13.0 upgraded in place to the CI-built 0.13.1 (same device id, still paired, the
+  Companion reported 0.13.1 and online); SOLIDWORKS itself was not open, so nothing ran in it.
+- KEVOS: not yet run in a real SOLIDWORKS; the release MSI is built only by CI; no MCP progress notifications
   (JSON responses), progress is in `sw_command_status`; ChatGPT and Grok connectors untested; the gateway is one
   process (SQLite, live sessions in memory).
 - App sign-in (OAuth) is tested with the MCP Python SDK client; not yet with every AI app's connector.

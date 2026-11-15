@@ -7,6 +7,9 @@
   paused for that long after you resumed.
 - Install it over 0.13.0 or any earlier version: it upgrades in place, and the computer stays paired with its settings
   kept. CI installs 0.13.0, upgrades it to this version and checks both (`.github/scripts/test-upgrade.ps1`).
+- Download for SOLIDWORKS gives the development-signed build since 15 Nov 2026. Only BIZOMAT's development computer
+  trusts its certificate, so on other computers Windows shows an unknown publisher until the installer is signed with
+  a commercial certificate.
 
 ## 0.13.0 (BIZOMAT CAD Automation for SOLIDWORKS)
 
