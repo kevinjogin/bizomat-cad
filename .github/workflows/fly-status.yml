@@ -48,7 +48,7 @@ jobs:
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_CADOS_TOKEN }}
         run: |
-          flyctl ssh console --app "$APP" -C "sh -c 'echo === /data/downloads; ls -la /data/downloads 2>&1; echo === /data/bridge-release.json; head -c 2000 /data/bridge-release.json 2>&1; echo; echo === OPENSKETCH_INSTALLER_URL; printenv OPENSKETCH_INSTALLER_URL || echo not set'" || true
+          flyctl ssh console --app "$APP" -C "sh -c 'echo === /data/downloads; ls -la /data/downloads 2>&1; sha256sum /data/downloads/*.msi 2>&1; echo === /data/bridge-release.json; head -c 2000 /data/bridge-release.json 2>&1; echo; echo === OPENSKETCH_INSTALLER_URL; printenv OPENSKETCH_INSTALLER_URL || echo not set'" || true
 
       - name: Recent logs
         env:
