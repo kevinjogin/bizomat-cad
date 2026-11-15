@@ -348,6 +348,9 @@ time, and reports each step as ok, check or failed with the reason. Close or del
 <section id="computers"><h2>Several computers</h2>
 <p>Install and pair each computer the same way. Each one gets its own key. The SOLIDWORKS page lists them: set a default or
 remove one. When more than one is online, tell your assistant which to use, for example "on DESK-02".</p>
+<p>Where this server is connected to BIZOMAT, your computers, recent commands and AI assistants also show in BIZOMAT ERP,
+with your company's other tools, within a few minutes. Only accounts with a confirmed email are shown there: sign in
+with BIZOMAT once to confirm yours.</p>
 <p><b>New or lost computer:</b> remove the old one on the SOLIDWORKS page. It stops working at once. Then install and pair
 the new one. Nothing needs to be copied.</p></section>
 

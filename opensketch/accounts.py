@@ -296,6 +296,16 @@ def find_by_email(email: str) -> dict | None:
     return next((public(u) for u in _users()["users"] if u["email"] == email), None)
 
 
+def confirmed_accounts() -> list[dict]:
+    """The accounts whose email address is proven, for the status report to BIZOMAT ERP (erpstatus.py): [{id, email,
+    bizomat}]. Proven means what `email_verified` records: the owner's own setup, a confirmed Google or BIZOMAT
+    sign-in, or a link to one. An email typed at sign-up, on an invite, by the owner on the Admin page or by an early
+    tester is never proven, so such an account is left out: matching on it could show one person's computers to
+    someone else. Suspended accounts are included (their computers then read as offline)."""
+    return [{"id": u["id"], "email": u["email"], "bizomat": u.get("bizomat")} for u in _users()["users"]
+            if u.get("email_verified") is True and u.get("email") and not u["email"].endswith("@" + TESTER_DOMAIN)]
+
+
 def rename(user_id: str, name: str) -> dict:
     name = (name or "").strip()[:60]
     if not name:

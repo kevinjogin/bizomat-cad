@@ -322,9 +322,9 @@ def oauth_problem_page(message: str) -> bytes:
 
 # Privacy notice: public (Google requires one before a sign-in app can be used by anyone), about this service.
 PRIVACY_BODY = """<main id="main"><div class="doc-hero"><div class="container"><span class="eyebrow">Legal</span><h1>Privacy</h1>
-<p>What BIZOMAT CAD Automation keeps about you, why, and who else sees it. Last updated 14 November 2026.</p></div></div>
+<p>What BIZOMAT CAD Automation keeps about you, why, and who else sees it. Last updated 15 November 2026.</p></div></div>
 <div class="container doc-layout"><nav class="toc" aria-label="On this page"><h4>On this page</h4><ol>
-<li><a href="#summary">Summary</a></li><li><a href="#kept">What is kept</a></li><li><a href="#bizomat">Sign in with BIZOMAT</a></li><li><a href="#google">Sign in with Google</a></li>
+<li><a href="#summary">Summary</a></li><li><a href="#kept">What is kept</a></li><li><a href="#bizomat">Sign in with BIZOMAT</a></li><li><a href="#erp">BIZOMAT ERP</a></li><li><a href="#google">Sign in with Google</a></li>
 <li><a href="#ai">AI assistants</a></li><li><a href="#who">Who can see your work</a></li><li><a href="#delete">Deleting your data</a></li>
 <li><a href="#changes">Changes</a></li></ol></nav><article class="prose">
 <section id="summary"><h2>Summary</h2>
@@ -357,6 +357,17 @@ is confirmed, and the BIZOMAT companies you belong to.</p>
 <p>This service uses it only to sign you in and to link the sign-in to your account. It keeps the BIZOMAT account ID with
 your account, and your name and email address as your account's own. It does not keep your companies. It does not sell or
 share it, use it for advertising, or use it to train AI models. BIZOMAT's own privacy notice covers what BIZOMAT keeps.</p></section>
+<section id="erp"><h2>BIZOMAT ERP</h2>
+<p>When this service is connected to BIZOMAT, it reports the status of your CAD Automation to BIZOMAT ERP every few
+minutes, so you can see it there with your company's other tools. It reports only an account whose email address is
+confirmed: the owner's own, or one confirmed by a BIZOMAT or Google sign-in.</p>
+<p>The report has your email address and, if you signed in with BIZOMAT, your BIZOMAT account ID. It lists your computers
+(the name you gave each, whether it is online, the SOLIDWORKS version and state, the add-in version and when it was last
+seen), your last few commands (an ID, the tool, its status and when) and your connected AI assistants (their name and when
+they were connected and last used). It never has a password, key or token, a file name or path, or anything from your
+models.</p>
+<p>BIZOMAT ERP shows it to you and, in a company you belong to on BIZOMAT, to that company's owner and administrators.
+When your account is removed here, the report is withdrawn.</p></section>
 <section id="google"><h2>Sign in with Google</h2>
 <p>If you choose Continue with Google, Google tells this service your name, your email address, whether that address is
 verified, your Google account ID and, for work accounts, your organisation's domain. It asks for nothing else: no access to
@@ -369,8 +380,9 @@ your Google account settings (Security, Third-party connections).</p></section>
 measurements, preview images of your SOLIDWORKS model), under that assistant's own privacy terms. It can only do what the
 tools allow, only while you keep it connected, and only with the computers paired to your account.</p></section>
 <section id="who"><h2>Who can see your work</h2>
-<p>Only you and the assistants you connect. The people who run this service can technically reach the data stored on it,
-as with any online service.</p></section>
+<p>Only you and the assistants you connect. The status report to BIZOMAT ERP (above) shows your computers, commands and
+assistants, never your models. The people who run this service can technically reach the data stored on it, as with
+any online service.</p></section>
 <section id="delete"><h2>Deleting your data</h2>
 <p>Disconnect assistants, remove computers or make a new add-in key on your dashboard. To close your account and remove
 your sign-in details, ask your administrator or the person who invited you.</p></section>
