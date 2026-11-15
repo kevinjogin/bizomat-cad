@@ -2,17 +2,37 @@
 # "Download for SOLIDWORKS" (bizomat.ai/cad/download/solidworks, signed in) serves and whose SHA-256
 # /download/solidworks.sha256 gives (opensketch/server.py local_installer, read from the file at each download).
 #
-# The installer is a backup committed under backups/installer/ on SOURCE_REF. It is checked on the runner (SHA-256,
-# MSI product and version, the signing certificate's thumbprint), fetched by the Machine from that exact commit, checked
-# again there, and swapped in with one rename; the file it replaces is kept beside it as previous-<time>-<sha>.msi.
-# No deploy, no restart, no new Machine or volume. Runs when the branch claude/installer-volume is pushed: a one-off
-# operation (15 Nov 2026), because flyctl on the owner's PC could not open an SSH tunnel (403). Change the values below
-# for another installer. Needs the repository secret FLY_CADOS_TOKEN.
+# Run by hand (Actions > Installer on the CAD volume > Run workflow, confirm = PLACE). The installer is a backup
+# committed under backups/installer/ on a branch or tag of this repository. It is checked on the runner (SHA-256, MSI
+# product and version, the signing certificate's thumbprint, or that it carries no signature when the signer is
+# "unsigned"), fetched by the Machine from that exact commit, checked again there, and swapped in with one rename; the
+# file it replaces is kept beside it as previous-<time>-<sha>.msi. No deploy, no restart, no new Machine or volume.
+# First used on 15 Nov 2026 for the development-signed 0.13.1 (run 43770267108, from the branch this file was made on),
+# because flyctl on the owner's PC could not open an SSH tunnel (403). Needs the repository secret FLY_CADOS_TOKEN.
 name: Installer on the CAD volume
 
 on:
-  push:
-    branches: [claude/installer-volume]
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Branch or tag holding the installer backup (e.g. installer-0.13.1-dev)
+        required: true
+      source_path:
+        description: Path of the .msi under backups/installer/
+        required: true
+      sha256:
+        description: The installer's SHA-256 (64 hex characters, from its signing report)
+        required: true
+      version:
+        description: Its ProductVersion (e.g. 0.13.1)
+        required: true
+      signer:
+        description: SHA-1 thumbprint of the signing certificate (40 hex characters), or "unsigned"
+        required: true
+      confirm:
+        description: Type PLACE to replace the installer people download
+        required: true
+        default: ""
 
 permissions:
   contents: read
@@ -21,24 +41,33 @@ concurrency:
   group: installer-volume
   cancel-in-progress: false
 
+# The inputs reach the steps as environment variables only, never inside a script, and are checked first.
 env:
   APP: cados
-  SOURCE_REF: installer-0.13.1-dev
-  SOURCE_PATH: backups/installer/development-signed/0.13.1-20261116-0918/BIZOMAT-CAD-Automation-0.13.1-x64-DEV.msi
-  EXPECTED_SHA256: cc8f04ecb1ee20fdcc96261ea100ef48fa03850db454f29908b032aa10c7d1a2
-  EXPECTED_VERSION: 0.13.1
-  EXPECTED_SIGNER: CB6DBE7431F93403751B1BFE72B6C514D5E23F69  # CN=BIZOMAT Development, made 16 Nov 2026 (AEDT)
+  SOURCE_REF: ${{ inputs.source_ref }}
+  SOURCE_PATH: ${{ inputs.source_path }}
+  EXPECTED_SHA256: ${{ inputs.sha256 }}
+  EXPECTED_VERSION: ${{ inputs.version }}
+  EXPECTED_SIGNER: ${{ inputs.signer }}
+  CONFIRM: ${{ inputs.confirm }}
 
 jobs:
   place:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Check setup
+      - name: Check setup and inputs
         env:
           HAS_TOKEN: ${{ secrets.FLY_CADOS_TOKEN != '' }}
         run: |
-          if [ "$HAS_TOKEN" != "true" ]; then echo "::error::Add the repository secret FLY_CADOS_TOKEN."; exit 1; fi
+          fail() { echo "::error::$1"; exit 1; }
+          [ "$HAS_TOKEN" = "true" ] || fail "Add the repository secret FLY_CADOS_TOKEN."
+          [ "$CONFIRM" = "PLACE" ] || fail "Type PLACE in confirm to replace the installer people download."
+          [[ "$SOURCE_REF" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]{0,99}$ ]] || fail "source_ref is not a branch or tag name."
+          [[ "$SOURCE_PATH" =~ ^backups/installer/[A-Za-z0-9._/-]+\.msi$ && "$SOURCE_PATH" != *..* ]] || fail "source_path must be an .msi under backups/installer/."
+          [[ "$EXPECTED_SHA256" =~ ^[0-9a-f]{64}$ ]] || fail "sha256 must be 64 lower-case hexadecimal characters."
+          [[ "$EXPECTED_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "version must look like 0.13.1."
+          [[ "$EXPECTED_SIGNER" =~ ^[0-9A-F]{40}$ || "$EXPECTED_SIGNER" = unsigned ]] || fail "signer must be a 40-character upper-case thumbprint, or unsigned."
 
       - name: Is the installer on GitHub yet?
         run: |
@@ -68,15 +97,21 @@ jobs:
           version="$(msiinfo export "$f" Property | awk -F'\t' '$1=="ProductVersion"{print $2}' | tr -d '\r')"
           [ "$product" = "BIZOMAT CAD Automation for SOLIDWORKS" ] || { echo "::error::product is '$product'"; exit 1; }
           [ "$version" = "$EXPECTED_VERSION" ] || { echo "::error::version is $version, not $EXPECTED_VERSION"; exit 1; }
-          signers="$(bash tools/.github/scripts/msi-signer.sh "$f")"
-          echo "$signers"
-          grep -q "^$EXPECTED_SIGNER " <<<"$signers" || { echo "::error::not signed by $EXPECTED_SIGNER"; exit 1; }
+          if [ "$EXPECTED_SIGNER" = unsigned ]; then
+            if bash tools/.github/scripts/msi-signer.sh "$f" > /dev/null 2>&1; then echo "::error::the installer is signed, but signer says unsigned"; exit 1; fi
+            signed_by="no signature (unsigned, as asked)"
+          else
+            signers="$(bash tools/.github/scripts/msi-signer.sh "$f")"
+            echo "$signers"
+            grep -q "^$EXPECTED_SIGNER " <<<"$signers" || { echo "::error::not signed by $EXPECTED_SIGNER"; exit 1; }
+            signed_by="signed by \`$EXPECTED_SIGNER\` ($(grep "^$EXPECTED_SIGNER " <<<"$signers" | head -1 | sed 's/^[0-9A-F]* subject=//'))"
+          fi
           commit="$(git -C source rev-parse HEAD)"
           echo "COMMIT=$commit" >> "$GITHUB_ENV"
           {
             echo "### Installer checked on the runner"
             echo "- $product $version, $(stat -c %s "$f") bytes, SHA-256 \`$sum\`"
-            echo "- signed by \`$EXPECTED_SIGNER\` (CN=BIZOMAT Development; self-signed, trusted only where it was made)"
+            echo "- $signed_by"
             echo "- from \`$SOURCE_REF\` at \`$commit\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
