@@ -35,8 +35,9 @@ released; development-signed), never overwritten.
 - BIZOMAT corporate footer (owner, 8 Nov 2026; the website's `src/config/platform.ts` is the source): `brand.SLOGAN`
   ("Connecting Intelligence. Empowering Progress."), `brand.CORPORATE` (short description) and
   `brand.copyright_line()` ("(c) <year> BIZOMAT. All rights reserved.") in the site footer, the app footer and the
-  sign-in panel; the footer's BIZOMAT column links Home, About (/engine-room/), Products, Project Management and
-  Contact on bizomat.ai; legal links read Privacy Policy and Terms of Use. Product name, headline, logo and colours unchanged.
+  sign-in panel; the footer's BIZOMAT column links Home, About (/engine-room/), Systems (/systems/) and Contact on
+  bizomat.ai (owner, 14 Nov 2026: Systems replaced Products and Project Management); legal links read Privacy Policy
+  and Terms of Use. Product name, headline, logo and colours unchanged.
 - Brand: CADOS by KEVOS. Never "OpenSketch" in anything people read (pages, MCP server name, messages); real file
   paths and file names (`Documents\OpenSketch`, `OpenSketchSW.exe`) stay as they are. Logos are SVG paths in
   `brand.py`: the CADOS wordmark (built from the KEVOS letterforms) with "by KEVOS"; the KEVOS logo links to
@@ -156,8 +157,8 @@ released; development-signed), never overwritten.
   signed with the pairing key, rate-limited like the sign-in page; the password is sent once and kept nowhere). The
   installer download (`/download/solidworks`) needs sign-in. No Automation section: CADOS keeps no stored automations. Live status
   states: Connected, Disconnected, Checking connection, Authentication required, Installation required, Connection
-  error. App header: the sections, a KEVOS menu (kevos.com, Work, CADOS), the person, Sign out; app footer links
-  kevos.com and Work. `GET /api/solidworks` still gives the pages everything in one call. Sign-in, consent, notice and
+  error. App header: the sections, the BIZOMAT menu (BIZOMAT platform, Systems at bizomat.ai/systems/, CAD
+  Automation), the person, Sign out; app footer links bizomat.ai, Systems, Documentation, the legal pages and Support. `GET /api/solidworks` still gives the pages everything in one call. Sign-in, consent, notice and
   pairing pages share `auth.PAGE` (product panel and form).
 - Server (`server.py`): lifespan (warms the owner's agent CAD worker, runs the MCP session manager), BodyLimit,
   RequestLog, PasswordGate; /healthz; account routes; add-in link (`/mcp/sw/hello|next|result|file|blob`), `/api/sw*`;
@@ -315,8 +316,10 @@ released; development-signed), never overwritten.
   No password secret is needed on Fly (fly.toml sets OPENSKETCH_PUBLIC_URL, so a fresh server waits in setup mode);
   an old OPENSKETCH_PASSWORD secret can be unset. The Windows PC server (`windows/`) is the other way to run it.
 - fly.toml: app `cados`, `primary_region = 'ams'`, shared-cpu-2x with 2 GB (the live Machine; it said syd and performance-1x
-  until 9 Nov 2026), `auto_stop_machines = "suspend"`, kill_timeout 15, volume
-  `opensketch_data` at /data. The add-in's long poll keeps the machine awake while SOLIDWORKS is linked.
+  until 9 Nov 2026), always on since 14 Nov 2026 (`auto_stop_machines = "off"`, `min_machines_running = 1`), kill_timeout 15,
+  volume `opensketch_data` at /data. It was `suspend` before: bizomat.ai/cad and the computers' long polls reach it over
+  Fly's private network from the app bizomat, which does not count as traffic and cannot wake it, so it slept and
+  bizomat.ai/cad answered 502. Sleeping again needs Flycast between the router and this app.
 - `supervisor.py` (`python -m opensketch --supervise`, the image's CMD): asks /healthz every 5 s, restarts the server
   after 120 s without an answer (stacks to the log first), tells a suspended machine from a hang. With
   OPENSKETCH_PERSIST_URL it first restores the data folder from an object store and copies changes back
