@@ -295,8 +295,13 @@ released; development-signed), never overwritten.
   its own signed-in clones (`bizomat.ps1 setup`, then `git pull`); raw GitHub links do not work for a private
   repository. GitHub Actions minutes for private repositories are limited: when they run out, every job fails at once
   with no log (seen 7 Nov 2026), and `cloudflare.ps1` runs the repository's own checks before each deploy. The Fly app
-  below has no GitHub repository attached (Fly dashboard > cados > Settings shows "Attach existing repository", checked
-  9 Nov 2026): never attach one; deploys go through `deploy.yml` and its preflight.
+  below must have no GitHub repository attached: never attach one; deploys go through `deploy.yml` and its preflight.
+  **Found attached again on 15 Nov 2026** (Fly status run 3, `flyctl releases`): every push to main since at least 14 Nov
+  was built and deployed by Fly itself about a minute after the merge (releases v22, v24, v26 and v28, image tags
+  `deployment-<hex>`, healthz version `dev`), then again by `deploy.yml` (v23, v25, v27, version = the commit). Fly's
+  build ignores `[skip ci]` and skips the tests and the preflight: the merge of #7 (`[skip ci]`) went live as v28 that
+  way. Until the owner detaches it (Fly dashboard > cados > Settings), a merge to main deploys at once, whatever the
+  commit message says.
 - Listens on `::` (`--host ::`, `__main__.listen_sockets`: one dual-stack socket, IPv4 alone where there is no IPv6), so
   the BIZOMAT router (Fly app `bizomat`) reaches it over Fly's private network at cados.internal:8080.
 - Public address https://bizomat.ai/cad: CAD Automation lives under the BIZOMAT website's own address (the owner's
@@ -328,8 +333,12 @@ released; development-signed), never overwritten.
   FLY_CADOS_TOKEN, a deploy token for cados only. Every merge to main therefore goes to production: keep main
   releasable, and use [skip ci] in a merge commit's message to merge without deploying. Steps: the tests, then the preflight
   (`.github/scripts/fly-preflight.py`, which stops a deploy that would add, remove or resize the Machine), then
-  `flyctl deploy --app cados`. It never creates an app or volume. No repository is attached to the app in Fly (checked
-  9 Nov 2026; it used to build every push to jogkev-creator/CADOS main), so this workflow is the one deploy source.
+  `flyctl deploy --app cados`, the check that /healthz reports the commit, and (with `BIZOMAT_ID_CLIENT_SECRET` set)
+  a check that the sign-in page offers Sign in with BIZOMAT and that BIZOMAT holds this repository's secret: the token
+  endpoint must refuse a made-up code as invalid_grant, never invalid_client (the secret reaches curl on standard
+  input). Optional secrets reach Fly through `flyctl secrets import` on standard input, never on a command line. It
+  never creates an app or volume. It is meant to be the one deploy source; see above for the repository Fly has
+  attached again.
   Production, read from Fly on 9 Nov 2026: one Machine in ams (Amsterdam, not Sydney), shared CPU, 2 vCPUs, 2048 MB,
   and the 1 GB volume opensketch_data in ams; fly.toml matches it. Never add a Machine, change its size or memory, or
   move its region without the owner's approval (a move to syd means moving the volume: a planned change of its own).

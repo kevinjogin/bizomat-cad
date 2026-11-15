@@ -113,14 +113,21 @@ jobs:
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           BIZOMAT_ID_CLIENT_SECRET: ${{ secrets.BIZOMAT_ID_CLIENT_SECRET }}
+        # NAME=VALUE lines on standard input (flyctl secrets import): never on a command line, never in the log; only the
+        # names are printed.
         run: |
-          args=()
-          if [ -n "$OPENSKETCH_ACCESS_CODE" ]; then args+=("OPENSKETCH_ACCESS_CODE=$OPENSKETCH_ACCESS_CODE"); fi
+          lines=()
+          if [ -n "$OPENSKETCH_ACCESS_CODE" ]; then lines+=("OPENSKETCH_ACCESS_CODE=$OPENSKETCH_ACCESS_CODE"); fi
           if [ -n "$GOOGLE_CLIENT_ID" ] && [ -n "$GOOGLE_CLIENT_SECRET" ]; then
-            args+=("GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID" "GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET")
+            lines+=("GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID" "GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET")
           fi
-          if [ -n "$BIZOMAT_ID_CLIENT_SECRET" ]; then args+=("BIZOMAT_ID_CLIENT_SECRET=$BIZOMAT_ID_CLIENT_SECRET"); fi
-          if [ "${#args[@]}" -gt 0 ]; then flyctl secrets set --app "$APP" --stage "${args[@]}"; else echo "No optional secrets to pass."; fi
+          if [ -n "$BIZOMAT_ID_CLIENT_SECRET" ]; then lines+=("BIZOMAT_ID_CLIENT_SECRET=$BIZOMAT_ID_CLIENT_SECRET"); fi
+          if [ "${#lines[@]}" -gt 0 ]; then
+            printf '%s\n' "${lines[@]}" | flyctl secrets import --stage --app "$APP" > /dev/null
+            echo "Staged on $APP: $(printf '%s\n' "${lines[@]}" | cut -d= -f1 | paste -sd ' ')"
+          else
+            echo "No optional secrets to pass."
+          fi
 
       - name: Deploy
         env:
@@ -146,3 +153,35 @@ jobs:
           done
           echo "::error::https://$APP.fly.dev/healthz did not answer with version $want within 3 minutes (last answer: ${got:-none}). See 'flyctl logs -a $APP'. To go back: 'flyctl releases -a $APP --image', then 'flyctl deploy -a $APP --image <the previous image> --ha=false'."
           exit 1
+
+      # Sign in with BIZOMAT (opensketch/bizomat_id.py, docs/SITE-CAD-INTEGRATION.md section 8): with the secret set, the
+      # sign-in page offers it, and BIZOMAT holds the SHA-256 of this repository's secret. The second is proved without
+      # printing anything: BIZOMAT's token endpoint is asked to swap a made-up code with the client cad's credentials. The
+      # same secret answers invalid_grant (400); another secret, or no client cad on BIZOMAT, answers invalid_client
+      # (401). The secret reaches curl on standard input, never on a command line. Nothing is written on either side but a
+      # rate-limit count.
+      - name: Sign in with BIZOMAT (the secret is never printed)
+        env:
+          BIZOMAT_ID_CLIENT_SECRET: ${{ secrets.BIZOMAT_ID_CLIENT_SECRET }}
+        run: |
+          if [ -z "$BIZOMAT_ID_CLIENT_SECRET" ]; then
+            echo "Sign in with BIZOMAT: BIZOMAT_ID_CLIENT_SECRET is not set in this repository, so it stays off." >> "$GITHUB_STEP_SUMMARY"; exit 0
+          fi
+          offered=0
+          for _ in $(seq 1 12); do
+            if curl -fsS --max-time 15 -H 'Accept: text/html' "$PUBLIC_URL/login" | grep -q 'with BIZOMAT'; then offered=1; break; fi
+            sleep 5
+          done
+          if [ "$offered" != 1 ]; then echo "::error::The sign-in page does not offer Sign in with BIZOMAT although the secret is set."; exit 1; fi
+          code="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+          verifier="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
+          answer="$(printf 'user = "cad:%s"\n' "$BIZOMAT_ID_CLIENT_SECRET" | curl -s -K - --max-time 15 -w '\n%{http_code}' \
+            --data-urlencode grant_type=authorization_code --data-urlencode "code=$code" --data-urlencode "code_verifier=$verifier" \
+            --data-urlencode redirect_uri=https://bizomat.ai/cad/auth/bizomat/callback https://bizomat.ai/company/api/id/token)"
+          status="$(tail -n1 <<<"$answer")"; error="$(head -n -1 <<<"$answer" | jq -r '.error // empty' 2>/dev/null || true)"
+          if [ "$status" = 400 ] && [ "$error" = invalid_grant ]; then
+            echo "Sign in with BIZOMAT: offered on the sign-in page, and BIZOMAT holds this repository's secret (a made-up code was refused as invalid_grant)." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::error::BIZOMAT does not take this repository's BIZOMAT_ID_CLIENT_SECRET (HTTP $status, ${error:-no error code}): the secret differs from kevinjogin/bizomat-site's, or bizomat has not been deployed with the client cad yet."
+            exit 1
+          fi
