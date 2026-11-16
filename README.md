@@ -320,6 +320,18 @@ on a Cloudflare domain. Neither touches `bizomat`.
 | `domain.yml` | by hand | An extra host for `cados` on a Cloudflare domain |
 | `live-tls.yml` Live TLS | daily 07:41 Sydney, by hand | Checks the certificates of the public addresses (read-only) |
 
+**Ruleset for main** (`.github/rulesets/main.json`, kept in step with `tests.yml` by `tests/test_ruleset.py`): a
+pull request is required, with the four `tests.yml` checks passing (pytest main and worker processes, npm test, the
+Cloudflare Worker; reported by GitHub Actions only); force pushes and deleting `main` are blocked; nobody bypasses it.
+No approval is required, because GitHub does not let an account approve its own pull request. `tests.yml` runs on every
+pull request, docs-only ones included, so the required checks always report. The owner applies it (it needs admin
+access) from a checkout of `main`:
+`gh api -X POST repos/kevinjogin/bizomat-cad/rulesets --input .github/rulesets/main.json` (or Settings > Rules >
+Rulesets > New ruleset > Import a ruleset, with the same file). To change it later: `gh api -X PUT
+repos/kevinjogin/bizomat-cad/rulesets/<id> --input .github/rulesets/main.json` (`gh api
+repos/kevinjogin/bizomat-cad/rulesets` lists the id). To check it: `gh api repos/kevinjogin/bizomat-cad/rules/branches/main
+--jq '.[].type'` lists `deletion`, `non_fast_forward`, `pull_request` and `required_status_checks`.
+
 Windows jobs count double against GitHub Free's monthly minutes for private repositories. When the minutes run out
 every job fails at once with a billing message (seen on 7-8 Nov 2026).
 
