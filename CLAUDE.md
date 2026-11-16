@@ -71,7 +71,8 @@ byte for byte the CI build's apart from the signatures, and its text files apart
   `npm run check` in `cloudflare/mcp` on Node 22) on pull requests and
   non-main pushes; `deploy.yml` is the only way to production (Hosting, below; owner, 16 Nov 2026): on a push to main
   that changes what the image is built from or fly.toml, after the tests and the image's smoke test, it deploys that
-  exact image and checks it, rolling back by itself when a core check fails; `solidworks.yml`
+  exact image and checks it, rolling back by itself when a core check fails; `fly-status.yml` (by hand, read only)
+  checks that Fly has no deployment source for cados, so nothing deploys around it; `solidworks.yml`
   builds and tests the add-in and keeps the zip as an artifact. `domain.yml` (run by hand, `.github/scripts/kevos-domain.sh`) gives the Fly app
   its own address on a Cloudflare domain: DNS record, Fly certificate and validation record, OPENSKETCH_PUBLIC_URL
   (secrets CLOUDFLARE_API_TOKEN, FLY_CADOS_TOKEN; app fixed to cados). Python pins live in requirements.txt (image) and
@@ -309,13 +310,22 @@ byte for byte the CI build's apart from the signatures, and its text files apart
   its own signed-in clones (`bizomat.ps1 setup`, then `git pull`); raw GitHub links do not work for a private
   repository. GitHub Actions minutes for private repositories are limited: when they run out, every job fails at once
   with no log (seen 7 Nov 2026), and `cloudflare.ps1` runs the repository's own checks before each deploy. The Fly app
-  below must have no GitHub repository connected (Fly dashboard > cados > Settings): GitHub Actions' `deploy.yml` is the
-  only way to production (owner, 16 Nov 2026). **One was connected on 15 and 16 Nov 2026**: every push to main was built
-  and deployed by Fly itself about a minute after the merge (releases v22, v24, v26, v28, v29, v31, v33 and v34;
-  /healthz version `dev`; `[skip ci]` ignored; no tests, no preflight), before deploy.yml's own release (v35 on 16 Nov:
-  `9ec8423`). Both kinds of image were tagged `deployment-<id>`, so only the version told them apart. Once the owner has
-  disconnected it, deploy.yml warns when production reports `dev` and reports any release it did not make; a merge that
-  does not deploy (docs, workflows, tests) must leave the release list unchanged.
+  below must have no GitHub repository connected (Fly dashboard > cados > Settings): **GitHub Actions' `deploy.yml` is
+  the single deployment authority** (owner, 16 Nov 2026). One was connected on 15 and 16 Nov 2026: every push to main
+  was built and deployed by Fly itself about a minute after the merge, docs-only and `[skip ci]` merges included
+  (releases v22, v24, v26, v28, v29, v31, v33 and v34; /healthz version `dev`; no tests, no preflight), before
+  deploy.yml's own release (v35 on 16 Nov: `9ec8423`). Both kinds of image were tagged `deployment-<id>`, so only the
+  version told them apart. **The owner disconnected Fly's GitHub deployment for cados on 16 Nov 2026.** Fly's API
+  (GraphQL, read only with FLY_CADOS_TOKEN) confirmed it independently, before and after the merge of #13 (b7db50e,
+  01:08 UTC): `hasDeploymentSource: false` and `deploymentSource: null` in Fly status runs 43784118963 (01:05 UTC) and
+  43784971587 (01:13 UTC). That merge changed no deploy path and made no release: v35 stayed the latest, and the
+  Machine was not restarted (last updated 00:20:46 UTC before and after). Since then `fly-status.yml` checks it on
+  every run (its last step, `.github/scripts/fly-deploy-source.sh`; `tests/test_fly_deploy_source.py`): it passes with
+  no deployment source, fails with an error naming what Fly reports when one is connected, and fails without claiming
+  anything when the answer cannot be read. It never disconnects anything (that is done by hand in the Fly dashboard),
+  never prints the token or the raw answer, and deploys nothing. deploy.yml also warns when production reports `dev`
+  and reports any release it did not make; a merge that does not deploy (docs, workflows, tests) must leave the release
+  list unchanged. The first deploy through the new workflow waits for the next genuine change to the server's code.
 - Listens on `::` (`--host ::`, `__main__.listen_sockets`: one dual-stack socket, IPv4 alone where there is no IPv6), so
   the BIZOMAT router (Fly app `bizomat`) reaches it over Fly's private network at cados.internal:8080.
 - Public address https://bizomat.ai/cad: CAD Automation lives under the BIZOMAT website's own address (the owner's
@@ -365,7 +375,8 @@ byte for byte the CI build's apart from the signatures, and its text files apart
   and the 1 GB volume opensketch_data in ams; fly.toml matches it. Never add a Machine, change its size or memory, or
   move its region without the owner's approval (a move to syd means moving the volume: a planned change of its own).
   `fly-status.yml` (run by hand, changes nothing) prints the app's machines, volumes, secret
-  names, releases, logs and /healthz: both need the repository secret FLY_CADOS_TOKEN (a deploy token for cados).
+  names, releases, logs and /healthz, and last checks that no repository is connected to the app in Fly (it fails if
+  one is): both need the repository secret FLY_CADOS_TOKEN (a deploy token for cados).
   How this app and the BIZOMAT website (kevinjogin/bizomat-site, Fly app `bizomat`) work together:
   `docs/SITE-CAD-INTEGRATION.md`.
   No password secret is needed on Fly (fly.toml sets OPENSKETCH_PUBLIC_URL, so a fresh server waits in setup mode);
