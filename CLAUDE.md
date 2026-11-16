@@ -316,12 +316,15 @@ byte for byte the CI build's apart from the signatures, and its text files apart
   build ignores `[skip ci]` and skips the tests and the preflight: the merge of #7 (`[skip ci]`) went live as v28 that
   way. Until the owner detaches it (Fly dashboard > cados > Settings), a merge to main deploys at once, whatever the
   commit message says. It was still attached at the merge of #9 (15 Nov 2026 20:27 UTC: Fly's own build was v31, the
-  workflow's v32). Until it is detached nothing is merged to main (two branches wait: `installer-0.13.1-dev` and
-  `claude/installer-volume`). Detached, the next merge proves it: a merge that changes only `docs/`, root `*.md` or
+  workflow's v32). The two branches held back for it (#10, the 0.13.1 backup, and #11, `installer-volume.yml`) were
+  merged on 16 Nov 2026 at the owner's request whether or not it was detached: neither changes the server's code, so
+  a build by Fly runs the same code; #10 with `[skip ci]` (it touches `installer/`, so a normal merge would also have
+  rebuilt `bridge-latest`, whose SHA-256 is recorded) and #11 with one deploy.yml run. Detached, the next merge proves it: a merge that changes only `docs/`, root `*.md` or
   `backups/` makes no release at all (deploy.yml ignores them), any other merge exactly one, deploy.yml's (its version
   the commit); a release with a `deployment-<hex>` image means Fly still builds (`fly-status.yml` lists them). Both
-  waiting branches change more than that (`installer/signing/`, `.github/`), so each merge runs deploy.yml: one deploy
-  each, queued one after the other (concurrency `deploy-cados`), each a restart of the one Machine of a few seconds.
+  branches changed more than that (`installer/signing/`, `.github/`), so a merge of each without `[skip ci]` runs
+  deploy.yml: one deploy each, queued one after the other (concurrency `deploy-cados`), each a restart of the one
+  Machine of a few seconds.
 - Listens on `::` (`--host ::`, `__main__.listen_sockets`: one dual-stack socket, IPv4 alone where there is no IPv6), so
   the BIZOMAT router (Fly app `bizomat`) reaches it over Fly's private network at cados.internal:8080.
 - Public address https://bizomat.ai/cad: CAD Automation lives under the BIZOMAT website's own address (the owner's
@@ -441,8 +444,20 @@ byte for byte the CI build's apart from the signatures, and its text files apart
   25 s), the AI's commands were refused as PAUSED meanwhile, and `tests/test_bridge_e2e.py` failed about one run in
   three; the test now requires pause and resume to be seen within 5 s.
 - On the owner's PC (15 Nov 2026): 0.13.0 upgraded in place to the CI-built 0.13.1 (same device id, still paired, the
-  Companion reported 0.13.1 and online); SOLIDWORKS itself was not open, so nothing ran in it.
-- KEVOS: not yet run in a real SOLIDWORKS; the release MSI is built only by CI; no MCP progress notifications
+  Companion reported 0.13.1 and online).
+- First run in a real SOLIDWORKS (15 Nov 2026, 23:10 to 23:45 UTC; SOLIDWORKS 2022 SP5, 30.5.0, on the owner's PC, add-in
+  and Companion 0.13.1, through the Companion and the MCP from an AI app): a part (fully defined sketch, extrude, hole,
+  fillets: each volume exactly as the kernel predicted), a batch rolled back after a failing step (volume back to the
+  last digit), a delete not done without the person's approval, a global variable, save, a STEP export, an assembly
+  (insert, concentric and coincident mates, no interference), a drawing (A3, 2:1, third angle, 4 views, 18 dimensions,
+  notes, title block properties) and its PDF, a SOLIDWORKS screenshot and a command's history in `sw_command_status`;
+  the owner then reported pause and resume and the add-in's reconnection after Tools > Add-Ins off and on as working
+  (not watched remotely). Results and what was not tested: `docs/KEVOS-TEST-REPORT.md` section 4. Found:
+  `sw_selftest` cannot finish from an AI app that ends a tool call after 60 s (Claude's did): the stage stops with the
+  call, after its first step, and leaves an unsaved part; a fillet with its prediction (the body read back as STEP)
+  took over 60 s; one status read took 39 s (the Companion took the command after 12 s, the add-in answered 26 s later
+  with six documents open); the owner's default drawing template has no sheet format, so no title block shows.
+- KEVOS: the release MSI is built only by CI; no MCP progress notifications
   (JSON responses), progress is in `sw_command_status`; ChatGPT and Grok connectors untested; the gateway is one
   process (SQLite, live sessions in memory).
 - App sign-in (OAuth) is tested with the MCP Python SDK client; not yet with every AI app's connector.
@@ -453,8 +468,9 @@ byte for byte the CI build's apart from the signatures, and its text files apart
 
 ## Next
 
-1. Run the KEVOS checklist (`docs/KEVOS-TEST-REPORT.md` section 4) on Windows with SOLIDWORKS 2022: the MSI, the
-   Companion, the add-in's new UI, events, confirmation and modal check have only been compiled, not run.
-1. Run the self test on real SOLIDWORKS installs and fix from the reports.
+1. Make `sw_selftest` survive an AI app's 60 s tool limit (run each stage in the background and report progress), and
+   make the slow reads faster (a fillet's prediction, a status read with many documents open).
+1. Finish the KEVOS checklist (`docs/KEVOS-TEST-REPORT.md` section 4): the items still marked not tested.
+1. Run the self test on more real SOLIDWORKS installs and fix from the reports.
 2. Tune SW_GUIDE from what the AI gets wrong on real work.
 3. Early access and Google sign-in settings on the Admin page.
