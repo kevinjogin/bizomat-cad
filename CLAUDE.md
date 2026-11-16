@@ -25,7 +25,11 @@ computer with a self-signed `CN=BIZOMAT Development` certificate from its certif
 0.13.0 built from ce0c810, upgrades it to the current version and checks the upgrade in place: one product, the new
 version in the install record and the list of apps, the Companion and add-in replaced, the registrations, and each
 person's settings and data kept. Installer backups: `backups/installer/` (original, as
-released; development-signed), never overwritten.
+released; development-signed), never overwritten. The development certificate in use since 16 Nov 2026 (AEDT) is
+`CB6DBE7431F93403751B1BFE72B6C514D5E23F69` (`installer/signing/`), made on the owner's current PC; the 8 Nov one
+(`DBEB45D1...`, which signed 0.13.0) is on no computer any more. The development-signed 0.13.1 is backed up in
+`backups/installer/development-signed/0.13.1-20261116-0918` (branch `installer-0.13.1-dev`): its program files are
+byte for byte the CI build's apart from the signatures, and its text files apart from line endings.
 
 ## Rules
 
@@ -241,7 +245,7 @@ released; development-signed), never overwritten.
   delete, rename, dimensions (InsertModelAnnotations3 on one view or all), arrange_dimensions, centre_marks
   (AutoInsertCenterMarks2), note (CreateText2), properties, sheet (scale, projection), bom (InsertBomTable4 with the
   first BOM template in SOLIDWORKS' file locations, then AutoBalloon5). A failing action stops the list; the result
-  says which, with what was done before it. Not run in a real SOLIDWORKS yet.
+  says which, with what was done before it. `sw_get_drawing` ran in a real SOLIDWORKS on 15 Nov 2026; `sw_edit_drawing` not yet.
 - `sw_selftest.py`: stages plate / shapes / assembly in `Documents\OpenSketch\selftest` (the plate stage ends with its drawing and a PDF of it), each step ok / check /
   failed with the reason; the first thing to run on a new PC. Tests run it against SimSW, a stand-in add-in built
   on the kernel and mate solver.
@@ -279,6 +283,13 @@ released; development-signed), never overwritten.
   `https://bizomat.ai/downloads/cad/BIZOMAT-CAD-Automation-x64.msi`. `/download/solidworks.sha256` (the pages'
   checksum link) answers for the file on the volume, else redirects to `brand.checksum_url()`. Pages link the
   checksum (`/download/solidworks.sha256`) and support (`brand.support_url()`: the website's contact page), never GitHub.
+  Since 15 Nov 2026 (22:45 UTC) the volume holds the development-signed 0.13.1 (1,323,008 bytes, SHA-256
+  `cc8f04ecb1ee20fdcc96261ea100ef48fa03850db454f29908b032aa10c7d1a2`, signer `CB6DBE74...`), put there by
+  `.github/workflows/installer-volume.yml` (by hand, `confirm` = PLACE; inputs: the branch holding the backup, its path
+  under `backups/installer/`, SHA-256, version and signer thumbprint or `unsigned`; checked on the runner with msitools
+  and `.github/scripts/msi-signer.sh`, fetched by the Machine from that commit and checked again, swapped in with one
+  rename, the file before kept as `previous-<time>-<sha>.msi`; no restart). The development-signed 0.13.0 it replaced is
+  `/data/downloads/previous-20261115T224521Z-51b6de4152e6.msi`. `fly-status.yml` prints each installer's SHA-256.
   `tests/test_installer.py` keeps the MSI, the add-in code and the download link in step. `build.ps1` signs with a
   store certificate by thumbprint (`-CertThumbprint`/KEVOS_SIGN_THUMBPRINT, never falls back to unsigned when one is
   asked for) or a `.pfx` (CI); `-Timestamp ''` signs without a timestamp, `-NameSuffix` (sign-development passes
@@ -304,7 +315,16 @@ released; development-signed), never overwritten.
   `deployment-<hex>`, healthz version `dev`), then again by `deploy.yml` (v23, v25, v27, version = the commit). Fly's
   build ignores `[skip ci]` and skips the tests and the preflight: the merge of #7 (`[skip ci]`) went live as v28 that
   way. Until the owner detaches it (Fly dashboard > cados > Settings), a merge to main deploys at once, whatever the
-  commit message says.
+  commit message says. It was still attached at the merge of #9 (15 Nov 2026 20:27 UTC: Fly's own build was v31, the
+  workflow's v32). The two branches held back for it (#10, the 0.13.1 backup, and #11, `installer-volume.yml`) were
+  merged on 16 Nov 2026 at the owner's request whether or not it was detached: neither changes the server's code, so
+  a build by Fly runs the same code; #10 with `[skip ci]` (it touches `installer/`, so a normal merge would also have
+  rebuilt `bridge-latest`, whose SHA-256 is recorded) and #11 with one deploy.yml run. Detached, the next merge proves it: a merge that changes only `docs/`, root `*.md` or
+  `backups/` makes no release at all (deploy.yml ignores them), any other merge exactly one, deploy.yml's (its version
+  the commit); a release with a `deployment-<hex>` image means Fly still builds (`fly-status.yml` lists them). Both
+  branches changed more than that (`installer/signing/`, `.github/`), so a merge of each without `[skip ci]` runs
+  deploy.yml: one deploy each, queued one after the other (concurrency `deploy-cados`), each a restart of the one
+  Machine of a few seconds.
 - Listens on `::` (`--host ::`, `__main__.listen_sockets`: one dual-stack socket, IPv4 alone where there is no IPv6), so
   the BIZOMAT router (Fly app `bizomat`) reaches it over Fly's private network at cados.internal:8080.
 - Public address https://bizomat.ai/cad: CAD Automation lives under the BIZOMAT website's own address (the owner's
@@ -423,7 +443,21 @@ released; development-signed), never overwritten.
   `CompanionEngine.SetPaused`), so the gateway sees a resume within about 0.5 s. Before, it waited for the poll (up to
   25 s), the AI's commands were refused as PAUSED meanwhile, and `tests/test_bridge_e2e.py` failed about one run in
   three; the test now requires pause and resume to be seen within 5 s.
-- KEVOS: not yet run on Windows or in a real SOLIDWORKS; the MSI is built only by CI; no MCP progress notifications
+- On the owner's PC (15 Nov 2026): 0.13.0 upgraded in place to the CI-built 0.13.1 (same device id, still paired, the
+  Companion reported 0.13.1 and online).
+- First run in a real SOLIDWORKS (15 Nov 2026, 23:10 to 23:45 UTC; SOLIDWORKS 2022 SP5, 30.5.0, on the owner's PC, add-in
+  and Companion 0.13.1, through the Companion and the MCP from an AI app): a part (fully defined sketch, extrude, hole,
+  fillets: each volume exactly as the kernel predicted), a batch rolled back after a failing step (volume back to the
+  last digit), a delete not done without the person's approval, a global variable, save, a STEP export, an assembly
+  (insert, concentric and coincident mates, no interference), a drawing (A3, 2:1, third angle, 4 views, 18 dimensions,
+  notes, title block properties) and its PDF, a SOLIDWORKS screenshot and a command's history in `sw_command_status`;
+  the owner then reported pause and resume and the add-in's reconnection after Tools > Add-Ins off and on as working
+  (not watched remotely). Results and what was not tested: `docs/KEVOS-TEST-REPORT.md` section 4. Found:
+  `sw_selftest` cannot finish from an AI app that ends a tool call after 60 s (Claude's did): the stage stops with the
+  call, after its first step, and leaves an unsaved part; a fillet with its prediction (the body read back as STEP)
+  took over 60 s; one status read took 39 s (the Companion took the command after 12 s, the add-in answered 26 s later
+  with six documents open); the owner's default drawing template has no sheet format, so no title block shows.
+- KEVOS: the release MSI is built only by CI; no MCP progress notifications
   (JSON responses), progress is in `sw_command_status`; ChatGPT and Grok connectors untested; the gateway is one
   process (SQLite, live sessions in memory).
 - App sign-in (OAuth) is tested with the MCP Python SDK client; not yet with every AI app's connector.
@@ -434,8 +468,9 @@ released; development-signed), never overwritten.
 
 ## Next
 
-1. Run the KEVOS checklist (`docs/KEVOS-TEST-REPORT.md` section 4) on Windows with SOLIDWORKS 2022: the MSI, the
-   Companion, the add-in's new UI, events, confirmation and modal check have only been compiled, not run.
-1. Run the self test on real SOLIDWORKS installs and fix from the reports.
+1. Make `sw_selftest` survive an AI app's 60 s tool limit (run each stage in the background and report progress), and
+   make the slow reads faster (a fillet's prediction, a status read with many documents open).
+1. Finish the KEVOS checklist (`docs/KEVOS-TEST-REPORT.md` section 4): the items still marked not tested.
+1. Run the self test on more real SOLIDWORKS installs and fix from the reports.
 2. Tune SW_GUIDE from what the AI gets wrong on real work.
 3. Early access and Google sign-in settings on the Admin page.
