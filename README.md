@@ -237,8 +237,11 @@ other branch, tag or schedule deploys, and Fly never builds or deploys anything 
    started no workflow).
 3. **One deploy source.** No GitHub repository may be connected to the `cados` app in Fly (Fly dashboard > `cados` >
    Settings). One was on 15 and 16 Nov 2026: Fly then built and deployed every push to `main` itself, untested, as
-   version `dev`. Never connect one: deploys go through the workflow below. The workflow warns when production reports
-   `dev` and reports any release it did not make.
+   version `dev`. **The owner disconnected it on 16 Nov 2026**, and Fly's API confirmed it before and after the merge
+   of pull request #13 (`hasDeploymentSource: false`, `deploymentSource: null`; that merge made no release). GitHub
+   Actions is now the single deployment authority: never connect one again. `fly-status.yml` checks this on every run
+   and fails when Fly reports a deployment source; the deploy workflow warns when production reports `dev` and reports
+   any release it did not make.
 
 **Deploy**: automatically on such a merge, or by hand: Actions > **Deploy to Fly.io (cados)** > Run workflow on
 `main`, `action` = `deploy`, `confirm` = `DEPLOY` (to redeploy, or after a change the paths leave out). It:
@@ -274,8 +277,12 @@ Machine in `ams`. A change to the Machine (size, memory or region) is a decision
 pull request, then deploy with `allow_machine_change` = `YES`. (Each CAD worker process uses about 400 MB; with less
 than 2 GB set `OPENSKETCH_CAD_WORKERS = "0"`.)
 
-`fly-status.yml` (by hand) prints the Machines, volumes, secret names, releases, logs and `/healthz` and changes
-nothing. `domain.yml` (by hand) gives the app an extra host on a Cloudflare domain. Neither touches `bizomat`.
+`fly-status.yml` (by hand) prints the Machines, volumes, secret names, releases, logs and `/healthz`, then checks
+that no repository is connected to `cados` in Fly (`.github/scripts/fly-deploy-source.sh`: one read-only query to
+Fly's API with the deploy token, which reaches curl on standard input; only plain fields are printed). It passes with
+no deployment source, fails with an error naming what is connected, and fails without claiming anything when Fly's
+answer cannot be read. It changes, disconnects and deploys nothing. `domain.yml` (by hand) gives the app an extra host
+on a Cloudflare domain. Neither touches `bizomat`.
 
 ## 10. The add-in, the installer and releases
 
@@ -309,7 +316,7 @@ nothing. `domain.yml` (by hand) gives the app an extra host on a Cloudflare doma
 | `solidworks.yml` SOLIDWORKS add-in | push of `solidworks/`, `installer/` or itself (any branch), tags, pull request, by hand | Add-in build and tests; the MSI on Windows; releases on `main` and on tags |
 | `installer-test.yml` Installer test | pull request and push (not `main`) touching the installer, by hand | Builds, test-signs, installs and removes the MSI on Windows |
 | `deploy.yml` Deploy to Fly.io (cados) | push to `main` changing the image's files or `fly.toml`; by hand (deploy, rollback, build-only) | Tests and one image build with a smoke test, then preflight, deploy of that image, checks and automatic rollback (section 9) |
-| `fly-status.yml` | by hand | Read-only status of `cados` |
+| `fly-status.yml` Fly status | by hand | Read-only status of `cados`; fails if a repository is connected to it in Fly |
 | `domain.yml` | by hand | An extra host for `cados` on a Cloudflare domain |
 | `live-tls.yml` Live TLS | daily 07:41 Sydney, by hand | Checks the certificates of the public addresses (read-only) |
 
@@ -327,6 +334,10 @@ every job fails at once with a billing message (seen on 7-8 Nov 2026).
   a snapshot and move the Machine onto it; never delete the old volume until the restored one is checked. Losing the
   bridge signing key means every computer must pair again.
 - **Logs and state:** `flyctl status -a cados`, `flyctl logs -a cados`, or Actions > `fly-status.yml`.
+- **Fly deploying by itself:** when `fly-status.yml` reports a deployment source, or a deploy reports a release it did
+  not make (or production reports version `dev`), disconnect the repository by hand: Fly dashboard > `cados` >
+  Settings. Nothing in this repository disconnects it. Then run `fly-status.yml` again: it passes once Fly reports
+  `hasDeploymentSource: false` and `deploymentSource: null`.
 - **Owner password:** there is no reset page. The owner resets other people on Admin, and their own password with
   `python -m opensketch --reset-password EMAIL` on the server (`fly ssh console -a cados`).
 - **A stuck server:** the supervisor restarts it after 120 s without a health answer. A Machine restart:
