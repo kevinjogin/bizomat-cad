@@ -108,7 +108,9 @@ The image also builds the add-in, so the home page can offer it for download.
 
 ### Fly.io
 
-`fly.toml` and `.github/workflows/deploy.yml` deploy it on every push to `main` once the tests pass. Set the
+`fly.toml` and `.github/workflows/deploy.yml` deploy it from GitHub Actions (never from Fly's own GitHub
+connection): on a push to `main` that changes the image's files, the tests and a smoke test of the built image pass,
+then that image is deployed and checked. Set the
 repository secret `FLY_API_TOKEN` (optionally `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` for Sign in with Google), and the repository variable `FLY_APP` to your app's name. For your
 own domain, add a certificate in the Fly dashboard and set the variable `PUBLIC_URL`.
 
