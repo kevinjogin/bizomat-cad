@@ -311,8 +311,9 @@ byte for byte the CI build's apart from the signatures, and its text files apart
   with no log (seen 7 Nov 2026), and `cloudflare.ps1` runs the repository's own checks before each deploy. The Fly app
   below must have no GitHub repository attached: never attach one; deploys go through `deploy.yml` and its preflight.
   **Found attached again on 15 Nov 2026** (Fly status run 3, `flyctl releases`): every push to main since at least 14 Nov
-  was built and deployed by Fly itself about a minute after the merge (releases v22, v24, v26 and v28, image tags
-  `deployment-<hex>`, healthz version `dev`), then again by `deploy.yml` (v23, v25, v27, version = the commit). Fly's
+  was built and deployed by Fly itself about a minute after the merge (releases v22, v24, v26 and v28, healthz version
+  `dev`), then again by `deploy.yml` (v23, v25, v27, version = the commit). Both kinds of image are tagged
+  `deployment-<id>` (deploy.yml sets no image label), so only the version tells them apart. Fly's
   build ignores `[skip ci]` and skips the tests and the preflight: the merge of #7 (`[skip ci]`) went live as v28 that
   way. Until the owner detaches it (Fly dashboard > cados > Settings), a merge to main deploys at once, whatever the
   commit message says. It was still attached at the merge of #9 (15 Nov 2026 20:27 UTC: Fly's own build was v31, the
@@ -321,7 +322,10 @@ byte for byte the CI build's apart from the signatures, and its text files apart
   a build by Fly runs the same code; #10 with `[skip ci]` (it touches `installer/`, so a normal merge would also have
   rebuilt `bridge-latest`, whose SHA-256 is recorded) and #11 with one deploy.yml run. Detached, the next merge proves it: a merge that changes only `docs/`, root `*.md` or
   `backups/` makes no release at all (deploy.yml ignores them), any other merge exactly one, deploy.yml's (its version
-  the commit); a release with a `deployment-<hex>` image means Fly still builds (`fly-status.yml` lists them). Both
+  the commit); an extra release per merge, with /healthz at `dev` until deploy.yml lands, means Fly still builds
+  (`fly-status.yml` lists the releases). It still did on 16 Nov 2026: the #10 merge (`[skip ci]`, no workflow run) went
+  live as v33 (`dev`, about 40 s after the merge), the #11 merge as v34 (`dev`), then deploy.yml's v35 (`9ec8423`), which
+  stayed. Both
   branches changed more than that (`installer/signing/`, `.github/`), so a merge of each without `[skip ci]` runs
   deploy.yml: one deploy each, queued one after the other (concurrency `deploy-cados`), each a restart of the one
   Machine of a few seconds.
