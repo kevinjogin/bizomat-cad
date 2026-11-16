@@ -245,7 +245,7 @@ byte for byte the CI build's apart from the signatures, and its text files apart
   delete, rename, dimensions (InsertModelAnnotations3 on one view or all), arrange_dimensions, centre_marks
   (AutoInsertCenterMarks2), note (CreateText2), properties, sheet (scale, projection), bom (InsertBomTable4 with the
   first BOM template in SOLIDWORKS' file locations, then AutoBalloon5). A failing action stops the list; the result
-  says which, with what was done before it. Not run in a real SOLIDWORKS yet.
+  says which, with what was done before it. `sw_get_drawing` ran in a real SOLIDWORKS on 15 Nov 2026; `sw_edit_drawing` not yet.
 - `sw_selftest.py`: stages plate / shapes / assembly in `Documents\OpenSketch\selftest` (the plate stage ends with its drawing and a PDF of it), each step ok / check /
   failed with the reason; the first thing to run on a new PC. Tests run it against SimSW, a stand-in add-in built
   on the kernel and mate solver.
