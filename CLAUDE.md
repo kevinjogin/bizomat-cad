@@ -72,7 +72,10 @@ byte for byte the CI build's apart from the signatures, and its text files apart
   non-main pushes; `deploy.yml` is the only way to production (Hosting, below; owner, 16 Nov 2026): on a push to main
   that changes what the image is built from or fly.toml, after the tests and the image's smoke test, it deploys that
   exact image and checks it, rolling back by itself when a core check fails; `fly-status.yml` (by hand, read only)
-  checks that Fly has no deployment source for cados, so nothing deploys around it; `solidworks.yml`
+  checks that Fly has no deployment source for cados, so nothing deploys around it. main is protected by the ruleset
+  `.github/rulesets/main.json` (a pull request with the four tests.yml checks passing, no force push, no deletion, no
+  bypass; applied by the owner with `gh api`, README.md section 11; `tests/test_ruleset.py`), so tests.yml runs on
+  every pull request, docs-only ones included; `solidworks.yml`
   builds and tests the add-in and keeps the zip as an artifact. `domain.yml` (run by hand, `.github/scripts/kevos-domain.sh`) gives the Fly app
   its own address on a Cloudflare domain: DNS record, Fly certificate and validation record, OPENSKETCH_PUBLIC_URL
   (secrets CLOUDFLARE_API_TOKEN, FLY_CADOS_TOKEN; app fixed to cados). Python pins live in requirements.txt (image) and
