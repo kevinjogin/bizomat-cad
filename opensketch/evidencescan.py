@@ -20,7 +20,7 @@ It scans one document at a time, only while the Machine has at least MIN_FREE_MB
 a scan waits rather than take memory a CAD worker needs), at the lowest CPU priority, with a time limit. The document is
 written to a private temporary folder, checked against the ERP's SHA-256, scanned and deleted at once; it is never
 kept, logged or shown. Signatures are fetched with freshclam into SIG_DIR (the Machine's own disk, not the volume)
-every UPDATE_EVERY seconds, without freshclam's test load (which needs as much memory as a scan). Anything that goes
+when the first document comes, then every UPDATE_EVERY seconds, without freshclam's test load (which needs as much memory as a scan). Anything that goes
 wrong is an "error" verdict or a wait, never a reason for the server to stop.
 
 Off unless the BIZOMAT client secret is set (bizomat_id.client()) and clamscan and freshclam are installed (the image
@@ -306,14 +306,19 @@ class Scanner:
         free = free_mb()
         if free is None or free < min_free_mb():
             return LOW_MEMORY_WAIT
-        if not self._signatures():
-            return POLL
+        # Signatures already here are kept fresh; none are fetched until a document comes (the ERP hands out nothing
+        # while its flag is off, so a server that never scans never downloads them).
+        if signatures_ready() and self.last_update is not None:
+            self._signatures()
         auth = basic(*cs)
         try:
             with httpx.Client(timeout=TIMEOUT, follow_redirects=False) as http:
                 doc = ask_next(http, auth)
                 if doc is None:
                     self.failures = 0
+                    return POLL
+                if not self._signatures():
+                    # Not scanned: the ERP hands it out again after its claim ends.
                     return POLL
                 result = scan_bytes(*doc)
                 send_result(http, auth, result)

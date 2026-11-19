@@ -123,7 +123,7 @@ def test_clean_infected_and_error_verdicts_one_at_a_time(clam, erp):
     pdf = b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n"
     stand = erp([("doc_clean_0001", pdf), ("doc_virus_0002", b"%PDF-1.4 " + EICAR), ("doc_broke_0003", b"BROKEN")])
     s = es.Scanner()
-    assert s.step() == es.NEXT_SOON  # fetches the signatures first, without their test load
+    assert s.step() == es.NEXT_SOON  # the first document fetches the signatures, without their test load
     assert es.signatures_ready() and clam["updates"].read_text().count("1") == 1
     assert s.step() == es.NEXT_SOON
     assert s.step() == es.NEXT_SOON
@@ -200,3 +200,17 @@ def test_real_clamav_finds_eicar_and_passes_a_plain_pdf(monkeypatch):
     assert bad["verdict"] == "infected" and "Eicar" in bad["signature"]
     pdf = b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n"
     assert es.scan_bytes("doc_plain_0002", hashlib.sha256(pdf).hexdigest(), pdf)["verdict"] == "clean"
+
+
+def test_no_signatures_are_fetched_while_the_erp_hands_out_nothing(clam, erp):
+    erp([])
+    s = es.Scanner()
+    assert s.step() == es.POLL and s.step() == es.POLL
+    assert not es.signatures_ready() and not clam["updates"].exists()
+
+
+def test_the_privacy_notice_says_documents_are_scanned_here_and_deleted():
+    from fastapi.testclient import TestClient
+    from opensketch import server
+    page = TestClient(server.app).get("/privacy").text
+    assert "Amsterdam, the Netherlands" in page and "malware with ClamAV" in page and "deletes the document straight away" in page
