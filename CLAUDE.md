@@ -169,6 +169,20 @@ byte for byte the CI build's apart from the signatures, and its text files apart
   (`auth.PRIVACY_BODY`, section `erp`) and the docs page say what is sent. Tests: `tests/test_erpstatus.py` (a
   stand-in ERP with the ERP's own rules; the slow test runs the real work app when `BIZOMAT_WORK_APP` names a built
   `apps/work`, and checks who sees which computer).
+- Malware scan of BIZOMAT ERP's verification documents (`evidencescan.py`, 19 Nov 2026; the owner chose this 2 GB
+  Machine because BIZOMAT's own have 512 MB and ClamAV needs about 1 GB while it scans: measured 1,000 MB at its peak,
+  about 12 s a file, ClamAV 1.5.4 with the full signature set). A daemon thread `evidence-scan` (started and stopped by
+  `server.lifespan`, never the event loop) asks `POST <bizomat_id.provider()>/api/id/scan/next` with the BIZOMAT client
+  credentials (HTTP Basic, client `cad`; no new secret, no new open address), checks the bytes against the ERP's
+  SHA-256, scans them in a private temporary folder at nice 19 and deletes them, and posts `scan/result` (clean,
+  infected with the signature, or error). Files over ClamAV's limits and encrypted documents count as infected. One at
+  a time, only while 1,300 MB are free (`OPENSKETCH_SCAN_MIN_FREE_MB`; unknown memory: never). freshclam fetches the
+  signatures to the Machine's own disk (`/var/lib/clamav`, not the volume) every 6 hours with `TestDatabases no`. Off
+  without the BIZOMAT client secret or ClamAV (the image installs clamav and clamav-freshclam), or with
+  `OPENSKETCH_EVIDENCE_SCAN=0`; the ERP (bizomat-site `apps/work/src/worker/company/scan.ts`) hands out nothing until
+  its flag `evidence_scanning` is on. Admin's people API reports its status (`evidence_scan`). Tests:
+  `tests/test_evidencescan.py` (stand-in ERP and ClamAV; a slow test runs the real ClamAV on EICAR when installed).
+  Not yet deployed: it goes live with the next deploy of this repository, and scans nothing before the ERP flag is on.
 - Pages: `/` is the product page for visitors (`site.landing`) and the app's Home for a signed-in person (and on an
   open server); `/overview` (product page) and `/docs` (setup, connection, auth, verify, self test, troubleshooting,
   security) are public (`auth.PUBLIC_PAGES`), as are `/privacy` and the design system under `/ui/` (`cados.css`,
