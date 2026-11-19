@@ -108,6 +108,7 @@ jobs:
     outputs:
       tag: ${{ steps.push.outputs.tag }}
       digest: ${{ steps.push.outputs.digest }}
+      config: ${{ steps.push.outputs.config }}
       version: ${{ steps.build.outputs.version }}
     steps:
       - name: Check the token
@@ -173,12 +174,17 @@ jobs:
           docker push "$REGISTRY_IMAGE:$tag" | tail -n 3
           digest="$(docker inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$REGISTRY_IMAGE:$tag" | grep "^$REGISTRY_IMAGE@" | head -1 | cut -d@ -f2)"
           if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then echo "::error::The registry did not return a digest for $tag."; exit 1; fi
+          # The image's config digest, as the registry holds it: Fly deploys the image under its own deployment-<id> tag
+          # with a rewritten manifest (another manifest digest), but the configuration, and so every layer, is the same.
+          config="$(bash .github/scripts/image-config.sh "$REGISTRY_IMAGE@$digest")"
+          if [[ ! "$config" =~ ^sha256:[0-9a-f]{64}$ ]]; then echo "::error::The registry did not return the config digest of $tag."; exit 1; fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "config=$config" >> "$GITHUB_OUTPUT"
           {
             echo "### Image"
             echo "- built once from \`$GITHUB_SHA\` (version \`${GITHUB_SHA::7}\`), smoke-tested as a container"
-            echo "- pushed as \`$REGISTRY_IMAGE:$tag\`, digest \`$digest\`"
+            echo "- pushed as \`$REGISTRY_IMAGE:$tag\`, digest \`$digest\`, config \`$config\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
   deploy:
@@ -202,6 +208,7 @@ jobs:
       ROLLBACK_IMAGE: ${{ inputs.image }}
       BUILT_TAG: ${{ needs.image.outputs.tag }}
       BUILT_DIGEST: ${{ needs.image.outputs.digest }}
+      BUILT_CONFIG: ${{ needs.image.outputs.config }}
     steps:
       - name: Check the token and what to deploy
         id: what
@@ -216,16 +223,17 @@ jobs:
             if [[ "$ROLLBACK_IMAGE" =~ ^sha-[0-9a-f]{40}$ ]]; then want="${ROLLBACK_IMAGE:4:7}"
             elif [[ "$ROLLBACK_IMAGE" =~ ^deployment-[0-9A-Za-z]{10,40}$ ]]; then want=""
             else echo "::error::image must be sha-<40-character commit> or deployment-<id> (flyctl releases -a cados --image)."; exit 1; fi
-            ref="$REGISTRY_IMAGE:$ROLLBACK_IMAGE"; digest=""
+            ref="$REGISTRY_IMAGE:$ROLLBACK_IMAGE"; digest=""; config=""
           else
             if [[ ! "$BUILT_TAG" =~ ^sha-[0-9a-f]{40}$ ]] || [[ ! "$BUILT_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
               echo "::error::The image job left no tested image to deploy."; exit 1
             fi
-            want="${GITHUB_SHA::7}"; ref="$REGISTRY_IMAGE:$BUILT_TAG"; digest="$BUILT_DIGEST"
+            want="${GITHUB_SHA::7}"; ref="$REGISTRY_IMAGE:$BUILT_TAG"; digest="$BUILT_DIGEST"; config="$BUILT_CONFIG"
           fi
           echo "ref=$ref" >> "$GITHUB_OUTPUT"
           echo "want=$want" >> "$GITHUB_OUTPUT"
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "config=$config" >> "$GITHUB_OUTPUT"
           echo "To deploy: $ref ${digest:-} (version ${want:-as built})"
 
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -310,6 +318,7 @@ jobs:
           FLY_API_TOKEN: ${{ secrets.FLY_CADOS_TOKEN }}
           WANT: ${{ steps.what.outputs.want }}
           WANT_DIGEST: ${{ steps.what.outputs.digest }}
+          WANT_CONFIG: ${{ steps.what.outputs.config }}
         run: bash .github/scripts/cados-checks.sh core
 
       - name: Roll back to the image that ran before

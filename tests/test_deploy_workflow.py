@@ -67,6 +67,9 @@ def test_what_was_deployed_is_checked_and_a_failed_core_check_rolls_back():
     deploy = job("deploy")
     assert "cados-checks.sh core" in deploy and "cados-checks.sh public" in deploy
     assert "WANT_DIGEST: ${{ steps.what.outputs.digest }}" in deploy
+    # Fly runs a pushed image under its own deployment-<id> tag with a rewritten manifest: the config digest decides.
+    assert "WANT_CONFIG: ${{ steps.what.outputs.config }}" in deploy
+    assert "image-config.sh" in job("image")
     rollback = deploy[deploy.index("- name: Roll back"):]
     assert "failure()" in rollback.split("\n", 3)[2], "the rollback runs only when something before it failed"
     assert deploy.index("Roll back") < deploy.index("Checks through bizomat.ai"), "a failure through bizomat.ai never rolls back"

@@ -9,7 +9,10 @@
 #                                                 the installer download behind sign-in, the OAuth metadata of /cad/mcp
 #
 # Environment: APP (cados), ORIGIN (https://cados.fly.dev), PUBLIC_URL (https://bizomat.ai/cad); for core also WANT (the
-# version /healthz must report; empty: any), WANT_DIGEST (sha256:...; empty: not checked) and FLY_API_TOKEN.
+# version /healthz must report; empty: any), WANT_DIGEST (sha256:...; empty: not checked), WANT_CONFIG (the image's config
+# digest, sha256:...; empty: not used) and FLY_API_TOKEN. The Machine runs the expected image when Fly reports the
+# pushed manifest digest, or, since Fly deploys an image under its own deployment-<id> tag with a rewritten manifest,
+# when the manifest it reports has the pushed image's config digest (.github/scripts/image-config.sh).
 # Exit 0 only when every check passed.
 set -uo pipefail
 part="${1:?core or public}"
@@ -42,9 +45,15 @@ if [ "$part" = core ]; then
   version_ok() { [ -n "$version" ] && { [ -z "$WANT" ] || [ "$version" = "$WANT" ]; }; }
   check "$ORIGIN/healthz answers ok with version ${WANT:-(any)} (got: ${version:-no answer})" version_ok
 
+  WANT_CONFIG="${WANT_CONFIG:-}"
   digest="$(flyctl machine list --app "$APP" --json 2>/dev/null | jq -r 'first(.[] | .image_ref.digest // empty)' 2>/dev/null || true)"
-  digest_ok() { [ -z "$WANT_DIGEST" ] || [ "$digest" = "$WANT_DIGEST" ]; }
-  check "the Machine runs image ${WANT_DIGEST:-(digest not checked)} (got: ${digest:-unknown})" digest_ok
+  config=""
+  if [ -n "$WANT_DIGEST" ] && [ -n "$digest" ] && [ "$digest" != "$WANT_DIGEST" ] && [ -n "$WANT_CONFIG" ]; then
+    flyctl auth docker >/dev/null 2>&1 || true
+    config="$(bash "$(dirname "$0")/image-config.sh" "${REGISTRY_IMAGE:-registry.fly.io/$APP}@$digest" || true)"
+  fi
+  digest_ok() { [ -z "$WANT_DIGEST" ] || [ "$digest" = "$WANT_DIGEST" ] || { [ -n "$WANT_CONFIG" ] && [ "$config" = "$WANT_CONFIG" ]; }; }
+  check "the Machine runs image ${WANT_DIGEST:-(digest not checked)}${WANT_CONFIG:+ (config $WANT_CONFIG)} (got: ${digest:-unknown}${config:+, config $config})" digest_ok
 
   read -r st auth < <(ask www-authenticate -X POST -H 'Content-Type: application/json' \
     -H 'Accept: application/json, text/event-stream' --data '{}' "$ORIGIN/mcp")
