@@ -380,7 +380,11 @@ byte for byte the CI build's apart from the signatures, and its text files apart
   /healthz reports the commit, the Machine runs the pushed digest, MCP answers 401 with a Bearer challenge, the OAuth
   metadata answers) deploy the recorded image again when one fails (automatic rollback) and fail the run; the checks
   through bizomat.ai and Sign in with BIZOMAT (the token endpoint must refuse a made-up code as invalid_grant, never
-  invalid_client) fail it without a rollback. Docs, workflows, scripts, tests, the installer and backups reach main
+  invalid_client) fail it without a rollback. The image check passes when Fly reports the pushed manifest digest or, because Fly runs an image
+  under its own `deployment-<id>` tag with a rewritten manifest, when that manifest has the pushed image's config digest
+  (`.github/scripts/image-config.sh`, `tests/test_image_config.py`). The first deploy of a real change (19 Nov 2026, the
+  malware scanner, run 44623909917) failed only that check (the new server answered every other) and rolled back by
+  itself to 9ec8423; this was the fix. Docs, workflows, scripts, tests, the installer and backups reach main
   without a deploy (tests/test_deploy_workflow.py keeps the paths equal to the Dockerfile's COPY lines and holds the
   other rules). By hand (Actions > Deploy to Fly.io (cados)): `deploy` (`confirm` = `DEPLOY`), `rollback` (`image` =
   `sha-<commit>` or a `deployment-<id>`, an image already in the registry, no build) or `build-only` (any branch: pushes
