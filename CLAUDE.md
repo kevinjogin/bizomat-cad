@@ -182,7 +182,8 @@ byte for byte the CI build's apart from the signatures, and its text files apart
   `OPENSKETCH_EVIDENCE_SCAN=0`; the ERP (bizomat-site `apps/work/src/worker/company/scan.ts`) hands out nothing until
   its flag `evidence_scanning` is on. Admin's people API reports its status (`evidence_scan`). Tests:
   `tests/test_evidencescan.py` (stand-in ERP and ClamAV; a slow test runs the real ClamAV on EICAR when installed).
-  Not yet deployed: it goes live with the next deploy of this repository, and scans nothing before the ERP flag is on.
+  Deployed 19 Nov 2026 (version 00f46c2, deploy run 44626760785, every core and public check passed); it scans nothing
+  while the ERP's flag is off, and the privacy notice says where documents are scanned.
 - Pages: `/` is the product page for visitors (`site.landing`) and the app's Home for a signed-in person (and on an
   open server); `/overview` (product page) and `/docs` (setup, connection, auth, verify, self test, troubleshooting,
   security) are public (`auth.PUBLIC_PAGES`), as are `/privacy` and the design system under `/ui/` (`cados.css`,
@@ -342,7 +343,8 @@ byte for byte the CI build's apart from the signatures, and its text files apart
   anything when the answer cannot be read. It never disconnects anything (that is done by hand in the Fly dashboard),
   never prints the token or the raw answer, and deploys nothing. deploy.yml also warns when production reports `dev`
   and reports any release it did not make; a merge that does not deploy (docs, workflows, tests) must leave the release
-  list unchanged. The first deploy through the new workflow waits for the next genuine change to the server's code.
+  list unchanged. The first deploy of a genuine change (the malware scanner, 19 Nov 2026) rolled back on the image check
+  (run 44623909917); after the config-digest fix (#17) it deployed by hand (run 44626760785, 00f46c2).
 - Listens on `::` (`--host ::`, `__main__.listen_sockets`: one dual-stack socket, IPv4 alone where there is no IPv6), so
   the BIZOMAT router (Fly app `bizomat`) reaches it over Fly's private network at cados.internal:8080.
 - Public address https://bizomat.ai/cad: CAD Automation lives under the BIZOMAT website's own address (the owner's
