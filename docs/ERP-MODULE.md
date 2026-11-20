@@ -134,4 +134,9 @@ pages here. With the flag off, every page is served here again.
   groups them by part file and says materials are not read.
 - `cados` stays in Amsterdam (owner, 19 Nov 2026).
 
-Tests: `tests/test_erplink.py` (a stand-in ERP with its own key and JWKS).
+Tests: `tests/test_erplink.py` (a stand-in ERP with its own key and JWKS), and `tests/test_erp_e2e.py` (slow, by hand
+before a release, in place of the retired staging walk): the real BIZOMAT work app built and run on Node
+(`BIZOMAT_WORK_APP=<bizomat-site>/apps/work`, after `npm run build` there), this engine over HTTP and the stand-in
+Companion paired through the ERP; `BIZOMAT_E2E_REPORT=<file>` writes each check's result. It covers one sign-in, the
+module for permitted people only, company isolation, downloads by role in the ERP and through links, the migration of
+earlier work, old pages into the ERP, fair-use limits, read-only refusal, password retirement and the rollback.
